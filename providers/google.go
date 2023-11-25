@@ -13,11 +13,11 @@ import (
 const GoogleProviderKey = "google"
 
 func GoogleAuthLogin(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthBegin(i, GoogleOauthConfig(i))
+	return identity.OAuthBeginHandler(i, GoogleOauthConfig(i))
 }
 
 func GoogleAuthCallback(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthCallback[GoogleUser](i, GoogleOauthConfig(i))
+	return identity.OAuthCallbackHandler[GoogleUser](i, GoogleOauthConfig(i))
 }
 
 type GoogleUser struct {

@@ -12,11 +12,11 @@ import (
 const TwitchProviderKey = "twitch"
 
 func TwitchAuthLogin(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthBegin(i, TwitchOauthConfig(i))
+	return identity.OAuthBeginHandler(i, TwitchOauthConfig(i))
 }
 
 func TwitchAuthCallback(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthCallback[TwitchUser](i, TwitchOauthConfig(i))
+	return identity.OAuthCallbackHandler[TwitchUser](i, TwitchOauthConfig(i))
 }
 
 type TwitchUser struct {
@@ -35,7 +35,6 @@ func (TwitchUser) Request(ctx context.Context, i *identity.Identity, accessToken
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Client-Id", providerConf.ClientID)
-	req.Header.Set("User-Agent", "Vel (127.0.0.1, 0.0.1)")
 	client := &http.Client{}
 	return client.Do(req)
 }

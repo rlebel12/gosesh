@@ -8,6 +8,15 @@ import (
 	"github.com/google/uuid"
 )
 
+func New() *Identity {
+	i := &Identity{}
+
+	i.Config.AuthSessionCookieName = defaultAuthSessionCookieName
+	i.Config.OAuthStateCookieName = defaultOAuthStateCookieName
+
+	return i
+}
+
 type Identity struct {
 	Config *Config
 	Storer
@@ -71,13 +80,4 @@ type Storer interface {
 type Redirecter interface {
 	SetCallbackRedirectURL(ctx context.Context, oAuthState string, redirectURL *url.URL) error
 	GetCallbackRedirectURL(ctx context.Context, oAuthState string) (*url.URL, error)
-}
-
-func New() *Identity {
-	i := &Identity{}
-
-	i.Config.AuthSessionCookieName = defaultAuthSessionCookieName
-	i.Config.OAuthStateCookieName = defaultOAuthStateCookieName
-
-	return i
 }

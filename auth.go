@@ -23,7 +23,7 @@ const (
 	SessionIdleDuration   = 24 * time.Hour
 )
 
-func OAuthBegin(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
+func OAuthBeginHandler(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		b := make([]byte, 16)
@@ -69,7 +69,7 @@ type UserDataRequester interface {
 	GetEmail() string
 }
 
-func OAuthCallback[userDataRequester UserDataRequester](i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
+func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		oauthState, err := r.Cookie(i.Config.OAuthStateCookieName)

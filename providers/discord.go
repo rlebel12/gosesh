@@ -12,11 +12,11 @@ import (
 const DiscordProviderKey = "discord"
 
 func DiscordAuthLogin(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthBegin(i, DiscordOauthConfig(i))
+	return identity.OAuthBeginHandler(i, DiscordOauthConfig(i))
 }
 
 func DiscordAuthCallback(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthCallback[DiscordUser](i, DiscordOauthConfig(i))
+	return identity.OAuthCallbackHandler[DiscordUser](i, DiscordOauthConfig(i))
 }
 
 type DiscordUser struct {
@@ -33,7 +33,6 @@ func (DiscordUser) Request(ctx context.Context, i *identity.Identity, accessToke
 		return nil, fmt.Errorf("failed creating request: %s", err.Error())
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("User-Agent", "Vel (127.0.0.1, 0.0.1)")
 	client := &http.Client{}
 	return client.Do(req)
 }
