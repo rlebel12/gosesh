@@ -35,7 +35,7 @@ func (i *Identity) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		session, err := i.Identifier.GetSession(ctx, sessionID)
+		session, err := i.Storer.GetSession(ctx, sessionID)
 		if err != nil {
 			next.ServeHTTP(w, r)
 			return
@@ -51,10 +51,40 @@ func (i *Identity) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		authCtx := context.WithValue(ctx, SessionContextKey, session)
-		r = r.WithContext(authCtx)
+		ctx = context.WithValue(ctx, SessionContextKey, session)
+		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (i *Identity) AuthenticateAndRefresh(next http.Handler) http.Handler {
+	return i.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, ok := CurrentSession(r)
+		if !ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		now := time.Now().UTC()
+		if session.IdleAt.After(now) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ctx := r.Context()
+		session, err := i.Storer.UpdateSession(ctx, session.ID, UpdateSessionValues{
+			IdleAt:   now.Add(SessionActiveDuration),
+			ExpireAt: now.Add(SessionIdleDuration),
+		})
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ctx = context.WithValue(ctx, SessionContextKey, session)
+		r = r.WithContext(ctx)
+		next.ServeHTTP(w, r)
+	}))
 }
 
 func (i *Identity) RequireAuthentication(next http.Handler) http.Handler {

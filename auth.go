@@ -22,42 +22,7 @@ const (
 	SessionIdleDuration   = 24 * time.Hour
 )
 
-type UserDataRequester interface {
-	Request(ctx context.Context, i *Identity, accessToken string) (*http.Response, error)
-	GetEmail() string
-}
-
-func GetUserData[DataType UserDataRequester](ctx context.Context, i *Identity, accessToken string) (DataType, error) {
-	var userData DataType
-	response, err := userData.Request(ctx, i, accessToken)
-	if err != nil {
-		return userData, fmt.Errorf("failed getting user info: %s", err.Error())
-	}
-	defer response.Body.Close()
-	contents, err := io.ReadAll(response.Body)
-	if err != nil {
-		return userData, fmt.Errorf("failed read response: %s", err.Error())
-	}
-
-	if err := json.Unmarshal(contents, &userData); err != nil {
-		return userData, fmt.Errorf("failed unmarshalling response: %s", err.Error())
-	}
-	return userData, nil
-}
-
-func (i *Identity) GoogleAuthLogin(w http.ResponseWriter, r *http.Request) error {
-	return i.login(w, r, i.GoogleOauthConfig())
-}
-
-func (i *Identity) DiscordAuthLogin(w http.ResponseWriter, r *http.Request) error {
-	return i.login(w, r, i.DiscordOauthConfig())
-}
-
-func (i *Identity) TwitchAuthLogin(w http.ResponseWriter, r *http.Request) error {
-	return i.login(w, r, i.TwitchOauthConfig())
-}
-
-func (i *Identity) login(w http.ResponseWriter, r *http.Request, oauthCfg *oauth2.Config) error {
+func OAuthBegin(i *Identity, w http.ResponseWriter, r *http.Request, oauthCfg *oauth2.Config) error {
 	// ctx := r.Context()
 	b := make([]byte, 16)
 	rand.Read(b)
@@ -88,19 +53,12 @@ func (i *Identity) login(w http.ResponseWriter, r *http.Request, oauthCfg *oauth
 // 	)
 // }
 
-func (i *Identity) GoogleAuthCallback(w http.ResponseWriter, r *http.Request) error {
-	return callback[GoogleUser](i, w, r, i.GoogleOauthConfig())
+type UserDataRequester interface {
+	Request(ctx context.Context, i *Identity, accessToken string) (*http.Response, error)
+	GetEmail() string
 }
 
-func (i *Identity) DiscordAuthCallback(w http.ResponseWriter, r *http.Request) error {
-	return callback[DiscordUser](i, w, r, i.DiscordOauthConfig())
-}
-
-func (i *Identity) TwitchAuthCallback(w http.ResponseWriter, r *http.Request) error {
-	return callback[TwitchUser](i, w, r, i.TwitchOauthConfig())
-}
-
-func callback[UserDataType UserDataRequester](
+func OAuthCallback[userDataRequester UserDataRequester](
 	i *Identity, w http.ResponseWriter, r *http.Request, oauthCfg *oauth2.Config,
 ) error {
 	ctx := r.Context()
@@ -124,13 +82,13 @@ func callback[UserDataType UserDataRequester](
 		return fmt.Errorf("code exchange wrong: %s", err.Error())
 	}
 
-	userData, err := GetUserData[UserDataType](ctx, i, token.AccessToken)
+	userData, err := getUserData[userDataRequester](ctx, i, token.AccessToken)
 	if err != nil {
 		// rctx.Logger().Error(err)
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 	}
 
-	user, err := i.Identifier.UpsertUser(ctx, UpsertUserRequest{
+	user, err := i.Storer.UpsertUser(ctx, UpsertUserRequest{
 		Email: userData.GetEmail(),
 	})
 	if err != nil {
@@ -139,7 +97,7 @@ func callback[UserDataType UserDataRequester](
 	}
 
 	now := time.Now().UTC()
-	session, err := i.Identifier.CreateSession(ctx, CreateSessionRequest{
+	session, err := i.Storer.CreateSession(ctx, CreateSessionRequest{
 		User:     user,
 		IdleAt:   now.Add(SessionIdleDuration),
 		ExpireAt: now.Add(SessionActiveDuration),
@@ -162,6 +120,24 @@ func callback[UserDataType UserDataRequester](
 	// }
 
 	return nil
+}
+
+func getUserData[DataType UserDataRequester](ctx context.Context, i *Identity, accessToken string) (DataType, error) {
+	var userData DataType
+	response, err := userData.Request(ctx, i, accessToken)
+	if err != nil {
+		return userData, fmt.Errorf("failed getting user info: %s", err.Error())
+	}
+	defer response.Body.Close()
+	contents, err := io.ReadAll(response.Body)
+	if err != nil {
+		return userData, fmt.Errorf("failed read response: %s", err.Error())
+	}
+
+	if err := json.Unmarshal(contents, &userData); err != nil {
+		return userData, fmt.Errorf("failed unmarshalling response: %s", err.Error())
+	}
+	return userData, nil
 }
 
 // func getCallbackRedirectURL(rctx contexts.RequestContext, state string) (string, error) {

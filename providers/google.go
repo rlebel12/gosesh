@@ -1,13 +1,22 @@
-package identity
+package providers
 
 import (
 	"context"
 	"fmt"
 	"net/http"
 
+	"github.com/rlebel12/identity"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
+
+func GoogleAuthLogin(i *identity.Identity, w http.ResponseWriter, r *http.Request) error {
+	return identity.OAuthBegin(i, w, r, GoogleOauthConfig(i))
+}
+
+func GoogleAuthCallback(i *identity.Identity, w http.ResponseWriter, r *http.Request) error {
+	return identity.OAuthCallback[GoogleUser](i, w, r, GoogleOauthConfig(i))
+}
 
 type GoogleUser struct {
 	ID            string `json:"id"`
@@ -16,7 +25,7 @@ type GoogleUser struct {
 	Picture       string `json:"picture"`
 }
 
-func (GoogleUser) Request(ctx context.Context, i *Identity, accessToken string) (*http.Response, error) {
+func (GoogleUser) Request(ctx context.Context, i *identity.Identity, accessToken string) (*http.Response, error) {
 	const oauthGoogleUrlAPI = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
 	return http.Get(oauthGoogleUrlAPI + accessToken)
 }
@@ -25,10 +34,10 @@ func (user GoogleUser) GetEmail() string {
 	return user.Email
 }
 
-func (i *Identity) GoogleOauthConfig() *oauth2.Config {
+func GoogleOauthConfig(i *identity.Identity) *oauth2.Config {
 	return &oauth2.Config{
-		ClientID:     i.Config.GoogleOAuthConfig.ClientID,
-		ClientSecret: i.Config.GoogleOAuthConfig.ClientSecret,
+		ClientID:     i.Config.Providers.Google.ClientID,
+		ClientSecret: i.Config.Providers.Google.ClientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s/auth/google/callback", i.Config.Origin.Scheme, i.Config.Origin.Host),
 		Scopes: []string{

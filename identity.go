@@ -9,13 +9,11 @@ import (
 )
 
 type Identity struct {
-	Identifier
+	Storer
 	Config
 }
 
-type UserHandler interface{}
-
-type OAuthConfig struct {
+type ProviderConfig struct {
 	ClientID     string
 	ClientSecret string
 }
@@ -23,10 +21,11 @@ type OAuthConfig struct {
 type Config struct {
 	Origin url.URL
 
-	// OAuth
-	GoogleOAuthConfig  OAuthConfig
-	DiscordOAuthConfig OAuthConfig
-	TwitchOAuthConfig  OAuthConfig
+	Providers struct {
+		Google  ProviderConfig
+		Discord ProviderConfig
+		Twitch  ProviderConfig
+	}
 }
 
 type User struct {
@@ -60,7 +59,7 @@ type UpdateSessionValues struct {
 	ExpireAt time.Time
 }
 
-type Identifier interface {
+type Storer interface {
 	UpsertUser(ctx context.Context, req UpsertUserRequest) (User, error)
 	GetUser(ctx context.Context, userID uuid.UUID) (User, error)
 	CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error)
@@ -70,8 +69,9 @@ type Identifier interface {
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) error
 }
 
-func New(c Config) Identity {
+func New(c Config, s Storer) Identity {
 	return Identity{
 		Config: c,
+		Storer: s,
 	}
 }
