@@ -38,3 +38,17 @@ func (i *Identity) SessionCookie(sessionID uuid.UUID, expires time.Time) http.Co
 		Secure:   i.Config.Origin.Scheme == "https",
 	}
 }
+
+func (i *Identity) sessionIDFromCookie(w http.ResponseWriter, r *http.Request) (uuid.UUID, error) {
+	sessionCookie, err := r.Cookie(i.Config.AuthSessionCookieName)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
+	if err != nil {
+		return uuid.UUID{}, err
+	}
+
+	return uuid.ParseBytes([]byte(sessionIDRaw))
+}

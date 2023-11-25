@@ -9,7 +9,9 @@ import (
 )
 
 func New() *Identity {
-	i := &Identity{}
+	i := &Identity{
+		Config: &Config{},
+	}
 
 	i.Config.AuthSessionCookieName = defaultAuthSessionCookieName
 	i.Config.OAuthStateCookieName = defaultOAuthStateCookieName

@@ -2,11 +2,8 @@ package identity
 
 import (
 	"context"
-	"encoding/base64"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -15,44 +12,7 @@ const (
 
 func (i *Identity) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-
-		sessionCookieVal, err := r.Cookie(i.Config.AuthSessionCookieName)
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookieVal.Value)
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		sessionID, err := uuid.ParseBytes([]byte(sessionIDRaw))
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		session, err := i.Storer.GetSession(ctx, sessionID)
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if session.ExpireAt.Before(time.Now().UTC()) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		if session.User == nil {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		ctx = context.WithValue(ctx, SessionContextKey, session)
-		r = r.WithContext(ctx)
+		r = i.authenticate(w, r)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -102,4 +62,34 @@ func (i *Identity) RequireAuthentication(next http.Handler) http.Handler {
 func CurrentSession(r *http.Request) (Session, bool) {
 	session, ok := r.Context().Value(SessionContextKey).(Session)
 	return session, ok
+}
+
+func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Request {
+	session, ok := CurrentSession(r)
+	if ok {
+		return r
+	}
+
+	ctx := r.Context()
+
+	sessionID, err := i.sessionIDFromCookie(w, r)
+	if err != nil {
+		return r
+	}
+
+	session, err = i.Storer.GetSession(ctx, sessionID)
+	if err != nil {
+		return r
+	}
+
+	if session.ExpireAt.Before(time.Now().UTC()) {
+		return r
+	}
+
+	if session.User == nil {
+		return r
+	}
+
+	ctx = context.WithValue(ctx, SessionContextKey, session)
+	return r.WithContext(ctx)
 }

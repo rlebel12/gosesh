@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 )
 
@@ -158,21 +159,29 @@ func (i *Identity) getCallbackRedirectURL(ctx context.Context, state string) (*u
 	return i.Redirecter.GetCallbackRedirectURL(ctx, state)
 }
 
-// type logoutIn struct {
-// 	AllSessions bool `query:"all"`
-// }
+func (i *Identity) LogoutHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r = i.authenticate(w, r)
+		session, ok := CurrentSession(r)
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
-// func (i *Identity) Logout(w http.ResponseWriter, r *http.Request) error {
-// 	sessionID, err := r.Cookie(AuthSessionCookieName)
+		var err error
+		switch {
+		case r.URL.Query().Get("all") != "":
+			err = i.Storer.DeleteSession(r.Context(), session.ID)
+		default:
+			err = i.Storer.DeleteUserSessions(r.Context(), session.User.ID)
+		}
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-// 	sessionCookie := i.SessionCookie(uuid.UUID{}, time.Now().UTC())
-// 	http.SetCookie(w, &sessionCookie)
-
-// 	i.Identifier.DeleteSession(r.Context(), i.Session(r).ID)
-
-// 	return rctx.Redirect(http.StatusTemporaryRedirect, "/")
-// }
-
-// func callbackRedirectURLKey(state string) string {
-// 	return fmt.Sprintf("%s:%s", callbackRedirectKeyBase, state)
-// }
+		sessionCookie := i.SessionCookie(uuid.UUID{}, time.Now().UTC())
+		http.SetCookie(w, &sessionCookie)
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	}
+}
