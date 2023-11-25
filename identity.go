@@ -9,23 +9,22 @@ import (
 )
 
 type Identity struct {
+	Config *Config
 	Storer
-	Config
+	Redirecter
 }
 
-type ProviderConfig struct {
+type OAuthProviderConfig struct {
 	ClientID     string
 	ClientSecret string
 }
 
 type Config struct {
-	Origin url.URL
+	Origin                *url.URL
+	AuthSessionCookieName string
+	OAuthStateCookieName  string
 
-	Providers struct {
-		Google  ProviderConfig
-		Discord ProviderConfig
-		Twitch  ProviderConfig
-	}
+	Providers map[string]OAuthProviderConfig
 }
 
 type User struct {
@@ -69,9 +68,16 @@ type Storer interface {
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) error
 }
 
-func New(c Config, s Storer) Identity {
-	return Identity{
-		Config: c,
-		Storer: s,
-	}
+type Redirecter interface {
+	SetCallbackRedirectURL(ctx context.Context, oAuthState string, redirectURL *url.URL) error
+	GetCallbackRedirectURL(ctx context.Context, oAuthState string) (*url.URL, error)
+}
+
+func New() *Identity {
+	i := &Identity{}
+
+	i.Config.AuthSessionCookieName = defaultAuthSessionCookieName
+	i.Config.OAuthStateCookieName = defaultOAuthStateCookieName
+
+	return i
 }

@@ -17,7 +17,7 @@ func (i *Identity) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		sessionCookieVal, err := r.Cookie(AuthSessionCookieName)
+		sessionCookieVal, err := r.Cookie(i.Config.AuthSessionCookieName)
 		if err != nil {
 			next.ServeHTTP(w, r)
 			return

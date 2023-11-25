@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -22,104 +23,113 @@ const (
 	SessionIdleDuration   = 24 * time.Hour
 )
 
-func OAuthBegin(i *Identity, w http.ResponseWriter, r *http.Request, oauthCfg *oauth2.Config) error {
-	// ctx := r.Context()
-	b := make([]byte, 16)
-	rand.Read(b)
-	state := base64.URLEncoding.EncodeToString(b)
+func OAuthBegin(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		b := make([]byte, 16)
+		rand.Read(b)
+		state := base64.URLEncoding.EncodeToString(b)
 
-	expiration := time.Now().UTC().Add(5 * time.Minute)
-	cookie := i.OauthStateCookie(state, expiration)
-	http.SetCookie(w, &cookie)
+		expiration := time.Now().UTC().Add(5 * time.Minute)
+		cookie := i.OauthStateCookie(state, expiration)
+		http.SetCookie(w, &cookie)
 
-	// err = setCallbackRedirectURL(rctx, state, params.RedirectURL)
-	// if err != nil {
-	// 	return err
-	// }
+		err := i.setCallbackRedirectURL(ctx, r, state)
+		if err != nil {
+			panic(err)
+		}
 
-	url := oauthCfg.AuthCodeURL(state)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-	return nil
-	// return rctx.Redirect(http.StatusTemporaryRedirect, url)
+		url := oauthCfg.AuthCodeURL(state)
+		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+
+	}
 }
 
-// func setCallbackRedirectURL(rctx contexts.RequestContext, state string, redirectURL string) error {
-// 	if rctx.AppContext.Cache == nil || redirectURL == "" {
-// 		return nil
-// 	}
-// 	key := callbackRedirectURLKey(state)
-// 	return rctx.AppContext.Cache.SetCallbackRedirectURL(
-// 		rctx.Request().Context(), key, redirectURL, 5*time.Minute,
-// 	)
-// }
+func (i *Identity) setCallbackRedirectURL(ctx context.Context, r *http.Request, state string) error {
+	if i.Redirecter == nil {
+		return nil
+	}
+
+	redirectURLRaw := r.URL.Query().Get("redirect_url")
+	if redirectURLRaw == "" {
+		return nil
+	}
+
+	redirectURL, err := url.Parse(redirectURLRaw)
+	if err != nil {
+		return err
+	}
+
+	i.Redirecter.SetCallbackRedirectURL(ctx, state, redirectURL)
+	return nil
+}
 
 type UserDataRequester interface {
 	Request(ctx context.Context, i *Identity, accessToken string) (*http.Response, error)
 	GetEmail() string
 }
 
-func OAuthCallback[userDataRequester UserDataRequester](
-	i *Identity, w http.ResponseWriter, r *http.Request, oauthCfg *oauth2.Config,
-) error {
-	ctx := r.Context()
-	oauthState, err := r.Cookie(OauthStateCookieName)
-	if err != nil {
-		return err
+func OAuthCallback[userDataRequester UserDataRequester](i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		oauthState, err := r.Cookie(i.Config.OAuthStateCookieName)
+		if err != nil {
+			return
+		}
+
+		stateCookie := i.OauthStateCookie("", time.Now().UTC())
+		http.SetCookie(w, &stateCookie)
+
+		stateFromForm := r.FormValue("state")
+		if stateFromForm != oauthState.Value {
+			// rctx.Logger().Error("invalid oauth state")
+			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		}
+
+		code := r.FormValue("code")
+		token, err := oauthCfg.Exchange(ctx, code)
+		if err != nil {
+			_ = fmt.Errorf("code exchange wrong: %s", err.Error())
+			return
+		}
+
+		userData, err := getUserData[userDataRequester](ctx, i, token.AccessToken)
+		if err != nil {
+			// rctx.Logger().Error(err)
+			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		}
+
+		user, err := i.Storer.UpsertUser(ctx, UpsertUserRequest{
+			Email: userData.GetEmail(),
+		})
+		if err != nil {
+			// rctx.Logger().Error(err)
+			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		}
+
+		now := time.Now().UTC()
+		session, err := i.Storer.CreateSession(ctx, CreateSessionRequest{
+			User:     user,
+			IdleAt:   now.Add(SessionIdleDuration),
+			ExpireAt: now.Add(SessionActiveDuration),
+		})
+		if err != nil {
+			// rctx.Logger().Error(err)
+			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		}
+
+		sessionCookie := i.SessionCookie(session.ID, session.ExpireAt)
+		http.SetCookie(w, &sessionCookie)
+
+		redirectURL, err := i.getCallbackRedirectURL(ctx, oauthState.Value)
+		if err != nil {
+			// rctx.Logger().Error(err)
+			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		}
+		if *redirectURL != (url.URL{}) {
+			http.Redirect(w, r, redirectURL.String(), http.StatusTemporaryRedirect)
+		}
 	}
-
-	stateCookie := i.OauthStateCookie("", time.Now().UTC())
-	http.SetCookie(w, &stateCookie)
-
-	stateFromForm := r.FormValue("state")
-	if stateFromForm != oauthState.Value {
-		// rctx.Logger().Error("invalid oauth state")
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-	}
-
-	code := r.FormValue("code")
-	token, err := oauthCfg.Exchange(ctx, code)
-	if err != nil {
-		return fmt.Errorf("code exchange wrong: %s", err.Error())
-	}
-
-	userData, err := getUserData[userDataRequester](ctx, i, token.AccessToken)
-	if err != nil {
-		// rctx.Logger().Error(err)
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-	}
-
-	user, err := i.Storer.UpsertUser(ctx, UpsertUserRequest{
-		Email: userData.GetEmail(),
-	})
-	if err != nil {
-		// rctx.Logger().Error(err)
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-	}
-
-	now := time.Now().UTC()
-	session, err := i.Storer.CreateSession(ctx, CreateSessionRequest{
-		User:     user,
-		IdleAt:   now.Add(SessionIdleDuration),
-		ExpireAt: now.Add(SessionActiveDuration),
-	})
-	if err != nil {
-		// rctx.Logger().Error(err)
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-	}
-
-	sessionCookie := i.SessionCookie(session.ID, session.ExpireAt)
-	http.SetCookie(w, &sessionCookie)
-
-	// redirectURL, err := getCallbackRedirectURL(rctx, oauthState.Value)
-	// if err != nil {
-	// 	rctx.Logger().Error(err)
-	// 	return rctx.Redirect(http.StatusTemporaryRedirect, "/")
-	// }
-	// if redirectURL != "" {
-	// 	return rctx.Redirect(http.StatusPermanentRedirect, redirectURL)
-	// }
-
-	return nil
 }
 
 func getUserData[DataType UserDataRequester](ctx context.Context, i *Identity, accessToken string) (DataType, error) {
@@ -140,13 +150,13 @@ func getUserData[DataType UserDataRequester](ctx context.Context, i *Identity, a
 	return userData, nil
 }
 
-// func getCallbackRedirectURL(rctx contexts.RequestContext, state string) (string, error) {
-// 	if rctx.AppContext.Cache == nil {
-// 		return "", nil
-// 	}
-// 	key := callbackRedirectURLKey(state)
-// 	return rctx.AppContext.Cache.GetCallbackRedirectURL(rctx.Request().Context(), key)
-// }
+func (i *Identity) getCallbackRedirectURL(ctx context.Context, state string) (*url.URL, error) {
+	if i.Redirecter == nil {
+		return &url.URL{}, nil
+	}
+
+	return i.Redirecter.GetCallbackRedirectURL(ctx, state)
+}
 
 // type logoutIn struct {
 // 	AllSessions bool `query:"all"`

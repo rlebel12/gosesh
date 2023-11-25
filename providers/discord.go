@@ -9,12 +9,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func DiscordAuthLogin(i *identity.Identity, w http.ResponseWriter, r *http.Request) error {
-	return identity.OAuthBegin(i, w, r, DiscordOauthConfig(i))
+const DiscordProviderKey = "discord"
+
+func DiscordAuthLogin(i *identity.Identity) http.HandlerFunc {
+	return identity.OAuthBegin(i, DiscordOauthConfig(i))
 }
 
-func DiscordAuthCallback(i *identity.Identity, w http.ResponseWriter, r *http.Request) error {
-	return identity.OAuthCallback[DiscordUser](i, w, r, DiscordOauthConfig(i))
+func DiscordAuthCallback(i *identity.Identity) http.HandlerFunc {
+	return identity.OAuthCallback[DiscordUser](i, DiscordOauthConfig(i))
 }
 
 type DiscordUser struct {
@@ -41,9 +43,10 @@ func (user DiscordUser) GetEmail() string {
 }
 
 func DiscordOauthConfig(i *identity.Identity) *oauth2.Config {
+	providerConf := i.Config.Providers[DiscordProviderKey]
 	return &oauth2.Config{
-		ClientID:     i.Config.Providers.Discord.ClientID,
-		ClientSecret: i.Config.Providers.Discord.ClientSecret,
+		ClientID:     providerConf.ClientID,
+		ClientSecret: providerConf.ClientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s/auth/discord/callback", i.Config.Origin.Scheme, i.Config.Origin.Host),
 		Scopes: []string{

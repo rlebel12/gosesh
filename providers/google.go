@@ -10,12 +10,14 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func GoogleAuthLogin(i *identity.Identity, w http.ResponseWriter, r *http.Request) error {
-	return identity.OAuthBegin(i, w, r, GoogleOauthConfig(i))
+const GoogleProviderKey = "google"
+
+func GoogleAuthLogin(i *identity.Identity) http.HandlerFunc {
+	return identity.OAuthBegin(i, GoogleOauthConfig(i))
 }
 
-func GoogleAuthCallback(i *identity.Identity, w http.ResponseWriter, r *http.Request) error {
-	return identity.OAuthCallback[GoogleUser](i, w, r, GoogleOauthConfig(i))
+func GoogleAuthCallback(i *identity.Identity) http.HandlerFunc {
+	return identity.OAuthCallback[GoogleUser](i, GoogleOauthConfig(i))
 }
 
 type GoogleUser struct {
@@ -35,9 +37,10 @@ func (user GoogleUser) GetEmail() string {
 }
 
 func GoogleOauthConfig(i *identity.Identity) *oauth2.Config {
+	providerConf := i.Config.Providers[GoogleProviderKey]
 	return &oauth2.Config{
-		ClientID:     i.Config.Providers.Google.ClientID,
-		ClientSecret: i.Config.Providers.Google.ClientSecret,
+		ClientID:     providerConf.ClientID,
+		ClientSecret: providerConf.ClientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s/auth/google/callback", i.Config.Origin.Scheme, i.Config.Origin.Host),
 		Scopes: []string{

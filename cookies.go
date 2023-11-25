@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	AuthSessionCookieName = "vel_session"
-	OauthStateCookieName  = "vel_oauthstate"
+	defaultAuthSessionCookieName = "session"
+	defaultOAuthStateCookieName  = "oauthstate"
 )
 
 func (i *Identity) OauthStateCookie(value string, expires time.Time) http.Cookie {
 	return http.Cookie{
-		Name:     OauthStateCookieName,
+		Name:     i.Config.OAuthStateCookieName,
 		Value:    value,
 		Domain:   i.Config.Origin.Hostname(),
 		Path:     "/",
@@ -28,7 +28,7 @@ func (i *Identity) OauthStateCookie(value string, expires time.Time) http.Cookie
 
 func (i *Identity) SessionCookie(sessionID uuid.UUID, expires time.Time) http.Cookie {
 	return http.Cookie{
-		Name:     AuthSessionCookieName,
+		Name:     i.Config.AuthSessionCookieName,
 		Value:    base64.URLEncoding.EncodeToString([]byte(sessionID.String())),
 		Domain:   i.Config.Origin.Hostname(),
 		Path:     "/",
