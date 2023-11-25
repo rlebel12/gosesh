@@ -16,12 +16,8 @@ import (
 )
 
 const (
-	callbackRedirectKeyBase = "callback_redirect"
-)
-
-const (
-	SessionActiveDuration = 1 * time.Hour
-	SessionIdleDuration   = 24 * time.Hour
+	defaultSessionActiveDuration = 1 * time.Hour
+	defaultSessionIdleDuration   = 24 * time.Hour
 )
 
 func OAuthBeginHandler(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
@@ -81,14 +77,12 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 		stateCookie := i.OauthStateCookie("", time.Now().UTC())
 		http.SetCookie(w, &stateCookie)
 
-		stateFromForm := r.FormValue("state")
-		if stateFromForm != oauthState.Value {
+		if r.FormValue("state") != oauthState.Value {
 			// rctx.Logger().Error("invalid oauth state")
 			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		}
 
-		code := r.FormValue("code")
-		token, err := oauthCfg.Exchange(ctx, code)
+		token, err := oauthCfg.Exchange(ctx, r.FormValue("code"))
 		if err != nil {
 			_ = fmt.Errorf("code exchange wrong: %s", err.Error())
 			return
@@ -111,8 +105,8 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 		now := time.Now().UTC()
 		session, err := i.Storer.CreateSession(ctx, CreateSessionRequest{
 			User:     user,
-			IdleAt:   now.Add(SessionIdleDuration),
-			ExpireAt: now.Add(SessionActiveDuration),
+			IdleAt:   now.Add(i.Config.SessionActiveDuration),
+			ExpireAt: now.Add(i.Config.SessionIdleDuration),
 		})
 		if err != nil {
 			// rctx.Logger().Error(err)

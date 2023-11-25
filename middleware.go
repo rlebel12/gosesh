@@ -33,8 +33,8 @@ func (i *Identity) AuthenticateAndRefresh(next http.Handler) http.Handler {
 
 		ctx := r.Context()
 		session, err := i.Storer.UpdateSession(ctx, session.ID, UpdateSessionValues{
-			IdleAt:   now.Add(SessionActiveDuration),
-			ExpireAt: now.Add(SessionIdleDuration),
+			IdleAt:   now.Add(i.Config.SessionActiveDuration),
+			ExpireAt: now.Add(i.Config.SessionIdleDuration),
 		})
 		if err != nil {
 			next.ServeHTTP(w, r)

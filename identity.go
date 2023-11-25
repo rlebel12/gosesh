@@ -15,6 +15,8 @@ func New() *Identity {
 
 	i.Config.AuthSessionCookieName = defaultAuthSessionCookieName
 	i.Config.OAuthStateCookieName = defaultOAuthStateCookieName
+	i.Config.SessionIdleDuration = defaultSessionIdleDuration
+	i.Config.SessionActiveDuration = defaultSessionActiveDuration
 
 	return i
 }
@@ -31,9 +33,13 @@ type OAuthProviderConfig struct {
 }
 
 type Config struct {
-	Origin                *url.URL
+	Origin *url.URL
+
 	AuthSessionCookieName string
 	OAuthStateCookieName  string
+
+	SessionIdleDuration   time.Duration
+	SessionActiveDuration time.Duration
 
 	Providers map[string]OAuthProviderConfig
 }
