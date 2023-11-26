@@ -93,3 +93,29 @@ func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Re
 	ctx = context.WithValue(ctx, SessionContextKey, session)
 	return r.WithContext(ctx)
 }
+
+type ResponseWriter interface {
+	http.ResponseWriter
+	Status() int
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *responseWriter) WriteHeader(s int) {
+	w.status = s
+	w.ResponseWriter.WriteHeader(s)
+}
+
+func (w *responseWriter) Status() int {
+	return w.status
+}
+
+func NewResponseWriter(w http.ResponseWriter) ResponseWriter {
+	nrw := &responseWriter{
+		ResponseWriter: w,
+	}
+	return nrw
+}

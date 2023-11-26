@@ -43,7 +43,7 @@ func OAuthBeginHandler(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
 }
 
 func (i *Identity) setCallbackRedirectURL(ctx context.Context, r *http.Request, state string) error {
-	if i.Redirecter == nil {
+	if i.CallbackRedirecter == nil {
 		return nil
 	}
 
@@ -57,7 +57,7 @@ func (i *Identity) setCallbackRedirectURL(ctx context.Context, r *http.Request, 
 		return err
 	}
 
-	i.Redirecter.SetCallbackRedirectURL(ctx, state, redirectURL)
+	i.CallbackRedirecter.SetURL(ctx, state, redirectURL)
 	return nil
 }
 
@@ -146,11 +146,11 @@ func getUserData[DataType UserDataRequester](ctx context.Context, i *Identity, a
 }
 
 func (i *Identity) getCallbackRedirectURL(ctx context.Context, state string) (*url.URL, error) {
-	if i.Redirecter == nil {
+	if i.CallbackRedirecter == nil {
 		return &url.URL{}, nil
 	}
 
-	return i.Redirecter.GetCallbackRedirectURL(ctx, state)
+	return i.CallbackRedirecter.GetURL(ctx, state)
 }
 
 func (i *Identity) LogoutHandler() http.HandlerFunc {

@@ -24,7 +24,7 @@ func New() *Identity {
 type Identity struct {
 	Config *Config
 	Storer
-	Redirecter
+	CallbackRedirecter
 }
 
 type OAuthProviderConfig struct {
@@ -40,6 +40,8 @@ type Config struct {
 
 	SessionIdleDuration   time.Duration
 	SessionActiveDuration time.Duration
+
+	AllowedRedirectDomains []string
 
 	Providers map[string]OAuthProviderConfig
 }
@@ -85,7 +87,7 @@ type Storer interface {
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) error
 }
 
-type Redirecter interface {
-	SetCallbackRedirectURL(ctx context.Context, oAuthState string, redirectURL *url.URL) error
-	GetCallbackRedirectURL(ctx context.Context, oAuthState string) (*url.URL, error)
+type CallbackRedirecter interface {
+	SetURL(ctx context.Context, oAuthState string, redirectURL *url.URL) error
+	GetURL(ctx context.Context, oAuthState string) (*url.URL, error)
 }
