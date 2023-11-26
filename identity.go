@@ -10,7 +10,9 @@ import (
 
 func New() *Identity {
 	i := &Identity{
-		Config: &Config{},
+		Config: &Config{
+			Providers: map[string]OAuthProviderConfig{},
+		},
 	}
 
 	i.Config.AuthSessionCookieName = defaultAuthSessionCookieName
@@ -84,7 +86,7 @@ type Storer interface {
 	GetSession(ctx context.Context, sessionID uuid.UUID) (Session, error)
 	UpdateSession(ctx context.Context, sessionID uuid.UUID, req UpdateSessionValues) (Session, error)
 	DeleteSession(ctx context.Context, sessionID uuid.UUID) error
-	DeleteUserSessions(ctx context.Context, userID uuid.UUID) error
+	DeleteUserSessions(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
 type CallbackRedirecter interface {

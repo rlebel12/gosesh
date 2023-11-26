@@ -176,7 +176,7 @@ func (i *Identity) LogoutHandler() http.HandlerFunc {
 		case r.URL.Query().Get("all") != "":
 			err = i.Storer.DeleteSession(r.Context(), session.ID)
 		default:
-			err = i.Storer.DeleteUserSessions(r.Context(), session.UserID)
+			_, err = i.Storer.DeleteUserSessions(r.Context(), session.UserID)
 		}
 		if err != nil {
 			slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
