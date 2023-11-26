@@ -86,10 +86,6 @@ func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Re
 		return r
 	}
 
-	if session.User == nil {
-		return r
-	}
-
 	ctx = context.WithValue(ctx, SessionContextKey, session)
 	return r.WithContext(ctx)
 }

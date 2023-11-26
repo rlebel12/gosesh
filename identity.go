@@ -55,11 +55,11 @@ type User struct {
 
 type Session struct {
 	ID        uuid.UUID
+	UserID    uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	IdleAt    time.Time
 	ExpireAt  time.Time
-	User      *User
 }
 
 type UpsertUserRequest struct {
