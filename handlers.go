@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -33,7 +34,9 @@ func OAuthBeginHandler(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
 
 		err := i.setCallbackRedirectURL(ctx, r, state)
 		if err != nil {
-			panic(err)
+			slog.Error("Failed to set callback redirect URL: ", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		url := oauthCfg.AuthCodeURL(state)
@@ -71,6 +74,7 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 		ctx := r.Context()
 		oauthState, err := r.Cookie(i.Config.OAuthStateCookieName)
 		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -78,28 +82,31 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 		http.SetCookie(w, &stateCookie)
 
 		if r.FormValue("state") != oauthState.Value {
-			// rctx.Logger().Error("invalid oauth state")
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
 		token, err := oauthCfg.Exchange(ctx, r.FormValue("code"))
 		if err != nil {
-			_ = fmt.Errorf("code exchange wrong: %s", err.Error())
+			slog.Error("failed to exchange token", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		userData, err := getUserData[userDataRequester](ctx, i, token.AccessToken)
 		if err != nil {
-			// rctx.Logger().Error(err)
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			slog.Error("failed to get user data", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		user, err := i.Storer.UpsertUser(ctx, UpsertUserRequest{
 			Email: userData.GetEmail(),
 		})
 		if err != nil {
-			// rctx.Logger().Error(err)
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			slog.Error("failed to upsert user", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		now := time.Now().UTC()
@@ -109,8 +116,9 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 			ExpireAt: now.Add(i.Config.SessionIdleDuration),
 		})
 		if err != nil {
-			// rctx.Logger().Error(err)
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			slog.Error("failed to create session", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
 		sessionCookie := i.SessionCookie(session.ID, session.ExpireAt)
@@ -118,8 +126,9 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 
 		redirectURL, err := i.getCallbackRedirectURL(ctx, oauthState.Value)
 		if err != nil {
-			// rctx.Logger().Error(err)
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			slog.Error("failed to get callback redirect URL", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 		if *redirectURL != (url.URL{}) {
 			http.Redirect(w, r, redirectURL.String(), http.StatusTemporaryRedirect)
@@ -170,6 +179,7 @@ func (i *Identity) LogoutHandler() http.HandlerFunc {
 			err = i.Storer.DeleteUserSessions(r.Context(), session.User.ID)
 		}
 		if err != nil {
+			slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
