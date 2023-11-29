@@ -59,8 +59,8 @@ func (i *Identity) RequireAuthentication(next http.Handler) http.Handler {
 	})
 }
 
-func CurrentSession(r *http.Request) (Session, bool) {
-	session, ok := r.Context().Value(SessionContextKey).(Session)
+func CurrentSession(r *http.Request) (*Session, bool) {
+	session, ok := r.Context().Value(SessionContextKey).(*Session)
 	return session, ok
 }
 
