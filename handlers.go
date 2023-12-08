@@ -132,6 +132,12 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 		}
 		if *redirectURL != (url.URL{}) {
 			http.Redirect(w, r, redirectURL.String(), http.StatusTemporaryRedirect)
+			return
+		}
+		redirectURL, ok := ctx.Value(SuccessRedirectKey).(*url.URL)
+		if ok && *redirectURL != (url.URL{}) {
+			http.Redirect(w, r, redirectURL.String(), http.StatusTemporaryRedirect)
+			return
 		}
 	}
 }

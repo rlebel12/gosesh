@@ -3,11 +3,13 @@ package identity
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"time"
 )
 
 const (
-	SessionContextKey = "session"
+	SessionContextKey  = "session"
+	SuccessRedirectKey = "successRedirect"
 )
 
 func (i *Identity) Authenticate(next http.Handler) http.Handler {
@@ -88,6 +90,15 @@ func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Re
 
 	ctx = context.WithValue(ctx, SessionContextKey, session)
 	return r.WithContext(ctx)
+}
+
+func (i *Identity) SuccessRedirect(url *url.URL) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), SuccessRedirectKey, url)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 type ResponseWriter interface {
