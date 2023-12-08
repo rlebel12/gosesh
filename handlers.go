@@ -131,14 +131,15 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 			return
 		}
 		if *redirectURL != (url.URL{}) {
-			http.Redirect(w, r, redirectURL.String(), http.StatusTemporaryRedirect)
+			http.Redirect(w, r, redirectURL.String(), http.StatusPermanentRedirect)
 			return
 		}
-		redirectURL, ok := ctx.Value(SuccessRedirectKey).(*url.URL)
+		redirectURL, ok := ctx.Value(CallbackRedirectKey).(*url.URL)
 		if ok && *redirectURL != (url.URL{}) {
-			http.Redirect(w, r, redirectURL.String(), http.StatusTemporaryRedirect)
+			http.Redirect(w, r, redirectURL.String(), http.StatusPermanentRedirect)
 			return
 		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
@@ -192,6 +193,12 @@ func (i *Identity) LogoutHandler() http.HandlerFunc {
 
 		sessionCookie := i.SessionCookie(uuid.UUID{}, time.Now().UTC())
 		http.SetCookie(w, &sessionCookie)
+
+		redirectURL, ok := r.Context().Value(LogoutRedirectKey).(*url.URL)
+		if ok && *redirectURL != (url.URL{}) {
+			http.Redirect(w, r, redirectURL.String(), http.StatusPermanentRedirect)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

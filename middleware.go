@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	SessionContextKey  = "session"
-	SuccessRedirectKey = "successRedirect"
+	SessionContextKey   = "session"
+	CallbackRedirectKey = "successRedirect"
+	LogoutRedirectKey   = "logoutRedirect"
 )
 
 func (i *Identity) Authenticate(next http.Handler) http.Handler {
@@ -92,10 +93,18 @@ func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Re
 	return r.WithContext(ctx)
 }
 
-func (i *Identity) SuccessRedirect(url *url.URL) func(http.Handler) http.Handler {
+func (i *Identity) CallbackRedirect(url *url.URL) func(http.Handler) http.Handler {
+	return redirect(url, CallbackRedirectKey)
+}
+
+func (i *Identity) LogoutRedirect(url *url.URL) func(http.Handler) http.Handler {
+	return redirect(url, LogoutRedirectKey)
+}
+
+func redirect(url *url.URL, key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), SuccessRedirectKey, url)
+			ctx := context.WithValue(r.Context(), key, url)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
