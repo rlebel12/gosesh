@@ -1,4 +1,4 @@
-module github.com/rlebel12/identity
+module github.com/rlebel12/gosesh
 
 go 1.21.0
 

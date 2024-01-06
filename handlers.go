@@ -1,4 +1,4 @@
-package identity
+package gosesh
 
 import (
 	"context"
@@ -20,7 +20,7 @@ const (
 	defaultSessionIdleDuration   = 24 * time.Hour
 )
 
-func OAuthBeginHandler(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
+func OAuthBeginHandler(gs *Gosesh, oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		b := make([]byte, 16)
@@ -28,10 +28,10 @@ func OAuthBeginHandler(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
 		state := base64.URLEncoding.EncodeToString(b)
 
 		expiration := time.Now().UTC().Add(5 * time.Minute)
-		cookie := i.OauthStateCookie(state, expiration)
+		cookie := gs.OauthStateCookie(state, expiration)
 		http.SetCookie(w, &cookie)
 
-		err := i.setCallbackRedirectURL(ctx, r, state)
+		err := gs.setCallbackRedirectURL(ctx, r, state)
 		if err != nil {
 			slog.Error("Failed to set callback redirect URL: ", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -44,8 +44,8 @@ func OAuthBeginHandler(i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
 	}
 }
 
-func (i *Identity) setCallbackRedirectURL(ctx context.Context, r *http.Request, state string) error {
-	if i.CallbackRedirecter == nil {
+func (gs *Gosesh) setCallbackRedirectURL(ctx context.Context, r *http.Request, state string) error {
+	if gs.CallbackRedirecter == nil {
 		return nil
 	}
 
@@ -59,25 +59,25 @@ func (i *Identity) setCallbackRedirectURL(ctx context.Context, r *http.Request, 
 		return err
 	}
 
-	i.CallbackRedirecter.SetURL(ctx, state, redirectURL)
+	gs.CallbackRedirecter.SetURL(ctx, state, redirectURL)
 	return nil
 }
 
 type UserDataRequester interface {
-	Request(ctx context.Context, i *Identity, accessToken string) (*http.Response, error)
+	Request(ctx context.Context, gs *Gosesh, accessToken string) (*http.Response, error)
 	GetEmail() string
 }
 
-func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oauthCfg *oauth2.Config) http.HandlerFunc {
+func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		oauthState, err := r.Cookie(i.Config.OAuthStateCookieName)
+		oauthState, err := r.Cookie(gs.Config.OAuthStateCookieName)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		stateCookie := i.OauthStateCookie("", time.Now().UTC())
+		stateCookie := gs.OauthStateCookie("", time.Now().UTC())
 		http.SetCookie(w, &stateCookie)
 
 		if r.FormValue("state") != oauthState.Value {
@@ -92,14 +92,14 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 			return
 		}
 
-		userData, err := getUserData[userDataRequester](ctx, i, token.AccessToken)
+		userData, err := getUserData[userDataRequester](ctx, gs, token.AccessToken)
 		if err != nil {
 			slog.Error("failed to get user data", "err", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		user, err := i.Storer.UpsertUser(ctx, UpsertUserRequest{
+		user, err := gs.Storer.UpsertUser(ctx, UpsertUserRequest{
 			Email: userData.GetEmail(),
 		})
 		if err != nil {
@@ -109,10 +109,10 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 		}
 
 		now := time.Now().UTC()
-		session, err := i.Storer.CreateSession(ctx, CreateSessionRequest{
+		session, err := gs.Storer.CreateSession(ctx, CreateSessionRequest{
 			User:     user,
-			IdleAt:   now.Add(i.Config.SessionActiveDuration),
-			ExpireAt: now.Add(i.Config.SessionIdleDuration),
+			IdleAt:   now.Add(gs.Config.SessionActiveDuration),
+			ExpireAt: now.Add(gs.Config.SessionIdleDuration),
 		})
 		if err != nil {
 			slog.Error("failed to create session", "err", err)
@@ -120,10 +120,10 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 			return
 		}
 
-		sessionCookie := i.SessionCookie(session.ID, session.ExpireAt)
+		sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
 		http.SetCookie(w, &sessionCookie)
 
-		redirectURL, err := i.getCallbackRedirectURL(ctx, oauthState.Value)
+		redirectURL, err := gs.getCallbackRedirectURL(ctx, oauthState.Value)
 		if err != nil {
 			slog.Error("failed to get callback redirect URL", "err", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -142,9 +142,9 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](i *Identity, oaut
 	}
 }
 
-func getUserData[DataType UserDataRequester](ctx context.Context, i *Identity, accessToken string) (DataType, error) {
+func getUserData[DataType UserDataRequester](ctx context.Context, gs *Gosesh, accessToken string) (DataType, error) {
 	var userData DataType
-	response, err := userData.Request(ctx, i, accessToken)
+	response, err := userData.Request(ctx, gs, accessToken)
 	if err != nil {
 		return userData, fmt.Errorf("failed getting user info: %s", err.Error())
 	}
@@ -160,17 +160,17 @@ func getUserData[DataType UserDataRequester](ctx context.Context, i *Identity, a
 	return userData, nil
 }
 
-func (i *Identity) getCallbackRedirectURL(ctx context.Context, state string) (*url.URL, error) {
-	if i.CallbackRedirecter == nil {
+func (gs *Gosesh) getCallbackRedirectURL(ctx context.Context, state string) (*url.URL, error) {
+	if gs.CallbackRedirecter == nil {
 		return &url.URL{}, nil
 	}
 
-	return i.CallbackRedirecter.GetURL(ctx, state)
+	return gs.CallbackRedirecter.GetURL(ctx, state)
 }
 
-func (i *Identity) LogoutHandler() http.HandlerFunc {
+func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r = i.authenticate(w, r)
+		r = gs.authenticate(w, r)
 		session, ok := CurrentSession(r)
 		if !ok {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -180,9 +180,9 @@ func (i *Identity) LogoutHandler() http.HandlerFunc {
 		var err error
 		switch {
 		case r.URL.Query().Get("all") != "":
-			err = i.Storer.DeleteSession(r.Context(), session.ID)
+			err = gs.Storer.DeleteSession(r.Context(), session.ID)
 		default:
-			_, err = i.Storer.DeleteUserSessions(r.Context(), session.UserID)
+			_, err = gs.Storer.DeleteUserSessions(r.Context(), session.UserID)
 		}
 		if err != nil {
 			slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
@@ -190,7 +190,7 @@ func (i *Identity) LogoutHandler() http.HandlerFunc {
 			return
 		}
 
-		sessionCookie := i.ExpireSessionCookie()
+		sessionCookie := gs.ExpireSessionCookie()
 		http.SetCookie(w, &sessionCookie)
 
 		redirectURL, ok := r.Context().Value(LogoutRedirectKey).(*url.URL)

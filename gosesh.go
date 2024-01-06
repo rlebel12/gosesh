@@ -1,4 +1,4 @@
-package identity
+package gosesh
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func New() *Identity {
+func New() *Gosesh {
 	config := &Config{
 		Providers:             map[string]OAuthProviderConfig{},
 		AuthSessionCookieName: defaultAuthSessionCookieName,
@@ -17,14 +17,14 @@ func New() *Identity {
 		SessionActiveDuration: defaultSessionActiveDuration,
 	}
 
-	i := &Identity{
+	i := &Gosesh{
 		Config: config,
 	}
 
 	return i
 }
 
-type Identity struct {
+type Gosesh struct {
 	Config *Config
 	Storer
 	CallbackRedirecter

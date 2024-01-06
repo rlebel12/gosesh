@@ -1,4 +1,4 @@
-package identity
+package gosesh
 
 import (
 	"context"
@@ -13,15 +13,15 @@ const (
 	LogoutRedirectKey   = "logoutRedirect"
 )
 
-func (i *Identity) Authenticate(next http.Handler) http.Handler {
+func (gs *Gosesh) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = i.authenticate(w, r)
+		r = gs.authenticate(w, r)
 		next.ServeHTTP(w, r)
 	})
 }
 
-func (i *Identity) AuthenticateAndRefresh(next http.Handler) http.Handler {
-	return i.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
+	return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, ok := CurrentSession(r)
 		if !ok {
 			next.ServeHTTP(w, r)
@@ -35,9 +35,9 @@ func (i *Identity) AuthenticateAndRefresh(next http.Handler) http.Handler {
 		}
 
 		ctx := r.Context()
-		session, err := i.Storer.UpdateSession(ctx, session.ID, UpdateSessionValues{
-			IdleAt:   now.Add(i.Config.SessionActiveDuration),
-			ExpireAt: now.Add(i.Config.SessionIdleDuration),
+		session, err := gs.Storer.UpdateSession(ctx, session.ID, UpdateSessionValues{
+			IdleAt:   now.Add(gs.Config.SessionActiveDuration),
+			ExpireAt: now.Add(gs.Config.SessionIdleDuration),
 		})
 		if err != nil {
 			next.ServeHTTP(w, r)
@@ -50,7 +50,7 @@ func (i *Identity) AuthenticateAndRefresh(next http.Handler) http.Handler {
 	}))
 }
 
-func (i *Identity) RequireAuthentication(next http.Handler) http.Handler {
+func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := CurrentSession(r)
 		if !ok {
@@ -67,7 +67,7 @@ func CurrentSession(r *http.Request) (*Session, bool) {
 	return session, ok
 }
 
-func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Request {
+func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Request {
 	session, ok := CurrentSession(r)
 	if ok {
 		return r
@@ -75,12 +75,12 @@ func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Re
 
 	ctx := r.Context()
 
-	sessionID, err := i.sessionIDFromCookie(w, r)
+	sessionID, err := gs.sessionIDFromCookie(w, r)
 	if err != nil {
 		return r
 	}
 
-	session, err = i.Storer.GetSession(ctx, sessionID)
+	session, err = gs.Storer.GetSession(ctx, sessionID)
 	if err != nil {
 		return r
 	}
@@ -93,11 +93,11 @@ func (i *Identity) authenticate(w http.ResponseWriter, r *http.Request) *http.Re
 	return r.WithContext(ctx)
 }
 
-func (i *Identity) CallbackRedirect(url *url.URL) func(http.Handler) http.Handler {
+func (gs *Gosesh) CallbackRedirect(url *url.URL) func(http.Handler) http.Handler {
 	return redirect(url, CallbackRedirectKey)
 }
 
-func (i *Identity) LogoutRedirect(url *url.URL) func(http.Handler) http.Handler {
+func (gs *Gosesh) LogoutRedirect(url *url.URL) func(http.Handler) http.Handler {
 	return redirect(url, LogoutRedirectKey)
 }
 

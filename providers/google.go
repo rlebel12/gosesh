@@ -5,19 +5,19 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/rlebel12/identity"
+	"github.com/rlebel12/gosesh"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
 
 const GoogleProviderKey = "google"
 
-func GoogleAuthLogin(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthBeginHandler(i, GoogleOauthConfig(i))
+func GoogleAuthLogin(gs *gosesh.Gosesh) http.HandlerFunc {
+	return gosesh.OAuthBeginHandler(gs, GoogleOauthConfig(gs))
 }
 
-func GoogleAuthCallback(i *identity.Identity) http.HandlerFunc {
-	return identity.OAuthCallbackHandler[GoogleUser](i, GoogleOauthConfig(i))
+func GoogleAuthCallback(gs *gosesh.Gosesh) http.HandlerFunc {
+	return gosesh.OAuthCallbackHandler[GoogleUser](gs, GoogleOauthConfig(gs))
 }
 
 type GoogleUser struct {
@@ -27,7 +27,7 @@ type GoogleUser struct {
 	Picture       string `json:"picture"`
 }
 
-func (GoogleUser) Request(ctx context.Context, i *identity.Identity, accessToken string) (*http.Response, error) {
+func (GoogleUser) Request(ctx context.Context, gs *gosesh.Gosesh, accessToken string) (*http.Response, error) {
 	const oauthGoogleUrlAPI = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
 	return http.Get(oauthGoogleUrlAPI + accessToken)
 }
@@ -36,13 +36,13 @@ func (user GoogleUser) GetEmail() string {
 	return user.Email
 }
 
-func GoogleOauthConfig(i *identity.Identity) *oauth2.Config {
-	providerConf := i.Config.Providers[GoogleProviderKey]
+func GoogleOauthConfig(gs *gosesh.Gosesh) *oauth2.Config {
+	providerConf := gs.Config.Providers[GoogleProviderKey]
 	return &oauth2.Config{
 		ClientID:     providerConf.ClientID,
 		ClientSecret: providerConf.ClientSecret,
 		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/google/callback", i.Config.Origin.Scheme, i.Config.Origin.Host),
+			"%s://%s/auth/google/callback", gs.Config.Origin.Scheme, gs.Config.Origin.Host),
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 		},
