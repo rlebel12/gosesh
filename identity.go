@@ -9,16 +9,17 @@ import (
 )
 
 func New() *Identity {
-	i := &Identity{
-		Config: &Config{
-			Providers: map[string]OAuthProviderConfig{},
-		},
+	config := &Config{
+		Providers:             map[string]OAuthProviderConfig{},
+		AuthSessionCookieName: defaultAuthSessionCookieName,
+		OAuthStateCookieName:  defaultOAuthStateCookieName,
+		SessionIdleDuration:   defaultSessionIdleDuration,
+		SessionActiveDuration: defaultSessionActiveDuration,
 	}
 
-	i.Config.AuthSessionCookieName = defaultAuthSessionCookieName
-	i.Config.OAuthStateCookieName = defaultOAuthStateCookieName
-	i.Config.SessionIdleDuration = defaultSessionIdleDuration
-	i.Config.SessionActiveDuration = defaultSessionActiveDuration
+	i := &Identity{
+		Config: config,
+	}
 
 	return i
 }
