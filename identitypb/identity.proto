@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package identitypb;
+
+option go_package = "identity/identitypb";
+
+message GetExpireSessionCookieRequest {
+}
+
+message Cookie {
+    string name = 1;
+    string value = 2;
+    string domain = 3;
+    string path = 4;
+    int64 expires = 5;
+    string same_site = 6;
+    bool  http_only = 7;
+    bool secure = 8;
+}
+
+service IdentityService {
+  rpc GetExpireSessionCookie ( GetExpireSessionCookieRequest ) returns ( Cookie );
+}

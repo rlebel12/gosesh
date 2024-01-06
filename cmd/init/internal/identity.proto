@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package identity;
+
+option go_package = "vel/identity";
+
+message CookieRequest {
+}
+
+message CookieResponse {
+    string name = 1;
+    string value = 2;
+    string domain = 3;
+    string path = 4;
+    int64 expires = 5;
+    string same_site = 6;
+    bool  http_only = 7;
+    bool secure = 8;
+}
+
+service IdentityService {
+  rpc GetCookie ( CookieRequest ) returns ( CookieResponse );
+}
