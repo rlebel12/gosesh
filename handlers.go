@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 )
 
@@ -191,7 +190,7 @@ func (i *Identity) LogoutHandler() http.HandlerFunc {
 			return
 		}
 
-		sessionCookie := i.SessionCookie(uuid.UUID{}, time.Now().UTC())
+		sessionCookie := i.ExpireSessionCookie()
 		http.SetCookie(w, &sessionCookie)
 
 		redirectURL, ok := r.Context().Value(LogoutRedirectKey).(*url.URL)

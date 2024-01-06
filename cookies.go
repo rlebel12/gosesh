@@ -39,6 +39,10 @@ func (i *Identity) SessionCookie(sessionID uuid.UUID, expires time.Time) http.Co
 	}
 }
 
+func (i *Identity) ExpireSessionCookie() http.Cookie {
+	return i.SessionCookie(uuid.UUID{}, time.Now().UTC())
+}
+
 func (i *Identity) sessionIDFromCookie(w http.ResponseWriter, r *http.Request) (uuid.UUID, error) {
 	sessionCookie, err := r.Cookie(i.Config.AuthSessionCookieName)
 	if err != nil {
