@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -170,22 +171,12 @@ func (gs *Gosesh) getCallbackRedirectURL(ctx context.Context, state string) (*ur
 
 func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r = gs.authenticate(w, r)
-		session, ok := CurrentSession(r)
-		if !ok {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		var err error
-		switch {
-		case r.URL.Query().Get("all") != "":
-			err = gs.Store.DeleteSession(r.Context(), session.ID)
-		default:
-			_, err = gs.Store.DeleteUserSessions(r.Context(), session.UserID)
-		}
+		err := gs.Logout(w, r)
 		if err != nil {
-			slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
+			if errors.Is(err, ErrUnauthorized) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -200,4 +191,27 @@ func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+var ErrUnauthorized = errors.New("unauthorized")
+
+func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) error {
+	r = gs.authenticate(w, r)
+	session, ok := CurrentSession(r)
+	if !ok {
+		return ErrUnauthorized
+	}
+
+	var err error
+	switch {
+	case r.URL.Query().Get("all") != "":
+		err = gs.Store.DeleteSession(r.Context(), session.ID)
+	default:
+		_, err = gs.Store.DeleteUserSessions(r.Context(), session.UserID)
+	}
+	if err != nil {
+		slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
+		return err
+	}
+	return nil
 }
