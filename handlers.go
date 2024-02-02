@@ -99,7 +99,7 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauth
 			return
 		}
 
-		user, err := gs.Storer.UpsertUser(ctx, UpsertUserRequest{
+		user, err := gs.Store.UpsertUser(ctx, UpsertUserRequest{
 			Email: userData.GetEmail(),
 		})
 		if err != nil {
@@ -109,7 +109,7 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauth
 		}
 
 		now := time.Now().UTC()
-		session, err := gs.Storer.CreateSession(ctx, CreateSessionRequest{
+		session, err := gs.Store.CreateSession(ctx, CreateSessionRequest{
 			User:     user,
 			IdleAt:   now.Add(gs.Config.SessionActiveDuration),
 			ExpireAt: now.Add(gs.Config.SessionIdleDuration),
@@ -180,9 +180,9 @@ func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 		var err error
 		switch {
 		case r.URL.Query().Get("all") != "":
-			err = gs.Storer.DeleteSession(r.Context(), session.ID)
+			err = gs.Store.DeleteSession(r.Context(), session.ID)
 		default:
-			_, err = gs.Storer.DeleteUserSessions(r.Context(), session.UserID)
+			_, err = gs.Store.DeleteUserSessions(r.Context(), session.UserID)
 		}
 		if err != nil {
 			slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")

@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func New() *Gosesh {
+func New(store Storer) *Gosesh {
 	config := &Config{
 		Providers:             map[string]OAuthProviderConfig{},
 		AuthSessionCookieName: defaultAuthSessionCookieName,
@@ -19,6 +19,7 @@ func New() *Gosesh {
 
 	gs := &Gosesh{
 		Config: config,
+		Store:  store,
 	}
 
 	return gs
@@ -26,7 +27,7 @@ func New() *Gosesh {
 
 type Gosesh struct {
 	Config *Config
-	Storer
+	Store  Storer
 	CallbackRedirecter
 }
 
