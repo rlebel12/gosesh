@@ -20,10 +20,10 @@ type MemoryStore struct {
 	Sessions map[uuid.UUID]*gosesh.Session
 }
 
-func (ms *MemoryStore) UpsertUser(ctx context.Context, req gosesh.UpsertUserRequest) (*gosesh.User, error) {
+func (ms *MemoryStore) UpsertUser(ctx context.Context, req gosesh.UpsertUserRequest) (uuid.UUID, error) {
 	for _, user := range ms.Users {
 		if user.Email == req.Email {
-			return user, nil
+			return user.ID, nil
 		}
 	}
 
@@ -32,7 +32,7 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, req gosesh.UpsertUserRequ
 		Email: req.Email,
 	}
 	ms.Users[u.ID] = u
-	return u, nil
+	return u.ID, nil
 }
 
 func (ms *MemoryStore) GetUser(ctx context.Context, userID uuid.UUID) (*gosesh.User, error) {
@@ -46,7 +46,7 @@ func (ms *MemoryStore) GetUser(ctx context.Context, userID uuid.UUID) (*gosesh.U
 func (ms *MemoryStore) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (*gosesh.Session, error) {
 	s := &gosesh.Session{
 		ID:       uuid.New(),
-		UserID:   req.User.ID,
+		UserID:   req.UserID,
 		IdleAt:   req.IdleAt,
 		ExpireAt: req.ExpireAt,
 	}

@@ -67,7 +67,7 @@ type UpsertUserRequest struct {
 }
 
 type CreateSessionRequest struct {
-	User     *User
+	UserID   uuid.UUID
 	IdleAt   time.Time
 	ExpireAt time.Time
 }
@@ -78,7 +78,7 @@ type UpdateSessionValues struct {
 }
 
 type Storer interface {
-	UpsertUser(ctx context.Context, req UpsertUserRequest) (*User, error)
+	UpsertUser(ctx context.Context, req UpsertUserRequest) (uuid.UUID, error)
 	GetUser(ctx context.Context, userID uuid.UUID) (*User, error)
 	CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, sessionID uuid.UUID) (*Session, error)

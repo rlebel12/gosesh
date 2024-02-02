@@ -99,7 +99,7 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauth
 			return
 		}
 
-		user, err := gs.Store.UpsertUser(ctx, UpsertUserRequest{
+		id, err := gs.Store.UpsertUser(ctx, UpsertUserRequest{
 			Email: userData.GetEmail(),
 		})
 		if err != nil {
@@ -110,7 +110,7 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauth
 
 		now := time.Now().UTC()
 		session, err := gs.Store.CreateSession(ctx, CreateSessionRequest{
-			User:     user,
+			UserID:   id,
 			IdleAt:   now.Add(gs.Config.SessionActiveDuration),
 			ExpireAt: now.Add(gs.Config.SessionIdleDuration),
 		})
