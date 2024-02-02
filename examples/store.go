@@ -3,7 +3,6 @@ package examples
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/rlebel12/gosesh"
@@ -24,16 +23,13 @@ type MemoryStore struct {
 func (ms *MemoryStore) UpsertUser(ctx context.Context, req gosesh.UpsertUserRequest) (*gosesh.User, error) {
 	for _, user := range ms.Users {
 		if user.Email == req.Email {
-			user.UpdatedAt = time.Now().UTC()
 			return user, nil
 		}
 	}
 
 	u := &gosesh.User{
-		ID:        uuid.New(),
-		Email:     req.Email,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		ID:    uuid.New(),
+		Email: req.Email,
 	}
 	ms.Users[u.ID] = u
 	return u, nil
@@ -49,12 +45,10 @@ func (ms *MemoryStore) GetUser(ctx context.Context, userID uuid.UUID) (*gosesh.U
 
 func (ms *MemoryStore) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (*gosesh.Session, error) {
 	s := &gosesh.Session{
-		ID:        uuid.New(),
-		UserID:    req.User.ID,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-		IdleAt:    req.IdleAt,
-		ExpireAt:  req.ExpireAt,
+		ID:       uuid.New(),
+		UserID:   req.User.ID,
+		IdleAt:   req.IdleAt,
+		ExpireAt: req.ExpireAt,
 	}
 	ms.Sessions[s.ID] = s
 	return s, nil
