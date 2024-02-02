@@ -17,11 +17,11 @@ func New() *Gosesh {
 		SessionActiveDuration: defaultSessionActiveDuration,
 	}
 
-	i := &Gosesh{
+	gs := &Gosesh{
 		Config: config,
 	}
 
-	return i
+	return gs
 }
 
 type Gosesh struct {
