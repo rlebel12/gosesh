@@ -171,7 +171,7 @@ func (gs *Gosesh) getCallbackRedirectURL(ctx context.Context, state string) (*ur
 
 func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		err := gs.Logout(w, r)
+		r, err := gs.Logout(w, r)
 		if err != nil {
 			if errors.Is(err, ErrUnauthorized) {
 				w.WriteHeader(http.StatusUnauthorized)
@@ -180,9 +180,6 @@ func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-
-		sessionCookie := gs.ExpireSessionCookie()
-		http.SetCookie(w, &sessionCookie)
 
 		redirectURL, ok := r.Context().Value(LogoutRedirectKey).(*url.URL)
 		if ok && *redirectURL != (url.URL{}) {
@@ -195,11 +192,11 @@ func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 
 var ErrUnauthorized = errors.New("unauthorized")
 
-func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) error {
+func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
 	r = gs.authenticate(w, r)
 	session, ok := CurrentSession(r)
 	if !ok {
-		return ErrUnauthorized
+		return r, ErrUnauthorized
 	}
 
 	var err error
@@ -211,7 +208,12 @@ func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err != nil {
 		slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
-		return err
+		return r, err
 	}
-	return nil
+
+	sessionCookie := gs.ExpireSessionCookie()
+	http.SetCookie(w, &sessionCookie)
+
+	ctx := context.WithValue(r.Context(), SessionContextKey, nil)
+	return r.WithContext(ctx), nil
 }
