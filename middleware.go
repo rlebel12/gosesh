@@ -109,29 +109,3 @@ func redirect(url *url.URL, key string) func(http.Handler) http.Handler {
 		})
 	}
 }
-
-type ResponseWriter interface {
-	http.ResponseWriter
-	Status() int
-}
-
-type responseWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *responseWriter) WriteHeader(s int) {
-	w.status = s
-	w.ResponseWriter.WriteHeader(s)
-}
-
-func (w *responseWriter) Status() int {
-	return w.status
-}
-
-func NewResponseWriter(w http.ResponseWriter) ResponseWriter {
-	nrw := &responseWriter{
-		ResponseWriter: w,
-	}
-	return nrw
-}
