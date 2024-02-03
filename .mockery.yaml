@@ -1,0 +1,11 @@
+with-expecter: true
+inpackage: true
+packages:
+    github.com/rlebel12/gosesh:
+        interfaces:
+            Storer:
+            UserDataRequester:
+filename: "mock_{{.InterfaceName}}.go"
+dir: "./"
+mockname: "Mock{{.InterfaceName}}"
+outpkg: "gosesh"
