@@ -64,12 +64,16 @@ func (gs *Gosesh) setCallbackRedirectURL(ctx context.Context, r *http.Request, s
 	return nil
 }
 
-type UserDataRequester interface {
-	Request(ctx context.Context, gs *Gosesh, accessToken string) (*http.Response, error)
+type Emailer interface {
 	GetEmail() string
 }
 
-func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauthCfg *oauth2.Config) http.HandlerFunc {
+type UserDataRequester interface {
+	Request(ctx context.Context, gs *Gosesh, accessToken string) (*http.Response, error)
+	Emailer
+}
+
+func OAuthCallbackHandler[T UserDataRequester](gs *Gosesh, oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		oauthState, err := r.Cookie(gs.Config.OAuthStateCookieName)
@@ -93,16 +97,14 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauth
 			return
 		}
 
-		userData, err := getUserData[userDataRequester](ctx, gs, token.AccessToken)
+		data, err := getUserData[T](ctx, gs, token.AccessToken)
 		if err != nil {
 			slog.Error("failed to get user data", "err", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		id, err := gs.Store.UpsertUser(ctx, UpsertUserRequest{
-			Email: userData.GetEmail(),
-		})
+		id, err := gs.Store.UpsertUser(ctx, data)
 		if err != nil {
 			slog.Error("failed to upsert user", "err", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -143,22 +145,22 @@ func OAuthCallbackHandler[userDataRequester UserDataRequester](gs *Gosesh, oauth
 	}
 }
 
-func getUserData[DataType UserDataRequester](ctx context.Context, gs *Gosesh, accessToken string) (DataType, error) {
-	var userData DataType
-	response, err := userData.Request(ctx, gs, accessToken)
+func getUserData[T UserDataRequester](ctx context.Context, gs *Gosesh, accessToken string) (T, error) {
+	var data T
+	response, err := data.Request(ctx, gs, accessToken)
 	if err != nil {
-		return userData, fmt.Errorf("failed getting user info: %s", err.Error())
+		return data, fmt.Errorf("failed getting user info: %s", err.Error())
 	}
 	defer response.Body.Close()
 	contents, err := io.ReadAll(response.Body)
 	if err != nil {
-		return userData, fmt.Errorf("failed read response: %s", err.Error())
+		return data, fmt.Errorf("failed read response: %s", err.Error())
 	}
 
-	if err := json.Unmarshal(contents, &userData); err != nil {
-		return userData, fmt.Errorf("failed unmarshalling response: %s", err.Error())
+	if err := json.Unmarshal(contents, &data); err != nil {
+		return data, fmt.Errorf("failed unmarshalling response: %s", err.Error())
 	}
-	return userData, nil
+	return data, nil
 }
 
 func (gs *Gosesh) getCallbackRedirectURL(ctx context.Context, state string) (*url.URL, error) {

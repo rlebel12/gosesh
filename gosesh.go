@@ -62,10 +62,6 @@ type Session struct {
 	ExpireAt time.Time
 }
 
-type UpsertUserRequest struct {
-	Email string
-}
-
 type CreateSessionRequest struct {
 	UserID   uuid.UUID
 	IdleAt   time.Time
@@ -78,7 +74,7 @@ type UpdateSessionValues struct {
 }
 
 type Storer interface {
-	UpsertUser(ctx context.Context, req UpsertUserRequest) (uuid.UUID, error)
+	UpsertUser(ctx context.Context, e Emailer) (uuid.UUID, error)
 	GetUser(ctx context.Context, userID uuid.UUID) (*User, error)
 	CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, sessionID uuid.UUID) (*Session, error)

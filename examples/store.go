@@ -3,9 +3,11 @@ package examples
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/rlebel12/gosesh"
+	"github.com/rlebel12/gosesh/providers"
 )
 
 func NewMemoryStore() *MemoryStore {
@@ -20,16 +22,23 @@ type MemoryStore struct {
 	Sessions map[uuid.UUID]*gosesh.Session
 }
 
-func (ms *MemoryStore) UpsertUser(ctx context.Context, req gosesh.UpsertUserRequest) (uuid.UUID, error) {
+func (ms *MemoryStore) UpsertUser(ctx context.Context, e gosesh.Emailer) (uuid.UUID, error) {
+	switch d := e.(type) {
+	case providers.DiscordUser:
+		slog.Info("Discord user", "id", d.ID, "username", d.Username, "email", d.Email, "verified", d.Verified)
+	case providers.GoogleUser:
+		slog.Info("Google user", "id", d.ID, "email", d.Email)
+	default:
+		slog.Info("Unknown user", "email", e.GetEmail())
+	}
 	for _, user := range ms.Users {
-		if user.Email == req.Email {
+		if user.Email == e.GetEmail() {
 			return user.ID, nil
 		}
 	}
-
 	u := &gosesh.User{
 		ID:    uuid.New(),
-		Email: req.Email,
+		Email: e.GetEmail(),
 	}
 	ms.Users[u.ID] = u
 	return u.ID, nil
