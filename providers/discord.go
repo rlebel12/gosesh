@@ -21,11 +21,11 @@ type DiscordProvider struct {
 	cfg *oauth2.Config
 }
 
-func (p *DiscordProvider) DiscordAuthLogin() http.HandlerFunc {
+func (p *DiscordProvider) LoginHandler() http.HandlerFunc {
 	return gosesh.OAuthBeginHandler(p.gs, p.cfg)
 }
 
-func (p *DiscordProvider) DiscordAuthCallback() http.HandlerFunc {
+func (p *DiscordProvider) CallbackHandler() http.HandlerFunc {
 	return gosesh.OAuthCallbackHandler[DiscordUser](p.gs, p.cfg)
 }
 
@@ -33,7 +33,7 @@ type DiscordScopes struct {
 	Email bool
 }
 
-func (s DiscordScopes) String() []string {
+func (s DiscordScopes) Strings() []string {
 	scopes := []string{"identify"}
 	if s.Email {
 		scopes = append(scopes, "email")
@@ -72,7 +72,7 @@ func DiscordOauthConfig(gs *gosesh.Gosesh, scopes DiscordScopes) *oauth2.Config 
 		ClientSecret: providerConf.ClientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s/auth/discord/callback", gs.Config.Origin.Scheme, gs.Config.Origin.Host),
-		Scopes: scopes.String(),
+		Scopes: scopes.Strings(),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
 			TokenURL:  "https://discord.com/api/oauth2/token",
