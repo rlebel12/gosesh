@@ -12,13 +12,28 @@ import (
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		Users:    map[uuid.UUID]*gosesh.User{},
+		Users:    map[uuid.UUID]gosesh.User{},
 		Sessions: map[uuid.UUID]*gosesh.Session{},
 	}
 }
 
+type (
+	User struct {
+		id    uuid.UUID
+		email string
+	}
+)
+
+func (u User) GUID() string {
+	return u.email
+}
+
+func (u User) ID() uuid.UUID {
+	return u.id
+}
+
 type MemoryStore struct {
-	Users    map[uuid.UUID]*gosesh.User
+	Users    map[uuid.UUID]gosesh.User
 	Sessions map[uuid.UUID]*gosesh.Session
 }
 
@@ -32,19 +47,19 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, e gosesh.Emailer) (uuid.U
 		slog.Info("Unknown user", "email", e.GetEmail())
 	}
 	for _, user := range ms.Users {
-		if user.Email == e.GetEmail() {
-			return user.ID, nil
+		if user.GUID() == e.GetEmail() {
+			return user.ID(), nil
 		}
 	}
-	u := &gosesh.User{
-		ID:    uuid.New(),
-		Email: e.GetEmail(),
+	u := User{
+		id:    uuid.New(),
+		email: e.GetEmail(),
 	}
-	ms.Users[u.ID] = u
-	return u.ID, nil
+	ms.Users[u.ID()] = u
+	return u.ID(), nil
 }
 
-func (ms *MemoryStore) GetUser(ctx context.Context, userID uuid.UUID) (*gosesh.User, error) {
+func (ms *MemoryStore) GetUser(ctx context.Context, userID uuid.UUID) (gosesh.User, error) {
 	u, ok := ms.Users[userID]
 	if !ok {
 		return nil, errors.New("user not found")
