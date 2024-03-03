@@ -9,21 +9,43 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const DiscordProviderKey = "discord"
-
-func DiscordAuthLogin(gs *gosesh.Gosesh) http.HandlerFunc {
-	return gosesh.OAuthBeginHandler(gs, DiscordOauthConfig(gs))
+func NewDiscordProvider(gs *gosesh.Gosesh, scopes DiscordScopes) DiscordProvider {
+	return DiscordProvider{
+		gs:  gs,
+		cfg: DiscordOauthConfig(gs, scopes),
+	}
 }
 
-func DiscordAuthCallback(gs *gosesh.Gosesh) http.HandlerFunc {
-	return gosesh.OAuthCallbackHandler[DiscordUser](gs, DiscordOauthConfig(gs))
+type DiscordProvider struct {
+	gs  *gosesh.Gosesh
+	cfg *oauth2.Config
+}
+
+func (p *DiscordProvider) DiscordAuthLogin() http.HandlerFunc {
+	return gosesh.OAuthBeginHandler(p.gs, p.cfg)
+}
+
+func (p *DiscordProvider) DiscordAuthCallback() http.HandlerFunc {
+	return gosesh.OAuthCallbackHandler[DiscordUser](p.gs, p.cfg)
+}
+
+type DiscordScopes struct {
+	Email bool
+}
+
+func (s DiscordScopes) String() []string {
+	scopes := []string{"identify"}
+	if s.Email {
+		scopes = append(scopes, "email")
+	}
+	return scopes
 }
 
 type DiscordUser struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
-	Email    string `json:"email"`
-	Verified bool   `json:"verified"`
+	Email    string `json:"email,omitempty"`
+	Verified bool   `json:"verified,omitempty"`
 }
 
 func (DiscordUser) Request(ctx context.Context, gs *gosesh.Gosesh, accessToken string) (*http.Response, error) {
@@ -41,17 +63,16 @@ func (user DiscordUser) GetEmail() string {
 	return user.Email
 }
 
-func DiscordOauthConfig(gs *gosesh.Gosesh) *oauth2.Config {
+const DiscordProviderKey = "discord"
+
+func DiscordOauthConfig(gs *gosesh.Gosesh, scopes DiscordScopes) *oauth2.Config {
 	providerConf := gs.Config.Providers[DiscordProviderKey]
 	return &oauth2.Config{
 		ClientID:     providerConf.ClientID,
 		ClientSecret: providerConf.ClientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s/auth/discord/callback", gs.Config.Origin.Scheme, gs.Config.Origin.Host),
-		Scopes: []string{
-			"identify",
-			"email",
-		},
+		Scopes: scopes.String(),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
 			TokenURL:  "https://discord.com/api/oauth2/token",
