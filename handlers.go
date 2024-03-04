@@ -204,9 +204,9 @@ func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request,
 	var err error
 	switch {
 	case r.URL.Query().Get("all") != "":
-		err = gs.Store.DeleteSession(r.Context(), session.ID)
-	default:
 		_, err = gs.Store.DeleteUserSessions(r.Context(), session.UserID)
+	default:
+		err = gs.Store.DeleteSession(r.Context(), session.ID)
 	}
 	if err != nil {
 		slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
