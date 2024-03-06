@@ -77,7 +77,6 @@ type UpdateSessionValues struct {
 
 type Storer interface {
 	UpsertUser(ctx context.Context, e Emailer) (uuid.UUID, error)
-	GetUser(ctx context.Context, userID uuid.UUID) (User, error)
 	CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, sessionID uuid.UUID) (*Session, error)
 	UpdateSession(ctx context.Context, sessionID uuid.UUID, req UpdateSessionValues) (*Session, error)

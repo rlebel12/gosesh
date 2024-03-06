@@ -59,14 +59,6 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, e gosesh.Emailer) (uuid.U
 	return u.ID(), nil
 }
 
-func (ms *MemoryStore) GetUser(ctx context.Context, userID uuid.UUID) (gosesh.User, error) {
-	u, ok := ms.Users[userID]
-	if !ok {
-		return nil, errors.New("user not found")
-	}
-	return u, nil
-}
-
 func (ms *MemoryStore) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (*gosesh.Session, error) {
 	s := &gosesh.Session{
 		ID:       uuid.New(),
