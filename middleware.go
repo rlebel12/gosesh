@@ -44,6 +44,9 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
+		sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
+		http.SetCookie(w, &sessionCookie)
+
 		ctx = context.WithValue(ctx, SessionContextKey, session)
 		r = r.WithContext(ctx)
 		next.ServeHTTP(w, r)
