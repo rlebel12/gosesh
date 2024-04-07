@@ -22,11 +22,11 @@ type DiscordProvider[ID gosesh.Identifier] struct {
 	cfg *oauth2.Config
 }
 
-func (p *DiscordProvider[ID]) LoginHandler() http.HandlerFunc {
-	return p.gs.OAuth2Begin(p.cfg)
+func (p *DiscordProvider[ID]) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
+	p.gs.OAuth2Begin(p.cfg)(w, r)
 }
 
-func (p *DiscordProvider[ID]) Callback(w http.ResponseWriter, r *http.Request) error {
+func (p *DiscordProvider[ID]) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
 	return p.gs.OAuth2Callback(gosesh.OAuth2CallbackParams{
 		W:            w,
 		R:            r,

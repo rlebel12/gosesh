@@ -23,8 +23,8 @@ type GoogleProvider[ID gosesh.Identifier] struct {
 	cfg *oauth2.Config
 }
 
-func (p *GoogleProvider[ID]) LoginHandler() http.HandlerFunc {
-	return p.gs.OAuth2Begin(p.cfg)
+func (p *GoogleProvider[ID]) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
+	p.gs.OAuth2Begin(p.cfg)(w, r)
 }
 
 func (p *GoogleProvider[ID]) Callback(w http.ResponseWriter, r *http.Request) error {
