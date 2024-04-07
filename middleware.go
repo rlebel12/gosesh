@@ -3,24 +3,21 @@ package gosesh
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"time"
 )
 
 const (
-	SessionContextKey   = "session"
-	CallbackRedirectKey = "successRedirect"
-	LogoutRedirectKey   = "logoutRedirect"
+	SessionContextKey = "session"
 )
 
-func (gs *Gosesh) Authenticate(next http.Handler) http.Handler {
+func (gs *Gosesh[ID]) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = gs.authenticate(w, r)
 		next.ServeHTTP(w, r)
 	})
 }
 
-func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
+func (gs *Gosesh[ID]) AuthenticateAndRefresh(next http.Handler) http.Handler {
 	return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, ok := CurrentSession(r)
 		if !ok {
@@ -53,7 +50,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 	}))
 }
 
-func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
+func (gs *Gosesh[ID]) RequireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := CurrentSession(r)
 		if !ok {
@@ -70,7 +67,7 @@ func CurrentSession(r *http.Request) (*Session, bool) {
 	return session, ok
 }
 
-func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Request {
+func (gs *Gosesh[ID]) authenticate(w http.ResponseWriter, r *http.Request) *http.Request {
 	session, ok := CurrentSession(r)
 	if ok {
 		return r
@@ -78,12 +75,12 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	ctx := r.Context()
 
-	sessionID, err := gs.sessionIDFromCookie(w, r)
+	id, err := gs.parseIdentifierFromCookie(w, r)
 	if err != nil {
 		return r
 	}
 
-	session, err = gs.Store.GetSession(ctx, sessionID)
+	session, err = gs.Store.GetSession(ctx, id)
 	if err != nil {
 		return r
 	}
@@ -94,21 +91,4 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	ctx = context.WithValue(ctx, SessionContextKey, session)
 	return r.WithContext(ctx)
-}
-
-func (gs *Gosesh) CallbackRedirect(url *url.URL) func(http.Handler) http.Handler {
-	return redirect(url, CallbackRedirectKey)
-}
-
-func (gs *Gosesh) LogoutRedirect(url *url.URL) func(http.Handler) http.Handler {
-	return redirect(url, LogoutRedirectKey)
-}
-
-func redirect(url *url.URL, key string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), key, url)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
 }

@@ -2,10 +2,9 @@ package gosesh
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -13,9 +12,9 @@ const (
 	defaultOAuthStateCookieName  = "oauthstate"
 )
 
-func (gs *Gosesh) OauthStateCookie(value string, expires time.Time) http.Cookie {
+func (gs *Gosesh[T]) OauthStateCookie(value string, expires time.Time) http.Cookie {
 	return http.Cookie{
-		Name:     gs.Config.OAuthStateCookieName,
+		Name:     gs.Config.OAuth2StateCookieName,
 		Value:    value,
 		Domain:   gs.Config.Origin.Hostname(),
 		Path:     "/",
@@ -26,10 +25,10 @@ func (gs *Gosesh) OauthStateCookie(value string, expires time.Time) http.Cookie 
 	}
 }
 
-func (gs *Gosesh) SessionCookie(sessionID uuid.UUID, expires time.Time) http.Cookie {
+func (gs *Gosesh[T]) SessionCookie(identifier Identifier, expires time.Time) http.Cookie {
 	return http.Cookie{
-		Name:     gs.Config.AuthSessionCookieName,
-		Value:    base64.URLEncoding.EncodeToString([]byte(sessionID.String())),
+		Name:     gs.Config.SessionCookieName,
+		Value:    base64.URLEncoding.EncodeToString([]byte(identifier.String())),
 		Domain:   gs.Config.Origin.Hostname(),
 		Path:     "/",
 		Expires:  expires,
@@ -39,20 +38,28 @@ func (gs *Gosesh) SessionCookie(sessionID uuid.UUID, expires time.Time) http.Coo
 	}
 }
 
-func (gs *Gosesh) ExpireSessionCookie() http.Cookie {
-	return gs.SessionCookie(uuid.UUID{}, time.Now().UTC())
+type emptyIdentifier struct{}
+
+func (emptyIdentifier) String() string {
+	return ""
 }
 
-func (gs *Gosesh) sessionIDFromCookie(w http.ResponseWriter, r *http.Request) (uuid.UUID, error) {
-	sessionCookie, err := r.Cookie(gs.Config.AuthSessionCookieName)
+func (gs *Gosesh[T]) ExpireSessionCookie() http.Cookie {
+	return gs.SessionCookie(emptyIdentifier{}, time.Now().UTC())
+}
+
+func (gs *Gosesh[T]) parseIdentifierFromCookie(w http.ResponseWriter, r *http.Request) (T, error) {
+	sessionCookie, err := r.Cookie(gs.Config.SessionCookieName)
 	if err != nil {
-		return uuid.UUID{}, err
+		var identifier T
+		return identifier, fmt.Errorf("failed to get session cookie: %w", err)
 	}
 
 	sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
 	if err != nil {
-		return uuid.UUID{}, err
+		var identifier T
+		return identifier, fmt.Errorf("failed to decode session cookie: %w", err)
 	}
 
-	return uuid.ParseBytes([]byte(sessionIDRaw))
+	return gs.IDParser(sessionIDRaw)
 }

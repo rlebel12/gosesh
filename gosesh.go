@@ -2,34 +2,47 @@ package gosesh
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"net/url"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-func New(store Storer) *Gosesh {
+func New[T Identifier](deps GoseshDependencies[T]) (*Gosesh[T], error) {
+	if deps.IDParser == nil {
+		return nil, fmt.Errorf("IDParser is required")
+	} else if deps.Store == nil {
+		return nil, fmt.Errorf("store is required")
+	}
+
 	config := &Config{
 		Providers:             map[string]OAuthProviderConfig{},
-		AuthSessionCookieName: defaultAuthSessionCookieName,
-		OAuthStateCookieName:  defaultOAuthStateCookieName,
+		SessionCookieName:     defaultAuthSessionCookieName,
+		OAuth2StateCookieName: defaultOAuthStateCookieName,
 		SessionIdleDuration:   defaultSessionIdleDuration,
 		SessionActiveDuration: defaultSessionActiveDuration,
 	}
 
-	gs := &Gosesh{
-		Config: config,
-		Store:  store,
+	gs := &Gosesh[T]{
+		Config:   config,
+		Store:    deps.Store,
+		IDParser: deps.IDParser,
 	}
-
-	return gs
+	return gs, nil
 }
 
-type Gosesh struct {
-	Config *Config
-	Store  Storer
-	CallbackRedirecter
+type GoseshDependencies[T Identifier] struct {
+	IDParser[T]
+	Store Storer
 }
+
+type Gosesh[T Identifier] struct {
+	Config   *Config
+	Store    Storer
+	IDParser IDParser[T]
+}
+
+type IDParser[T Identifier] func([]byte) (T, error)
 
 type OAuthProviderConfig struct {
 	ClientID     string
@@ -39,33 +52,28 @@ type OAuthProviderConfig struct {
 type Config struct {
 	Origin *url.URL
 
-	AuthSessionCookieName string
-	OAuthStateCookieName  string
+	SessionCookieName     string
+	OAuth2StateCookieName string
 
 	SessionIdleDuration   time.Duration
 	SessionActiveDuration time.Duration
 
-	AllowedRedirectDomains []string
-
 	Providers map[string]OAuthProviderConfig
 }
 
-type User interface {
-	// the user's ID from the store
-	ID() uuid.UUID
-	// the identifier that is unique to the user across all providers, e.g. email
-	GUID() string
+type Identifier interface {
+	fmt.Stringer
 }
 
 type Session struct {
-	ID       uuid.UUID
-	UserID   uuid.UUID
+	ID       Identifier
+	UserID   Identifier
 	IdleAt   time.Time
 	ExpireAt time.Time
 }
 
 type CreateSessionRequest struct {
-	UserID   uuid.UUID
+	UserID   Identifier
 	IdleAt   time.Time
 	ExpireAt time.Time
 }
@@ -75,16 +83,17 @@ type UpdateSessionValues struct {
 	ExpireAt time.Time
 }
 
-type Storer interface {
-	UpsertUser(ctx context.Context, e Emailer) (uuid.UUID, error)
-	CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
-	GetSession(ctx context.Context, sessionID uuid.UUID) (*Session, error)
-	UpdateSession(ctx context.Context, sessionID uuid.UUID, req UpdateSessionValues) (*Session, error)
-	DeleteSession(ctx context.Context, sessionID uuid.UUID) error
-	DeleteUserSessions(ctx context.Context, userID uuid.UUID) (int, error)
+type OAuth2User interface {
+	Identifier
+	Request(ctx context.Context, accessToken string) (*http.Response, error)
+	Unmarshal(b []byte) error
 }
 
-type CallbackRedirecter interface {
-	SetURL(ctx context.Context, oAuthState string, redirectURL *url.URL) error
-	GetURL(ctx context.Context, oAuthState string) (*url.URL, error)
+type Storer interface {
+	UpsertUser(ctx context.Context, udr OAuth2User) (Identifier, error)
+	CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
+	GetSession(ctx context.Context, sessionID Identifier) (*Session, error)
+	UpdateSession(ctx context.Context, sessionID Identifier, req UpdateSessionValues) (*Session, error)
+	DeleteSession(ctx context.Context, sessionID Identifier) error
+	DeleteUserSessions(ctx context.Context, userID Identifier) (int, error)
 }

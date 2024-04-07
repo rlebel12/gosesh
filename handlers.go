@@ -4,13 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -21,9 +19,8 @@ const (
 	defaultSessionIdleDuration   = 24 * time.Hour
 )
 
-func OAuthBeginHandler(gs *Gosesh, oauthCfg *oauth2.Config) http.HandlerFunc {
+func (gs *Gosesh[T]) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
 		b := make([]byte, 16)
 		rand.Read(b)
 		state := base64.URLEncoding.EncodeToString(b)
@@ -32,146 +29,99 @@ func OAuthBeginHandler(gs *Gosesh, oauthCfg *oauth2.Config) http.HandlerFunc {
 		cookie := gs.OauthStateCookie(state, expiration)
 		http.SetCookie(w, &cookie)
 
-		err := gs.setCallbackRedirectURL(ctx, r, state)
-		if err != nil {
-			slog.Error("Failed to set callback redirect URL: ", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
 		url := oauthCfg.AuthCodeURL(state)
 		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-
 	}
 }
 
-func (gs *Gosesh) setCallbackRedirectURL(ctx context.Context, r *http.Request, state string) error {
-	if gs.CallbackRedirecter == nil {
-		return nil
+var (
+	ErrMissingArguments         = errors.New("missing arguments")
+	ErrFailedGettingStateCookie = errors.New("failed getting state cookie")
+	ErrInvalidStateCookie       = errors.New("invalid state cookie")
+	ErrFailedExchangingToken    = errors.New("failed exchanging token")
+	ErrFailedUnmarshallingData  = errors.New("failed unmarshalling data")
+	ErrFailedUpsertingUser      = errors.New("failed upserting user")
+	ErrFailedCreatingSession    = errors.New("failed creating session")
+)
+
+type OAuth2CallbackParams struct {
+	W            http.ResponseWriter
+	R            *http.Request
+	User         OAuth2User
+	OAuth2Config *oauth2.Config
+}
+
+func (gs *Gosesh[T]) OAuth2Callback(args OAuth2CallbackParams) error {
+	if args.R == nil {
+		return errors.New("missing request")
+	} else if args.W == nil {
+		return errors.New("missing response writer")
+	} else if args.User == nil {
+		return errors.New("missing requester")
+	} else if args.OAuth2Config == nil {
+		return errors.New("missing oauth config")
 	}
 
-	redirectURLRaw := r.URL.Query().Get("redirect_url")
-	if redirectURLRaw == "" {
-		return nil
-	}
-
-	redirectURL, err := url.Parse(redirectURLRaw)
+	r := args.R
+	w := args.W
+	ctx := r.Context()
+	oauthState, err := r.Cookie(gs.Config.OAuth2StateCookieName)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err)
 	}
 
-	gs.CallbackRedirecter.SetURL(ctx, state, redirectURL)
+	stateCookie := gs.OauthStateCookie("", time.Now().UTC())
+	http.SetCookie(w, &stateCookie)
+
+	if r.FormValue("state") != oauthState.Value {
+		return fmt.Errorf("%w: %w", ErrInvalidStateCookie, err)
+	}
+
+	token, err := args.OAuth2Config.Exchange(ctx, r.FormValue("code"))
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFailedExchangingToken, err)
+	}
+
+	err = gs.unmarshalUserData(ctx, args.User, token.AccessToken)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err)
+	}
+
+	id, err := gs.Store.UpsertUser(ctx, args.User)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
+	}
+
+	now := time.Now().UTC()
+	session, err := gs.Store.CreateSession(ctx, CreateSessionRequest{
+		UserID:   id,
+		IdleAt:   now.Add(gs.Config.SessionActiveDuration),
+		ExpireAt: now.Add(gs.Config.SessionIdleDuration),
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFailedCreatingSession, err)
+	}
+
+	sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
+	http.SetCookie(w, &sessionCookie)
 	return nil
 }
 
-type Emailer interface {
-	GetEmail() string
-}
-
-type UserDataRequester interface {
-	Request(ctx context.Context, gs *Gosesh, accessToken string) (*http.Response, error)
-	Emailer
-}
-
-func OAuthCallbackHandler[T UserDataRequester](gs *Gosesh, oauthCfg *oauth2.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		oauthState, err := r.Cookie(gs.Config.OAuthStateCookieName)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		stateCookie := gs.OauthStateCookie("", time.Now().UTC())
-		http.SetCookie(w, &stateCookie)
-
-		if r.FormValue("state") != oauthState.Value {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		token, err := oauthCfg.Exchange(ctx, r.FormValue("code"))
-		if err != nil {
-			slog.Error("failed to exchange token", "err", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		data, err := getUserData[T](ctx, gs, token.AccessToken)
-		if err != nil {
-			slog.Error("failed to get user data", "err", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		id, err := gs.Store.UpsertUser(ctx, data)
-		if err != nil {
-			slog.Error("failed to upsert user", "err", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		now := time.Now().UTC()
-		session, err := gs.Store.CreateSession(ctx, CreateSessionRequest{
-			UserID:   id,
-			IdleAt:   now.Add(gs.Config.SessionActiveDuration),
-			ExpireAt: now.Add(gs.Config.SessionIdleDuration),
-		})
-		if err != nil {
-			slog.Error("failed to create session", "err", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
-		http.SetCookie(w, &sessionCookie)
-
-		redirectURL, err := gs.getCallbackRedirectURL(ctx, oauthState.Value)
-		if err != nil {
-			slog.Error("failed to get callback redirect URL", "err", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if *redirectURL != (url.URL{}) {
-			http.Redirect(w, r, redirectURL.String(), http.StatusPermanentRedirect)
-			return
-		}
-		redirectURL, ok := ctx.Value(CallbackRedirectKey).(*url.URL)
-		if ok && *redirectURL != (url.URL{}) {
-			http.Redirect(w, r, redirectURL.String(), http.StatusPermanentRedirect)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}
-}
-
-func getUserData[T UserDataRequester](ctx context.Context, gs *Gosesh, accessToken string) (T, error) {
-	var data T
-	response, err := data.Request(ctx, gs, accessToken)
+func (gs *Gosesh[T]) unmarshalUserData(ctx context.Context, data OAuth2User, accessToken string) error {
+	response, err := data.Request(ctx, accessToken)
 	if err != nil {
-		return data, fmt.Errorf("failed getting user info: %s", err.Error())
+		return fmt.Errorf("failed getting user info: %s", err.Error())
 	}
 	defer response.Body.Close()
 	contents, err := io.ReadAll(response.Body)
 	if err != nil {
-		return data, fmt.Errorf("failed read response: %s", err.Error())
+		return fmt.Errorf("failed read response: %s", err.Error())
 	}
 
-	if err := json.Unmarshal(contents, &data); err != nil {
-		return data, fmt.Errorf("failed unmarshalling response: %s", err.Error())
-	}
-	return data, nil
+	return data.Unmarshal(contents)
 }
 
-func (gs *Gosesh) getCallbackRedirectURL(ctx context.Context, state string) (*url.URL, error) {
-	if gs.CallbackRedirecter == nil {
-		return &url.URL{}, nil
-	}
-
-	return gs.CallbackRedirecter.GetURL(ctx, state)
-}
-
-func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
+func (gs *Gosesh[T]) LogoutHandler(completeHandler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r, err := gs.Logout(w, r)
 		if err != nil {
@@ -183,18 +133,17 @@ func (gs *Gosesh) LogoutHandler() http.HandlerFunc {
 			return
 		}
 
-		redirectURL, ok := r.Context().Value(LogoutRedirectKey).(*url.URL)
-		if ok && *redirectURL != (url.URL{}) {
-			http.Redirect(w, r, redirectURL.String(), http.StatusPermanentRedirect)
+		if completeHandler == nil {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		completeHandler(w, r)
 	}
 }
 
 var ErrUnauthorized = errors.New("unauthorized")
 
-func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
+func (gs *Gosesh[T]) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
 	r = gs.authenticate(w, r)
 	session, ok := CurrentSession(r)
 	if !ok {
