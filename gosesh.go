@@ -44,8 +44,8 @@ type GoseshDependencies[T Identifier] struct {
 
 type NewOpts[T Identifier] func(*Gosesh[T])
 
-func WithConfig[T Identifier](opts ...ConfigOpts) func(*Gosesh[T]) {
-	return func(g *Gosesh[T]) {
+func WithConfig(opts ...ConfigOpts) func(*Gosesh[Identifier]) {
+	return func(g *Gosesh[Identifier]) {
 		g.Config = NewConfig(opts...)
 	}
 }
