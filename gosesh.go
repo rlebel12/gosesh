@@ -8,32 +8,27 @@ import (
 	"time"
 )
 
-func New[T Identifier](deps GoseshDependencies[T]) (*Gosesh[T], error) {
+func New[T Identifier](deps GoseshDependencies[T], opts ...NewOpts[T]) (*Gosesh[T], error) {
 	if deps.IDParser == nil {
 		return nil, fmt.Errorf("IDParser is required")
 	} else if deps.Store == nil {
 		return nil, fmt.Errorf("store is required")
 	}
 
-	config := &Config{
-		Providers:             map[string]OAuthProviderConfig{},
-		SessionCookieName:     defaultAuthSessionCookieName,
-		OAuth2StateCookieName: defaultOAuthStateCookieName,
-		SessionIdleDuration:   defaultSessionIdleDuration,
-		SessionActiveDuration: defaultSessionActiveDuration,
-	}
-
 	gs := &Gosesh[T]{
-		Config:   config,
 		Store:    deps.Store,
 		IDParser: deps.IDParser,
 	}
-	return gs, nil
-}
 
-type GoseshDependencies[T Identifier] struct {
-	IDParser[T]
-	Store Storer
+	for _, opt := range opts {
+		opt(gs)
+	}
+
+	if gs.Config == nil {
+		gs.Config = NewConfig()
+	}
+
+	return gs, nil
 }
 
 type Gosesh[T Identifier] struct {
@@ -42,11 +37,38 @@ type Gosesh[T Identifier] struct {
 	IDParser IDParser[T]
 }
 
+type GoseshDependencies[T Identifier] struct {
+	IDParser[T]
+	Store Storer
+}
+
+type NewOpts[T Identifier] func(*Gosesh[T])
+
+func WithConfig[T Identifier](opts ...ConfigOpts) func(*Gosesh[T]) {
+	return func(g *Gosesh[T]) {
+		g.Config = NewConfig(opts...)
+	}
+}
+
 type IDParser[T Identifier] func([]byte) (T, error)
 
 type OAuthProviderConfig struct {
 	ClientID     string
 	ClientSecret string
+}
+
+func NewConfig(opts ...ConfigOpts) *Config {
+	config := &Config{
+		Providers:             map[string]OAuthProviderConfig{},
+		SessionCookieName:     defaultAuthSessionCookieName,
+		OAuth2StateCookieName: defaultOAuthStateCookieName,
+		SessionIdleDuration:   defaultSessionIdleDuration,
+		SessionActiveDuration: defaultSessionActiveDuration,
+	}
+	for _, opt := range opts {
+		opt(config)
+	}
+	return config
 }
 
 type Config struct {
@@ -59,6 +81,38 @@ type Config struct {
 	SessionActiveDuration time.Duration
 
 	Providers map[string]OAuthProviderConfig
+}
+
+type ConfigOpts func(*Config)
+
+func WithSessionCookieName(name string) func(*Config) {
+	return func(c *Config) {
+		c.SessionCookieName = name
+	}
+}
+
+func WithOAuth2StateCookieName(name string) func(*Config) {
+	return func(c *Config) {
+		c.OAuth2StateCookieName = name
+	}
+}
+
+func WithSessionIdleDuration(d time.Duration) func(*Config) {
+	return func(c *Config) {
+		c.SessionIdleDuration = d
+	}
+}
+
+func WithSessionActiveDuration(d time.Duration) func(*Config) {
+	return func(c *Config) {
+		c.SessionActiveDuration = d
+	}
+}
+
+func WithOrigin(origin *url.URL) func(*Config) {
+	return func(c *Config) {
+		c.Origin = origin
+	}
 }
 
 type Identifier interface {

@@ -90,3 +90,12 @@ func DiscordOauthConfig(config gosesh.Config, scopes DiscordScopes) *oauth2.Conf
 		},
 	}
 }
+
+func WithDiscordProvider(pConfig gosesh.OAuthProviderConfig) func(*gosesh.Config) {
+	return func(config *gosesh.Config) {
+		config.Providers[DiscordProviderKey] = gosesh.OAuthProviderConfig{
+			ClientID:     pConfig.ClientID,
+			ClientSecret: pConfig.ClientSecret,
+		}
+	}
+}
