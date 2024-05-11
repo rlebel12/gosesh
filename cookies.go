@@ -48,7 +48,7 @@ func (gs *Gosesh[T]) ExpireSessionCookie() http.Cookie {
 	return gs.SessionCookie(emptyIdentifier{}, time.Now().UTC())
 }
 
-func (gs *Gosesh[T]) parseIdentifierFromCookie(w http.ResponseWriter, r *http.Request) (T, error) {
+func (gs *Gosesh[T]) parseIdentifierFromCookie(r *http.Request) (T, error) {
 	sessionCookie, err := r.Cookie(gs.Config.SessionCookieName)
 	if err != nil {
 		var identifier T

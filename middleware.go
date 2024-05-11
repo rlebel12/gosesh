@@ -12,7 +12,7 @@ const (
 
 func (gs *Gosesh[ID]) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r = gs.authenticate(w, r)
+		r = gs.authenticate(r)
 		next.ServeHTTP(w, r)
 	})
 }
@@ -67,7 +67,7 @@ func CurrentSession(r *http.Request) (*Session, bool) {
 	return session, ok
 }
 
-func (gs *Gosesh[ID]) authenticate(w http.ResponseWriter, r *http.Request) *http.Request {
+func (gs *Gosesh[ID]) authenticate(r *http.Request) *http.Request {
 	session, ok := CurrentSession(r)
 	if ok {
 		return r
@@ -75,7 +75,7 @@ func (gs *Gosesh[ID]) authenticate(w http.ResponseWriter, r *http.Request) *http
 
 	ctx := r.Context()
 
-	id, err := gs.parseIdentifierFromCookie(w, r)
+	id, err := gs.parseIdentifierFromCookie(r)
 	if err != nil {
 		return r
 	}

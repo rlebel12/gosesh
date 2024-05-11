@@ -144,7 +144,7 @@ func (gs *Gosesh[T]) LogoutHandler(completeHandler http.HandlerFunc) http.Handle
 var ErrUnauthorized = errors.New("unauthorized")
 
 func (gs *Gosesh[T]) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
-	r = gs.authenticate(w, r)
+	r = gs.authenticate(r)
 	session, ok := CurrentSession(r)
 	if !ok {
 		return r, ErrUnauthorized
