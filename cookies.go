@@ -12,7 +12,7 @@ const (
 	defaultOAuthStateCookieName  = "oauthstate"
 )
 
-func (gs *Gosesh[T]) OauthStateCookie(value string, expires time.Time) http.Cookie {
+func (gs *Gosesh) OauthStateCookie(value string, expires time.Time) http.Cookie {
 	return http.Cookie{
 		Name:     gs.Config.OAuth2StateCookieName,
 		Value:    value,
@@ -25,7 +25,7 @@ func (gs *Gosesh[T]) OauthStateCookie(value string, expires time.Time) http.Cook
 	}
 }
 
-func (gs *Gosesh[T]) SessionCookie(identifier Identifier, expires time.Time) http.Cookie {
+func (gs *Gosesh) SessionCookie(identifier Identifier, expires time.Time) http.Cookie {
 	return http.Cookie{
 		Name:     gs.Config.SessionCookieName,
 		Value:    base64.URLEncoding.EncodeToString([]byte(identifier.String())),
@@ -44,22 +44,20 @@ func (emptyIdentifier) String() string {
 	return ""
 }
 
-func (gs *Gosesh[T]) ExpireSessionCookie() http.Cookie {
+func (gs *Gosesh) ExpireSessionCookie() http.Cookie {
 	return gs.SessionCookie(emptyIdentifier{}, time.Now().UTC())
 }
 
-func (gs *Gosesh[T]) parseIdentifierFromCookie(r *http.Request) (T, error) {
+func (gs *Gosesh) parseIdentifierFromCookie(r *http.Request) (Identifier, error) {
 	sessionCookie, err := r.Cookie(gs.Config.SessionCookieName)
 	if err != nil {
-		var identifier T
-		return identifier, fmt.Errorf("failed to get session cookie: %w", err)
+		return nil, fmt.Errorf("failed to get session cookie: %w", err)
 	}
 
 	sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
 	if err != nil {
-		var identifier T
-		return identifier, fmt.Errorf("failed to decode session cookie: %w", err)
+		return nil, fmt.Errorf("failed to decode session cookie: %w", err)
 	}
 
-	return gs.IDParser(sessionIDRaw)
+	return gs.IDParser.Parse(sessionIDRaw)
 }

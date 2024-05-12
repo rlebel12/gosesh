@@ -10,14 +10,14 @@ const (
 	SessionContextKey = "session"
 )
 
-func (gs *Gosesh[ID]) Authenticate(next http.Handler) http.Handler {
+func (gs *Gosesh) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = gs.authenticate(r)
 		next.ServeHTTP(w, r)
 	})
 }
 
-func (gs *Gosesh[ID]) AuthenticateAndRefresh(next http.Handler) http.Handler {
+func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 	return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, ok := CurrentSession(r)
 		if !ok {
@@ -50,7 +50,7 @@ func (gs *Gosesh[ID]) AuthenticateAndRefresh(next http.Handler) http.Handler {
 	}))
 }
 
-func (gs *Gosesh[ID]) RequireAuthentication(next http.Handler) http.Handler {
+func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := CurrentSession(r)
 		if !ok {
@@ -67,7 +67,7 @@ func CurrentSession(r *http.Request) (*Session, bool) {
 	return session, ok
 }
 
-func (gs *Gosesh[ID]) authenticate(r *http.Request) *http.Request {
+func (gs *Gosesh) authenticate(r *http.Request) *http.Request {
 	session, ok := CurrentSession(r)
 	if ok {
 		return r

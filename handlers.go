@@ -19,7 +19,7 @@ const (
 	defaultSessionIdleDuration   = 24 * time.Hour
 )
 
-func (gs *Gosesh[T]) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
+func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b := make([]byte, 16)
 		rand.Read(b)
@@ -51,7 +51,7 @@ type OAuth2CallbackParams struct {
 	OAuth2Config *oauth2.Config
 }
 
-func (gs *Gosesh[T]) OAuth2Callback(args OAuth2CallbackParams) error {
+func (gs *Gosesh) OAuth2Callback(args OAuth2CallbackParams) error {
 	if args.R == nil {
 		return errors.New("missing request")
 	} else if args.W == nil {
@@ -107,7 +107,7 @@ func (gs *Gosesh[T]) OAuth2Callback(args OAuth2CallbackParams) error {
 	return nil
 }
 
-func (gs *Gosesh[T]) unmarshalUserData(ctx context.Context, data OAuth2User, accessToken string) error {
+func (gs *Gosesh) unmarshalUserData(ctx context.Context, data OAuth2User, accessToken string) error {
 	response, err := data.Request(ctx, accessToken)
 	if err != nil {
 		return fmt.Errorf("failed getting user info: %s", err.Error())
@@ -121,7 +121,7 @@ func (gs *Gosesh[T]) unmarshalUserData(ctx context.Context, data OAuth2User, acc
 	return data.Unmarshal(contents)
 }
 
-func (gs *Gosesh[T]) LogoutHandler(completeHandler http.HandlerFunc) http.HandlerFunc {
+func (gs *Gosesh) LogoutHandler(completeHandler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r, err := gs.Logout(w, r)
 		if err != nil {
@@ -143,7 +143,7 @@ func (gs *Gosesh[T]) LogoutHandler(completeHandler http.HandlerFunc) http.Handle
 
 var ErrUnauthorized = errors.New("unauthorized")
 
-func (gs *Gosesh[T]) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
+func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
 	r = gs.authenticate(r)
 	session, ok := CurrentSession(r)
 	if !ok {

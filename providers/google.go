@@ -11,23 +11,23 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func NewGoogleProvider[ID gosesh.Identifier](gs *gosesh.Gosesh[ID]) GoogleProvider[ID] {
-	return GoogleProvider[ID]{
+func NewGoogleProvider(gs *gosesh.Gosesh) GoogleProvider {
+	return GoogleProvider{
 		gs:  gs,
 		cfg: GoogleOauth2Config(*gs.Config),
 	}
 }
 
-type GoogleProvider[ID gosesh.Identifier] struct {
-	gs  *gosesh.Gosesh[ID]
+type GoogleProvider struct {
+	gs  *gosesh.Gosesh
 	cfg *oauth2.Config
 }
 
-func (p *GoogleProvider[ID]) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
+func (p *GoogleProvider) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
 	p.gs.OAuth2Begin(p.cfg)(w, r)
 }
 
-func (p *GoogleProvider[ID]) Callback(w http.ResponseWriter, r *http.Request) error {
+func (p *GoogleProvider) Callback(w http.ResponseWriter, r *http.Request) error {
 	return p.gs.OAuth2Callback(gosesh.OAuth2CallbackParams{
 		W:            w,
 		R:            r,

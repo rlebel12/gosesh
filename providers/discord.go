@@ -10,23 +10,23 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscordProvider[ID gosesh.Identifier](gs *gosesh.Gosesh[ID], scopes DiscordScopes) DiscordProvider[ID] {
-	return DiscordProvider[ID]{
+func NewDiscordProvider(gs *gosesh.Gosesh, scopes DiscordScopes) DiscordProvider {
+	return DiscordProvider{
 		gs:  gs,
 		cfg: DiscordOauthConfig(*gs.Config, scopes),
 	}
 }
 
-type DiscordProvider[ID gosesh.Identifier] struct {
-	gs  *gosesh.Gosesh[ID]
+type DiscordProvider struct {
+	gs  *gosesh.Gosesh
 	cfg *oauth2.Config
 }
 
-func (p *DiscordProvider[ID]) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
+func (p *DiscordProvider) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
 	p.gs.OAuth2Begin(p.cfg)(w, r)
 }
 
-func (p *DiscordProvider[ID]) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
+func (p *DiscordProvider) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
 	return p.gs.OAuth2Callback(gosesh.OAuth2CallbackParams{
 		W:            w,
 		R:            r,
