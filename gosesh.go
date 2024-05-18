@@ -126,7 +126,7 @@ type (
 		Now    func() time.Time
 	}
 
-	OAuth2ProviderConfig struct {
+	OAuth2Credentials struct {
 		ClientID     string
 		ClientSecret string
 	}

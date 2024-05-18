@@ -14,28 +14,28 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type HandlersSuite struct {
+type Oauth2BeginHandlerSuite struct {
 	suite.Suite
 	originalReader io.Reader
 }
 
-func (s *HandlersSuite) SetupSuite() {
+func (s *Oauth2BeginHandlerSuite) SetupSuite() {
 	s.originalReader = rand.Reader
 }
 
-func (s *HandlersSuite) TearDownSuite() {
+func (s *Oauth2BeginHandlerSuite) SetupTest() {
+	rand.Reader = strings.NewReader("deterministic random data")
+}
+
+func (s *Oauth2BeginHandlerSuite) SetupSubTest() {
+	rand.Reader = strings.NewReader("deterministic random data")
+}
+
+func (s *Oauth2BeginHandlerSuite) TearDownSuite() {
 	rand.Reader = s.originalReader
 }
 
-func (s *HandlersSuite) SetupTest() {
-	rand.Reader = strings.NewReader("deterministic random data")
-}
-
-func (s *HandlersSuite) SetupSubTest() {
-	rand.Reader = strings.NewReader("deterministic random data")
-}
-
-func (s *HandlersSuite) TestOAuth2BeginSuccess() {
+func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 	for name, test := range map[string]struct {
 		secure bool
@@ -86,18 +86,79 @@ func (s *HandlersSuite) TestOAuth2BeginSuccess() {
 	}
 }
 
-func (s *HandlersSuite) TestOAuth2BeginFailure() {
+func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginFailure() {
 	rand.Reader = strings.NewReader("")
 	sesh := New(nil, nil)
-	handler := sesh.OAuth2Begin(&oauth2.Config{})
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, &http.Request{})
+	sesh.OAuth2Begin(&oauth2.Config{})(rr, &http.Request{})
 	response := rr.Result()
 	s.Equal(http.StatusInternalServerError, response.StatusCode)
 	s.Equal("failed to create OAuth2 state\n", rr.Body.String())
 }
 
 func TestHandlersSuite(t *testing.T) {
-	suite.Run(t, new(HandlersSuite))
+	suite.Run(t, new(Oauth2BeginHandlerSuite))
 
+}
+
+type Oauth2CallbackHandlerSuite struct {
+	suite.Suite
+}
+
+func (s *Oauth2CallbackHandlerSuite) config() *oauth2.Config {
+	return &oauth2.Config{
+		ClientID:     "client_id",
+		ClientSecret: "client_secret",
+		RedirectURL:  "http://localhost/auth/callback",
+		Scopes:       []string{"email"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:   "http://localhost/auth",
+			TokenURL:  "http://localhost/token",
+			AuthStyle: oauth2.AuthStyleInParams,
+		},
+	}
+}
+
+type testCallbackRequestMode int
+
+const (
+	testCallbackErrNoStateCookie testCallbackRequestMode = iota
+	testCallbackInvalidStateCookie
+)
+
+func (s *Oauth2CallbackHandlerSuite) request(mode testCallbackRequestMode) *http.Request {
+	req, err := http.NewRequest(http.MethodGet, "http://localhost/auth/callback", nil)
+	s.Require().NoError(err)
+
+	if mode == testCallbackErrNoStateCookie {
+		return req
+	}
+
+	req.AddCookie(&http.Cookie{
+		Name:  "oauthstate",
+		Value: "ZGV0ZXJtaW5pc3RpYyByYQ==",
+	})
+	if mode == testCallbackInvalidStateCookie {
+		return req
+	}
+
+	return req
+}
+
+func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
+	rr := httptest.NewRecorder()
+	sesh := New(nil, nil)
+	err := sesh.OAuth2Callback(rr, s.request(testCallbackErrNoStateCookie), nil, &oauth2.Config{})
+	s.EqualError(err, "failed getting state cookie: http: named cookie not present")
+}
+
+func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
+	rr := httptest.NewRecorder()
+	sesh := New(nil, nil)
+	err := sesh.OAuth2Callback(rr, s.request(testCallbackInvalidStateCookie), nil, &oauth2.Config{})
+	s.EqualError(err, "invalid state cookie")
+}
+
+func TestOauth2CallbackHandlerSuite(t *testing.T) {
+	suite.Run(t, new(Oauth2CallbackHandlerSuite))
 }

@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func NewGoogle(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2ProviderConfig) GoogleProvider {
+func NewGoogle(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2Credentials) GoogleProvider {
 	oauth2Config := &oauth2.Config{
 		ClientID:     providerConfig.ClientID,
 		ClientSecret: providerConfig.ClientSecret,

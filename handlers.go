@@ -49,11 +49,11 @@ func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OA
 		return fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err)
 	}
 
-	stateCookie := gs.OauthStateCookie("", time.Now().UTC())
+	stateCookie := gs.OauthStateCookie("", gs.config.Now().UTC())
 	http.SetCookie(w, &stateCookie)
 
 	if r.FormValue("state") != oauthState.Value {
-		return fmt.Errorf("%w: %w", ErrInvalidStateCookie, err)
+		return ErrInvalidStateCookie
 	}
 
 	token, err := config.Exchange(ctx, r.FormValue("code"))
@@ -71,7 +71,7 @@ func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OA
 		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
 	}
 
-	now := time.Now().UTC()
+	now := gs.config.Now().UTC()
 	session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
 		UserID:   id,
 		IdleAt:   now.Add(gs.config.SessionActiveDuration),

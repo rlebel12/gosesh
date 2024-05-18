@@ -10,10 +10,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscord(gs *gosesh.Gosesh, scopes DiscordScopes, providerConfig gosesh.OAuth2ProviderConfig) Discord {
+func NewDiscord(gs *gosesh.Gosesh, scopes DiscordScopes, credentials gosesh.OAuth2Credentials) Discord {
 	oauth2Config := &oauth2.Config{
-		ClientID:     providerConfig.ClientID,
-		ClientSecret: providerConfig.ClientSecret,
+		ClientID:     credentials.ClientID,
+		ClientSecret: credentials.ClientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s/auth/discord/callback", gs.Config().Origin.Scheme, gs.Config().Origin.Host),
 		Scopes: scopes.Strings(),
