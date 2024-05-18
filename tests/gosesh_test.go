@@ -28,7 +28,6 @@ func (s *NewSuite) new(opts ...gosesh.NewOpts) *gosesh.Gosesh {
 
 func (s *NewSuite) defaultConfig() gosesh.Config {
 	return gosesh.Config{
-		Providers:             map[string]gosesh.OAuthProviderConfig{},
 		SessionCookieName:     "session",
 		OAuth2StateCookieName: "oauthstate",
 		SessionIdleDuration:   24 * time.Hour,

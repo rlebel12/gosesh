@@ -10,10 +10,22 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscordProvider(gs *gosesh.Gosesh, scopes DiscordScopes) DiscordProvider {
+func NewDiscordProvider(gs *gosesh.Gosesh, scopes DiscordScopes, providerConfig gosesh.OAuth2ProviderConfig) DiscordProvider {
+	oauth2Config := &oauth2.Config{
+		ClientID:     providerConfig.ClientID,
+		ClientSecret: providerConfig.ClientSecret,
+		RedirectURL: fmt.Sprintf(
+			"%s://%s/auth/discord/callback", gs.Config().Origin.Scheme, gs.Config().Origin.Host),
+		Scopes: scopes.Strings(),
+		Endpoint: oauth2.Endpoint{
+			AuthURL:   "https://discord.com/oauth2/authorize",
+			TokenURL:  "https://discord.com/api/oauth2/token",
+			AuthStyle: oauth2.AuthStyleInParams,
+		},
+	}
 	return DiscordProvider{
 		gs:  gs,
-		cfg: DiscordOauthConfig(gs.Config(), scopes),
+		cfg: oauth2Config,
 	}
 }
 
@@ -66,28 +78,4 @@ func (user *DiscordUser) Unmarshal(b []byte) error {
 
 func (user *DiscordUser) String() string {
 	return user.ID
-}
-
-const DiscordProviderKey = "discord"
-
-func DiscordOauthConfig(config gosesh.Config, scopes DiscordScopes) *oauth2.Config {
-	providerConf := config.Providers[DiscordProviderKey]
-	return &oauth2.Config{
-		ClientID:     providerConf.ClientID,
-		ClientSecret: providerConf.ClientSecret,
-		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/discord/callback", config.Origin.Scheme, config.Origin.Host),
-		Scopes: scopes.Strings(),
-		Endpoint: oauth2.Endpoint{
-			AuthURL:   "https://discord.com/oauth2/authorize",
-			TokenURL:  "https://discord.com/api/oauth2/token",
-			AuthStyle: oauth2.AuthStyleInParams,
-		},
-	}
-}
-
-func WithDiscordProvider(pConfig gosesh.OAuthProviderConfig) func(*gosesh.Config) {
-	return func(config *gosesh.Config) {
-		config.Providers[DiscordProviderKey] = pConfig
-	}
 }

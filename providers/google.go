@@ -11,10 +11,20 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func NewGoogleProvider(gs *gosesh.Gosesh) GoogleProvider {
+func NewGoogleProvider(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2ProviderConfig) GoogleProvider {
+	oauth2Config := &oauth2.Config{
+		ClientID:     providerConfig.ClientID,
+		ClientSecret: providerConfig.ClientSecret,
+		RedirectURL: fmt.Sprintf(
+			"%s://%s/auth/google/callback", gs.Config().Origin.Scheme, gs.Config().Origin.Host),
+		Scopes: []string{
+			"https://www.googleapis.com/auth/userinfo.email",
+		},
+		Endpoint: google.Endpoint,
+	}
 	return GoogleProvider{
 		gs:  gs,
-		cfg: GoogleOauth2Config(gs.Config()),
+		cfg: oauth2Config,
 	}
 }
 
@@ -49,20 +59,4 @@ func (user *GoogleUser) Unmarshal(b []byte) error {
 
 func (user *GoogleUser) String() string {
 	return user.ID
-}
-
-const GoogleProviderKey = "google"
-
-func GoogleOauth2Config(config gosesh.Config) *oauth2.Config {
-	providerConf := config.Providers[GoogleProviderKey]
-	return &oauth2.Config{
-		ClientID:     providerConf.ClientID,
-		ClientSecret: providerConf.ClientSecret,
-		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/google/callback", config.Origin.Scheme, config.Origin.Host),
-		Scopes: []string{
-			"https://www.googleapis.com/auth/userinfo.email",
-		},
-		Endpoint: google.Endpoint,
-	}
 }

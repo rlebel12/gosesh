@@ -11,7 +11,6 @@ import (
 
 func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 	config := &Config{
-		Providers:             map[string]OAuthProviderConfig{},
 		SessionCookieName:     "session",
 		OAuth2StateCookieName: "oauthstate",
 		SessionIdleDuration:   24 * time.Hour,
@@ -120,12 +119,10 @@ type (
 		SessionIdleDuration   time.Duration
 		SessionActiveDuration time.Duration
 
-		Providers map[string]OAuthProviderConfig
-
 		Logger *slog.Logger
 	}
 
-	OAuthProviderConfig struct {
+	OAuth2ProviderConfig struct {
 		ClientID     string
 		ClientSecret string
 	}

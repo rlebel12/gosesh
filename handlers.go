@@ -18,8 +18,8 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
-			gs.logError("failed to read OAuth state", "err", err)
-			http.Error(w, "failed to read OAuth state", http.StatusInternalServerError)
+			gs.logError("failed to create OAuth2 state", "err", err)
+			http.Error(w, "failed to create OAuth2 state", http.StatusInternalServerError)
 			return
 		}
 		state := base64.URLEncoding.EncodeToString(b)
