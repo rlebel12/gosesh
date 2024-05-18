@@ -1,4 +1,4 @@
-package tests
+package gosesh
 
 import (
 	"crypto/rand"
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rlebel12/gosesh"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/oauth2"
 )
@@ -36,7 +35,7 @@ func (s *HandlersSuite) SetupSubTest() {
 	rand.Reader = strings.NewReader("deterministic random data")
 }
 
-func (s *HandlersSuite) TestOAuth2Begin() {
+func (s *HandlersSuite) TestOAuth2BeginSuccess() {
 	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 	for name, test := range map[string]struct {
 		secure bool
@@ -45,15 +44,15 @@ func (s *HandlersSuite) TestOAuth2Begin() {
 		"secure":   {secure: true},
 	} {
 		s.Run(name, func() {
-			opts := []gosesh.NewOpts{gosesh.WithNow(func() time.Time {
+			opts := []NewOpts{WithNow(func() time.Time {
 				return now
 			})}
 			if test.secure {
 				url, err := url.Parse("https://localhost")
 				s.Require().NoError(err)
-				opts = append(opts, gosesh.WithOrigin(*url))
+				opts = append(opts, WithOrigin(*url))
 			}
-			sesh := gosesh.New(nil, nil, opts...)
+			sesh := New(nil, nil, opts...)
 			handler := sesh.OAuth2Begin(&oauth2.Config{
 				ClientID:     "client_id",
 				ClientSecret: "client_secret",
@@ -85,6 +84,17 @@ func (s *HandlersSuite) TestOAuth2Begin() {
 			)
 		})
 	}
+}
+
+func (s *HandlersSuite) TestOAuth2BeginFailure() {
+	rand.Reader = strings.NewReader("")
+	sesh := New(nil, nil)
+	handler := sesh.OAuth2Begin(&oauth2.Config{})
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, &http.Request{})
+	response := rr.Result()
+	s.Equal(http.StatusInternalServerError, response.StatusCode)
+	s.Equal("failed to create OAuth2 state\n", rr.Body.String())
 }
 
 func TestHandlersSuite(t *testing.T) {
