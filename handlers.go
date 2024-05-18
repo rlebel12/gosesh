@@ -44,7 +44,7 @@ var (
 
 func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OAuth2User, config *oauth2.Config) error {
 	ctx := r.Context()
-	oauthState, err := r.Cookie(gs.Config.OAuth2StateCookieName)
+	oauthState, err := r.Cookie(gs.config.OAuth2StateCookieName)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err)
 	}
@@ -66,16 +66,16 @@ func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OA
 		return fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err)
 	}
 
-	id, err := gs.Store.UpsertUser(ctx, user)
+	id, err := gs.store.UpsertUser(ctx, user)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
 	}
 
 	now := time.Now().UTC()
-	session, err := gs.Store.CreateSession(ctx, CreateSessionRequest{
+	session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
 		UserID:   id,
-		IdleAt:   now.Add(gs.Config.SessionActiveDuration),
-		ExpireAt: now.Add(gs.Config.SessionIdleDuration),
+		IdleAt:   now.Add(gs.config.SessionActiveDuration),
+		ExpireAt: now.Add(gs.config.SessionIdleDuration),
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedCreatingSession, err)
@@ -132,9 +132,9 @@ func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request,
 	var err error
 	switch {
 	case r.URL.Query().Get("all") != "":
-		_, err = gs.Store.DeleteUserSessions(r.Context(), session.UserID)
+		_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID)
 	default:
-		err = gs.Store.DeleteSession(r.Context(), session.ID)
+		err = gs.store.DeleteSession(r.Context(), session.ID)
 	}
 	if err != nil {
 		slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")

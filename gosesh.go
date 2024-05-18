@@ -22,9 +22,9 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 	}
 
 	gs := &Gosesh{
-		Config:   config,
-		Store:    store,
-		IDParser: parser,
+		config:   config,
+		store:    store,
+		idParser: parser,
 	}
 
 	return gs
@@ -38,9 +38,9 @@ func WithLogger(logger *slog.Logger) func(*Config) {
 
 type (
 	Gosesh struct {
-		Config   *Config
-		Store    Storer
-		IDParser IDParser
+		config   *Config
+		store    Storer
+		idParser IDParser
 	}
 
 	IDParser interface {
@@ -87,12 +87,20 @@ type (
 	NewOpts func(*Config)
 )
 
-func (gs *Gosesh) Configg() Config {
-	return *gs.Config
+func (gs *Gosesh) Config() Config {
+	return *gs.config
+}
+
+func (gs *Gosesh) Storer() Storer {
+	return gs.store
+}
+
+func (gs *Gosesh) IDParser() IDParser {
+	return gs.idParser
 }
 
 func (gs *Gosesh) Logger() *slog.Logger {
-	return gs.Configg().Logger
+	return gs.Config().Logger
 }
 
 func (gs *Gosesh) logError(msg string, args ...any) {
@@ -104,7 +112,7 @@ func (gs *Gosesh) logError(msg string, args ...any) {
 
 type (
 	Config struct {
-		Origin *url.URL
+		Origin url.URL
 
 		SessionCookieName     string
 		OAuth2StateCookieName string
@@ -147,7 +155,7 @@ func WithSessionActiveDuration(d time.Duration) func(*Config) {
 	}
 }
 
-func WithOrigin(origin *url.URL) func(*Config) {
+func WithOrigin(origin url.URL) func(*Config) {
 	return func(c *Config) {
 		c.Origin = origin
 	}

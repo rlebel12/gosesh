@@ -37,10 +37,10 @@ func (s *NewSuite) defaultConfig() gosesh.Config {
 }
 
 func (s *NewSuite) equalSuite(sesh *gosesh.Gosesh, expectedConfig gosesh.Config) {
-	s.Equal(s.parser, sesh.IDParser)
-	s.Equal(s.store, sesh.Store)
+	s.Equal(s.parser, sesh.IDParser())
+	s.Equal(s.store, sesh.Storer())
 	s.Nil(sesh.Logger())
-	s.Equal(expectedConfig, sesh.Configg())
+	s.Equal(expectedConfig, sesh.Config())
 }
 
 func (s *NewSuite) TestDefault() {
@@ -80,9 +80,9 @@ func (s *NewSuite) TestWithSessionActiveDuration() {
 func (s *NewSuite) TestWithOrigin() {
 	url, err := url.ParseRequestURI("http://example.com")
 	s.Require().NoError(err)
-	actual := s.new(gosesh.WithOrigin(url))
+	actual := s.new(gosesh.WithOrigin(*url))
 	expectedConfig := s.defaultConfig()
-	expectedConfig.Origin = url
+	expectedConfig.Origin = *url
 	s.equalSuite(actual, expectedConfig)
 }
 
@@ -91,7 +91,7 @@ func (s *NewSuite) TestWithLogger() {
 	actual := s.new(gosesh.WithLogger(logger))
 	expectedConfig := s.defaultConfig()
 	expectedConfig.Logger = logger
-	s.Equal(expectedConfig, actual.Configg())
+	s.Equal(expectedConfig, actual.Config())
 }
 
 func TestNewSuite(t *testing.T) {

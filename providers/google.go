@@ -14,7 +14,7 @@ import (
 func NewGoogleProvider(gs *gosesh.Gosesh) GoogleProvider {
 	return GoogleProvider{
 		gs:  gs,
-		cfg: GoogleOauth2Config(*gs.Config),
+		cfg: GoogleOauth2Config(gs.Config()),
 	}
 }
 

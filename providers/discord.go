@@ -13,7 +13,7 @@ import (
 func NewDiscordProvider(gs *gosesh.Gosesh, scopes DiscordScopes) DiscordProvider {
 	return DiscordProvider{
 		gs:  gs,
-		cfg: DiscordOauthConfig(*gs.Config, scopes),
+		cfg: DiscordOauthConfig(gs.Config(), scopes),
 	}
 }
 
@@ -88,9 +88,6 @@ func DiscordOauthConfig(config gosesh.Config, scopes DiscordScopes) *oauth2.Conf
 
 func WithDiscordProvider(pConfig gosesh.OAuthProviderConfig) func(*gosesh.Config) {
 	return func(config *gosesh.Config) {
-		config.Providers[DiscordProviderKey] = gosesh.OAuthProviderConfig{
-			ClientID:     pConfig.ClientID,
-			ClientSecret: pConfig.ClientSecret,
-		}
+		config.Providers[DiscordProviderKey] = pConfig
 	}
 }

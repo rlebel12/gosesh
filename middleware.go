@@ -34,9 +34,9 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 		}
 
 		ctx := r.Context()
-		session, err := gs.Store.UpdateSession(ctx, session.ID, UpdateSessionValues{
-			IdleAt:   now.Add(gs.Config.SessionActiveDuration),
-			ExpireAt: now.Add(gs.Config.SessionIdleDuration),
+		session, err := gs.store.UpdateSession(ctx, session.ID, UpdateSessionValues{
+			IdleAt:   now.Add(gs.config.SessionActiveDuration),
+			ExpireAt: now.Add(gs.config.SessionIdleDuration),
 		})
 		if err != nil {
 			next.ServeHTTP(w, r)
@@ -82,7 +82,7 @@ func (gs *Gosesh) authenticate(r *http.Request) *http.Request {
 		return r
 	}
 
-	session, err := gs.Store.GetSession(ctx, id)
+	session, err := gs.store.GetSession(ctx, id)
 	if err != nil {
 		return r
 	}
