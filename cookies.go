@@ -7,11 +7,6 @@ import (
 	"time"
 )
 
-const (
-	defaultAuthSessionCookieName = "session"
-	defaultOAuthStateCookieName  = "oauthstate"
-)
-
 func (gs *Gosesh) OauthStateCookie(value string, expires time.Time) http.Cookie {
 	return http.Cookie{
 		Name:     gs.Config.OAuth2StateCookieName,

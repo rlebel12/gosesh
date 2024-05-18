@@ -28,12 +28,7 @@ func (p *GoogleProvider) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *GoogleProvider) Callback(w http.ResponseWriter, r *http.Request) error {
-	return p.gs.OAuth2Callback(gosesh.OAuth2CallbackParams{
-		W:            w,
-		R:            r,
-		User:         new(GoogleUser),
-		OAuth2Config: p.cfg,
-	})
+	return p.gs.OAuth2Callback(w, r, new(GoogleUser), p.cfg)
 }
 
 type GoogleUser struct {

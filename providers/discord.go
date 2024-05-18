@@ -27,12 +27,7 @@ func (p *DiscordProvider) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *DiscordProvider) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
-	return p.gs.OAuth2Callback(gosesh.OAuth2CallbackParams{
-		W:            w,
-		R:            r,
-		User:         new(DiscordUser),
-		OAuth2Config: p.cfg,
-	})
+	return p.gs.OAuth2Callback(w, r, new(DiscordUser), p.cfg)
 }
 
 type DiscordScopes struct {

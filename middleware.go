@@ -6,8 +6,10 @@ import (
 	"time"
 )
 
+type contextKey string
+
 const (
-	SessionContextKey = "session"
+	SessionContextKey contextKey = "session"
 )
 
 func (gs *Gosesh) Authenticate(next http.Handler) http.Handler {
@@ -68,7 +70,7 @@ func CurrentSession(r *http.Request) (*Session, bool) {
 }
 
 func (gs *Gosesh) authenticate(r *http.Request) *http.Request {
-	session, ok := CurrentSession(r)
+	_, ok := CurrentSession(r)
 	if ok {
 		return r
 	}
@@ -80,7 +82,7 @@ func (gs *Gosesh) authenticate(r *http.Request) *http.Request {
 		return r
 	}
 
-	session, err = gs.Store.GetSession(ctx, id)
+	session, err := gs.Store.GetSession(ctx, id)
 	if err != nil {
 		return r
 	}

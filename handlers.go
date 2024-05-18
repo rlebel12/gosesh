@@ -14,15 +14,14 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const (
-	defaultSessionActiveDuration = 1 * time.Hour
-	defaultSessionIdleDuration   = 24 * time.Hour
-)
-
 func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b := make([]byte, 16)
-		rand.Read(b)
+		if _, err := rand.Read(b); err != nil {
+			gs.logError("failed to read OAuth state", "err", err)
+			http.Error(w, "failed to read OAuth state", http.StatusInternalServerError)
+			return
+		}
 		state := base64.URLEncoding.EncodeToString(b)
 
 		expiration := time.Now().UTC().Add(5 * time.Minute)
@@ -35,7 +34,6 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 }
 
 var (
-	ErrMissingArguments         = errors.New("missing arguments")
 	ErrFailedGettingStateCookie = errors.New("failed getting state cookie")
 	ErrInvalidStateCookie       = errors.New("invalid state cookie")
 	ErrFailedExchangingToken    = errors.New("failed exchanging token")
@@ -44,26 +42,7 @@ var (
 	ErrFailedCreatingSession    = errors.New("failed creating session")
 )
 
-type OAuth2CallbackParams struct {
-	W            http.ResponseWriter
-	R            *http.Request
-	User         OAuth2User
-	OAuth2Config *oauth2.Config
-}
-
-func (gs *Gosesh) OAuth2Callback(args OAuth2CallbackParams) error {
-	if args.R == nil {
-		return errors.New("missing request")
-	} else if args.W == nil {
-		return errors.New("missing response writer")
-	} else if args.User == nil {
-		return errors.New("missing requester")
-	} else if args.OAuth2Config == nil {
-		return errors.New("missing oauth config")
-	}
-
-	r := args.R
-	w := args.W
+func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OAuth2User, config *oauth2.Config) error {
 	ctx := r.Context()
 	oauthState, err := r.Cookie(gs.Config.OAuth2StateCookieName)
 	if err != nil {
@@ -77,17 +56,17 @@ func (gs *Gosesh) OAuth2Callback(args OAuth2CallbackParams) error {
 		return fmt.Errorf("%w: %w", ErrInvalidStateCookie, err)
 	}
 
-	token, err := args.OAuth2Config.Exchange(ctx, r.FormValue("code"))
+	token, err := config.Exchange(ctx, r.FormValue("code"))
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedExchangingToken, err)
 	}
 
-	err = gs.unmarshalUserData(ctx, args.User, token.AccessToken)
+	err = gs.unmarshalUserData(ctx, user, token.AccessToken)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err)
 	}
 
-	id, err := gs.Store.UpsertUser(ctx, args.User)
+	id, err := gs.Store.UpsertUser(ctx, user)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
 	}

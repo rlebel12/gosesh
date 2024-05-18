@@ -1,11 +1,10 @@
 with-expecter: true
-inpackage: true
+dir: "mocks/{{.InterfaceDirRelative}}"
+filename: "{{.InterfaceName | lower}}.go"
+mockname: "{{.InterfaceName}}"
+outpkg: "{{.PackageName}}"
 packages:
     github.com/rlebel12/gosesh:
-        interfaces:
-            Storer:
-            UserDataRequester:
-filename: "mock_{{.InterfaceName}}.go"
-dir: "./"
-mockname: "Mock{{.InterfaceName}}"
-outpkg: "gosesh"
+        config:
+            all: True
+            recursive: True

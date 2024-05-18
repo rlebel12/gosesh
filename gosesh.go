@@ -3,32 +3,37 @@ package gosesh
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 )
 
-func New(deps GoseshDependencies, opts ...NewOpts) (*Gosesh, error) {
-	if deps.IDParser == nil {
-		return nil, fmt.Errorf("IDParser is required")
-	} else if deps.Store == nil {
-		return nil, fmt.Errorf("store is required")
+func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
+	config := &Config{
+		Providers:             map[string]OAuthProviderConfig{},
+		SessionCookieName:     "session",
+		OAuth2StateCookieName: "oauthstate",
+		SessionIdleDuration:   24 * time.Hour,
+		SessionActiveDuration: 1 * time.Hour,
+	}
+	for _, opt := range opts {
+		opt(config)
 	}
 
 	gs := &Gosesh{
-		Store:    deps.Store,
-		IDParser: deps.IDParser,
+		Config:   config,
+		Store:    store,
+		IDParser: parser,
 	}
 
-	for _, opt := range opts {
-		opt(gs)
-	}
+	return gs
+}
 
-	if gs.Config == nil {
-		gs.Config = NewConfig()
+func WithLogger(logger *slog.Logger) func(*Config) {
+	return func(cfg *Config) {
+		cfg.Logger = logger
 	}
-
-	return gs, nil
 }
 
 type (
@@ -36,11 +41,6 @@ type (
 		Config   *Config
 		Store    Storer
 		IDParser IDParser
-	}
-
-	GoseshDependencies struct {
-		IDParser
-		Store Storer
 	}
 
 	IDParser interface {
@@ -84,18 +84,25 @@ type (
 		Unmarshal(b []byte) error
 	}
 
-	NewOpts func(*Gosesh)
+	NewOpts func(*Config)
 )
 
-func WithConfig(opts ...ConfigOpts) func(*Gosesh) {
-	return func(g *Gosesh) {
-		g.Config = NewConfig(opts...)
+func (gs *Gosesh) Configg() Config {
+	return *gs.Config
+}
+
+func (gs *Gosesh) Logger() *slog.Logger {
+	return gs.Configg().Logger
+}
+
+func (gs *Gosesh) logError(msg string, args ...any) {
+	if gs.Logger() == nil {
+		return
 	}
+	gs.Logger().Error(msg, args...)
 }
 
 type (
-	ConfigOpts func(*Config)
-
 	Config struct {
 		Origin *url.URL
 
@@ -106,6 +113,8 @@ type (
 		SessionActiveDuration time.Duration
 
 		Providers map[string]OAuthProviderConfig
+
+		Logger *slog.Logger
 	}
 
 	OAuthProviderConfig struct {
@@ -113,20 +122,6 @@ type (
 		ClientSecret string
 	}
 )
-
-func NewConfig(opts ...ConfigOpts) *Config {
-	config := &Config{
-		Providers:             map[string]OAuthProviderConfig{},
-		SessionCookieName:     defaultAuthSessionCookieName,
-		OAuth2StateCookieName: defaultOAuthStateCookieName,
-		SessionIdleDuration:   defaultSessionIdleDuration,
-		SessionActiveDuration: defaultSessionActiveDuration,
-	}
-	for _, opt := range opts {
-		opt(config)
-	}
-	return config
-}
 
 func WithSessionCookieName(name string) func(*Config) {
 	return func(c *Config) {
