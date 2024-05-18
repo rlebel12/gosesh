@@ -27,11 +27,14 @@ func (s *NewSuite) new(opts ...gosesh.NewOpts) *gosesh.Gosesh {
 }
 
 func (s *NewSuite) defaultConfig() gosesh.Config {
+	url, _ := url.Parse("http://localhost")
 	return gosesh.Config{
 		SessionCookieName:     "session",
 		OAuth2StateCookieName: "oauthstate",
 		SessionIdleDuration:   24 * time.Hour,
 		SessionActiveDuration: 1 * time.Hour,
+		Origin:                *url,
+		Now:                   time.Now,
 	}
 }
 
@@ -39,7 +42,11 @@ func (s *NewSuite) equalSuite(sesh *gosesh.Gosesh, expectedConfig gosesh.Config)
 	s.Equal(s.parser, sesh.IDParser())
 	s.Equal(s.store, sesh.Storer())
 	s.Nil(sesh.Logger())
-	s.Equal(expectedConfig, sesh.Config())
+	s.Equal(expectedConfig.SessionCookieName, sesh.Config().SessionCookieName)
+	s.Equal(expectedConfig.OAuth2StateCookieName, sesh.Config().OAuth2StateCookieName)
+	s.Equal(expectedConfig.SessionIdleDuration, sesh.Config().SessionIdleDuration)
+	s.Equal(expectedConfig.SessionActiveDuration, sesh.Config().SessionActiveDuration)
+	s.Equal(expectedConfig.Origin, sesh.Config().Origin)
 }
 
 func (s *NewSuite) TestDefault() {
@@ -90,7 +97,7 @@ func (s *NewSuite) TestWithLogger() {
 	actual := s.new(gosesh.WithLogger(logger))
 	expectedConfig := s.defaultConfig()
 	expectedConfig.Logger = logger
-	s.Equal(expectedConfig, actual.Config())
+	s.Equal(expectedConfig.Logger, actual.Config().Logger)
 }
 
 func TestNewSuite(t *testing.T) {

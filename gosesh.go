@@ -10,11 +10,14 @@ import (
 )
 
 func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
+	url, _ := url.Parse("http://localhost")
 	config := &Config{
 		SessionCookieName:     "session",
 		OAuth2StateCookieName: "oauthstate",
 		SessionIdleDuration:   24 * time.Hour,
 		SessionActiveDuration: 1 * time.Hour,
+		Origin:                *url,
+		Now:                   time.Now,
 	}
 	for _, opt := range opts {
 		opt(config)
@@ -120,6 +123,7 @@ type (
 		SessionActiveDuration time.Duration
 
 		Logger *slog.Logger
+		Now    func() time.Time
 	}
 
 	OAuth2ProviderConfig struct {
@@ -155,5 +159,11 @@ func WithSessionActiveDuration(d time.Duration) func(*Config) {
 func WithOrigin(origin url.URL) func(*Config) {
 	return func(c *Config) {
 		c.Origin = origin
+	}
+}
+
+func WithNow(fn func() time.Time) func(*Config) {
+	return func(c *Config) {
+		c.Now = fn
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscordProvider(gs *gosesh.Gosesh, scopes DiscordScopes, providerConfig gosesh.OAuth2ProviderConfig) DiscordProvider {
+func NewDiscord(gs *gosesh.Gosesh, scopes DiscordScopes, providerConfig gosesh.OAuth2ProviderConfig) Discord {
 	oauth2Config := &oauth2.Config{
 		ClientID:     providerConfig.ClientID,
 		ClientSecret: providerConfig.ClientSecret,
@@ -23,23 +23,23 @@ func NewDiscordProvider(gs *gosesh.Gosesh, scopes DiscordScopes, providerConfig 
 			AuthStyle: oauth2.AuthStyleInParams,
 		},
 	}
-	return DiscordProvider{
+	return Discord{
 		gs:  gs,
 		cfg: oauth2Config,
 	}
 }
 
-type DiscordProvider struct {
+type Discord struct {
 	gs  *gosesh.Gosesh
 	cfg *oauth2.Config
 }
 
-func (p *DiscordProvider) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
+func (p *Discord) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
 	p.gs.OAuth2Begin(p.cfg)(w, r)
 }
 
-func (p *DiscordProvider) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
-	return p.gs.OAuth2Callback(w, r, new(DiscordUser), p.cfg)
+func (p *Discord) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
+	return p.gs.OAuth2Callback(w, r, new(discordUser), p.cfg)
 }
 
 type DiscordScopes struct {
@@ -54,14 +54,14 @@ func (s DiscordScopes) Strings() []string {
 	return scopes
 }
 
-type DiscordUser struct {
+type discordUser struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email,omitempty"`
 	Verified bool   `json:"verified,omitempty"`
 }
 
-func (*DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+func (*discordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
 	const oauthDiscordUrlAPI = "https://discord.com/api/v9/users/@me"
 	req, err := http.NewRequest("GET", oauthDiscordUrlAPI, nil)
 	if err != nil {
@@ -72,10 +72,10 @@ func (*DiscordUser) Request(ctx context.Context, accessToken string) (*http.Resp
 	return client.Do(req)
 }
 
-func (user *DiscordUser) Unmarshal(b []byte) error {
+func (user *discordUser) Unmarshal(b []byte) error {
 	return json.Unmarshal(b, user)
 }
 
-func (user *DiscordUser) String() string {
+func (user *discordUser) String() string {
 	return user.ID
 }

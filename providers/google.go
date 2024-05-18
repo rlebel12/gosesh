@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func NewGoogleProvider(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2ProviderConfig) GoogleProvider {
+func NewGoogle(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2ProviderConfig) GoogleProvider {
 	oauth2Config := &oauth2.Config{
 		ClientID:     providerConfig.ClientID,
 		ClientSecret: providerConfig.ClientSecret,
@@ -38,25 +38,25 @@ func (p *GoogleProvider) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *GoogleProvider) Callback(w http.ResponseWriter, r *http.Request) error {
-	return p.gs.OAuth2Callback(w, r, new(GoogleUser), p.cfg)
+	return p.gs.OAuth2Callback(w, r, new(googleUser), p.cfg)
 }
 
-type GoogleUser struct {
+type googleUser struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
 	Picture       string `json:"picture"`
 }
 
-func (*GoogleUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+func (*googleUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
 	const oauthGoogleUrlAPI = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
 	return http.Get(oauthGoogleUrlAPI + accessToken)
 }
 
-func (user *GoogleUser) Unmarshal(b []byte) error {
+func (user *googleUser) Unmarshal(b []byte) error {
 	return json.Unmarshal(b, user)
 }
 
-func (user *GoogleUser) String() string {
+func (user *googleUser) String() string {
 	return user.ID
 }

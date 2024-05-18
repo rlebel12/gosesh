@@ -24,7 +24,7 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 		}
 		state := base64.URLEncoding.EncodeToString(b)
 
-		expiration := time.Now().UTC().Add(5 * time.Minute)
+		expiration := gs.config.Now().UTC().Add(5 * time.Minute)
 		cookie := gs.OauthStateCookie(state, expiration)
 		http.SetCookie(w, &cookie)
 
