@@ -108,3 +108,49 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		})
 	}
 }
+
+func TestRequireAuthentication(t *testing.T) {
+	require := require.New(t)
+	assert := assert.New(t)
+	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("authenticated", func(t *testing.T) {
+		store := mocks.NewStorer(t)
+		parser := mocks.NewIDParser(t)
+		identifier := mocks.NewIdentifier(t)
+		r, err := http.NewRequest(http.MethodGet, "/", nil)
+		require.NoError(err)
+		sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
+		rr := httptest.NewRecorder()
+
+		session := &gosesh.Session{
+			ID:     identifier,
+			UserID: identifier,
+			IdleAt: now.Add(-5 * time.Minute),
+		}
+		r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
+
+		handlerCalled := false
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+		})
+		sesh.RequireAuthentication(handler).ServeHTTP(rr, r)
+		assert.True(handlerCalled)
+	})
+
+	t.Run("unauthenticated", func(t *testing.T) {
+		r, err := http.NewRequest(http.MethodGet, "/", nil)
+		require.NoError(err)
+		store := mocks.NewStorer(t)
+		parser := mocks.NewIDParser(t)
+		sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
+		rr := httptest.NewRecorder()
+
+		handlerCalled := false
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handlerCalled = true
+		})
+		sesh.RequireAuthentication(handler).ServeHTTP(rr, r)
+		assert.False(handlerCalled)
+	})
+}
