@@ -1,4 +1,4 @@
 cover:
-	@go test -coverprofile=c.out ./...
-	@go tool cover -html=c.out -o coverage.html
-	@rm c.out
+	@go test -cover -coverpkg "." "./tests" -coverprofile=coverage.out ./...
+	@go tool cover -html=coverage.out -o coverage.html
+	@rm coverage.out

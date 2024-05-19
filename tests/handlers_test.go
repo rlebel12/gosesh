@@ -1,4 +1,4 @@
-package gosesh
+package tests
 
 import (
 	"crypto/rand"
@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rlebel12/gosesh"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/oauth2"
 )
@@ -44,15 +45,15 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 		"secure":   {secure: true},
 	} {
 		s.Run(name, func() {
-			opts := []NewOpts{WithNow(func() time.Time {
+			opts := []gosesh.NewOpts{gosesh.WithNow(func() time.Time {
 				return now
 			})}
 			if test.secure {
 				url, err := url.Parse("https://localhost")
 				s.Require().NoError(err)
-				opts = append(opts, WithOrigin(*url))
+				opts = append(opts, gosesh.WithOrigin(*url))
 			}
-			sesh := New(nil, nil, opts...)
+			sesh := gosesh.New(nil, nil, opts...)
 			handler := sesh.OAuth2Begin(&oauth2.Config{
 				ClientID:     "client_id",
 				ClientSecret: "client_secret",
@@ -88,7 +89,7 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 
 func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginFailure() {
 	rand.Reader = strings.NewReader("")
-	sesh := New(nil, nil)
+	sesh := gosesh.New(nil, nil)
 	rr := httptest.NewRecorder()
 	sesh.OAuth2Begin(&oauth2.Config{})(rr, &http.Request{})
 	response := rr.Result()
@@ -147,14 +148,14 @@ func (s *Oauth2CallbackHandlerSuite) request(mode testCallbackRequestMode) *http
 
 func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil)
+	sesh := gosesh.New(nil, nil)
 	err := sesh.OAuth2Callback(rr, s.request(testCallbackErrNoStateCookie), nil, &oauth2.Config{})
 	s.EqualError(err, "failed getting state cookie: http: named cookie not present")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil)
+	sesh := gosesh.New(nil, nil)
 	err := sesh.OAuth2Callback(rr, s.request(testCallbackInvalidStateCookie), nil, &oauth2.Config{})
 	s.EqualError(err, "invalid state cookie")
 }

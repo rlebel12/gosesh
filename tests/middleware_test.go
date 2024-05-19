@@ -1,8 +1,9 @@
-package gosesh
+package tests
 
 import (
 	"net/http"
 
+	"github.com/rlebel12/gosesh"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -42,8 +43,8 @@ type MiddlewareSuite struct {
 // 	})
 // }
 
-func (s *MiddlewareSuite) EqualRequestSession(expected *Session, actual *http.Request) {
-	session, ok := CurrentSession(actual)
+func (s *MiddlewareSuite) EqualRequestSession(expected *gosesh.Session, actual *http.Request) {
+	session, ok := gosesh.CurrentSession(actual)
 	s.True(ok)
 	s.Equal(expected, session)
 }
