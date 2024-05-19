@@ -23,7 +23,7 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 		}
 		state := base64.URLEncoding.EncodeToString(b)
 
-		expiration := gs.Now().UTC().Add(5 * time.Minute)
+		expiration := gs.now().UTC().Add(5 * time.Minute)
 		cookie := gs.OauthStateCookie(state, expiration)
 		http.SetCookie(w, &cookie)
 
@@ -48,7 +48,8 @@ func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OA
 		return fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err)
 	}
 
-	stateCookie := gs.OauthStateCookie("", gs.Now().UTC())
+	now := gs.now().UTC()
+	stateCookie := gs.OauthStateCookie("", now)
 	http.SetCookie(w, &stateCookie)
 
 	if r.FormValue("state") != oauthState.Value {
@@ -70,7 +71,6 @@ func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OA
 		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
 	}
 
-	now := gs.Now().UTC()
 	session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
 		UserID:   id,
 		IdleAt:   now.Add(gs.sessionActiveDuration),

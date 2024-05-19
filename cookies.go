@@ -40,7 +40,7 @@ func (emptyIdentifier) String() string {
 }
 
 func (gs *Gosesh) ExpireSessionCookie() http.Cookie {
-	return gs.SessionCookie(emptyIdentifier{}, time.Now().UTC())
+	return gs.SessionCookie(emptyIdentifier{}, gs.now().UTC())
 }
 
 func (gs *Gosesh) parseIdentifierFromCookie(r *http.Request) (Identifier, error) {

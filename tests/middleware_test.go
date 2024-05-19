@@ -28,10 +28,6 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 	assert := assert.New(t)
 	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	t.Run("no current session", func(t *testing.T) {
-
-	})
-
 	for name, test := range map[string]TestAuthenticateAndRefreshCase{
 		"no current session":         CaseNoSession,
 		"session active":             CaseSessionActive,

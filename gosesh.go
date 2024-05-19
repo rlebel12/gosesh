@@ -19,7 +19,7 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 		sessionIdleDuration:   24 * time.Hour,
 		sessionActiveDuration: 1 * time.Hour,
 		origin:                url,
-		Now:                   time.Now,
+		now:                   time.Now,
 	}
 	for _, opt := range opts {
 		opt(gs)
@@ -34,6 +34,42 @@ func WithLogger(logger *slog.Logger) func(*Gosesh) {
 	}
 }
 
+func WithSessionCookieName(name string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.sessionCookieName = name
+	}
+}
+
+func WithOAuth2StateCookieName(name string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.oAuth2StateCookieName = name
+	}
+}
+
+func WithSessionIdleDuration(d time.Duration) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.sessionIdleDuration = d
+	}
+}
+
+func WithSessionActiveDuration(d time.Duration) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.sessionActiveDuration = d
+	}
+}
+
+func WithOrigin(origin *url.URL) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.origin = origin
+	}
+}
+
+func WithNow(fn func() time.Time) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.now = fn
+	}
+}
+
 func (gs *Gosesh) Host() string {
 	return gs.origin.Host
 }
@@ -44,18 +80,15 @@ func (gs *Gosesh) Scheme() string {
 
 type (
 	Gosesh struct {
-		store    Storer
-		idParser IDParser
-
-		logger *slog.Logger
-		origin *url.URL
-
+		store                 Storer
+		idParser              IDParser
+		logger                *slog.Logger
+		origin                *url.URL
 		sessionCookieName     string
 		oAuth2StateCookieName string
-
 		sessionIdleDuration   time.Duration
 		sessionActiveDuration time.Duration
-		Now                   func() time.Time
+		now                   func() time.Time
 	}
 
 	IDParser interface {
@@ -100,6 +133,11 @@ type (
 	}
 
 	NewOpts func(*Gosesh)
+
+	OAuth2Credentials struct {
+		ClientID     string
+		ClientSecret string
+	}
 )
 
 func (gs *Gosesh) logError(msg string, args ...any) {
@@ -108,46 +146,3 @@ func (gs *Gosesh) logError(msg string, args ...any) {
 	}
 	gs.logger.Error(msg, args...)
 }
-
-func WithSessionCookieName(name string) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.sessionCookieName = name
-	}
-}
-
-func WithOAuth2StateCookieName(name string) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.oAuth2StateCookieName = name
-	}
-}
-
-func WithSessionIdleDuration(d time.Duration) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.sessionIdleDuration = d
-	}
-}
-
-func WithSessionActiveDuration(d time.Duration) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.sessionActiveDuration = d
-	}
-}
-
-func WithOrigin(origin *url.URL) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.origin = origin
-	}
-}
-
-func WithNow(fn func() time.Time) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.Now = fn
-	}
-}
-
-type (
-	OAuth2Credentials struct {
-		ClientID     string
-		ClientSecret string
-	}
-)

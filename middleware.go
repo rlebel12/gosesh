@@ -26,7 +26,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		now := gs.Now().UTC()
+		now := gs.now().UTC()
 		if session.IdleAt.After(now) {
 			next.ServeHTTP(w, r)
 			return
@@ -87,7 +87,7 @@ func (gs *Gosesh) authenticate(r *http.Request) *http.Request {
 		return r
 	}
 
-	if session.ExpireAt.Before(gs.Now().UTC()) {
+	if session.ExpireAt.Before(gs.now().UTC()) {
 		return r
 	}
 
