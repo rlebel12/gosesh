@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -137,7 +136,7 @@ func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request,
 		err = gs.store.DeleteSession(r.Context(), session.ID)
 	}
 	if err != nil {
-		slog.Error("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
+		gs.logError("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
 		return r, err
 	}
 

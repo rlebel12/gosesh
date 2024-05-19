@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/rlebel12/gosesh"
 	"github.com/rlebel12/gosesh/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/oauth2"
 )
@@ -352,4 +355,140 @@ func (s *Oauth2CallbackHandlerSuite) assertStateCookieReset(response *http.Respo
 
 func TestOauth2CallbackHandlerSuite(t *testing.T) {
 	suite.Run(t, new(Oauth2CallbackHandlerSuite))
+}
+
+type testLogoutStep int
+
+const (
+	testLogoutNoSessionCookie testLogoutStep = iota
+	testLogoutBadSessionCookie
+	testLogoutFailedParsingID
+	testLogoutFailedGettingSession
+	testLogoutSessionExpired
+	testLogoutFailedDeletingSession
+	testLogoutSuccess
+)
+
+func TestLogoutHandler(t *testing.T) {
+	require := require.New(t)
+	assert := assert.New(t)
+
+	for name, test := range map[string]struct {
+		step            testLogoutStep
+		deleteAll       bool
+		completeHandler bool
+	}{
+		"no session cookie":                                  {step: testLogoutNoSessionCookie},
+		"bad session cookie":                                 {step: testLogoutBadSessionCookie},
+		"failed parsing ID":                                  {step: testLogoutFailedParsingID},
+		"failed getting session":                             {step: testLogoutFailedGettingSession},
+		"session expired":                                    {step: testLogoutSessionExpired},
+		"failed deleting one session":                        {step: testLogoutFailedDeletingSession},
+		"failed deleting all sessions":                       {step: testLogoutFailedDeletingSession, deleteAll: true},
+		"success deleting one session":                       {step: testLogoutSuccess},
+		"success deleting all sessions":                      {step: testLogoutSuccess, deleteAll: true},
+		"success deleting one session with complete handler": {step: testLogoutSuccess, completeHandler: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			now := func() time.Time { return time.Now() }
+			store := mocks.NewStorer(t)
+			parser := mocks.NewIDParser(t)
+			r, err := http.NewRequest(http.MethodGet, "/", nil)
+			require.NoError(err)
+			sesh := gosesh.New(parser, store, gosesh.WithNow(now))
+			rr := httptest.NewRecorder()
+
+			func() {
+				if test.step == testLogoutNoSessionCookie {
+					return
+				}
+
+				if test.step == testLogoutBadSessionCookie {
+					r.AddCookie(&http.Cookie{
+						Name:  "session",
+						Value: "bad",
+					})
+					return
+				}
+				r.AddCookie(&http.Cookie{
+					Name:  "session",
+					Value: "aWRlbnRpZmllcg==",
+				})
+
+				if test.step == testLogoutFailedParsingID {
+					parser.EXPECT().Parse([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
+					return
+				}
+				identifier := mocks.NewIdentifier(t)
+				identifier.EXPECT().String().Return("identifier")
+				parser.EXPECT().Parse([]byte("identifier")).Return(identifier, nil)
+
+				if test.step == testLogoutFailedGettingSession {
+					store.EXPECT().GetSession(r.Context(), identifier).Return(nil, fmt.Errorf("failed get session"))
+					return
+				}
+
+				if test.step == testLogoutSessionExpired {
+					store.EXPECT().GetSession(r.Context(), identifier).Return(&gosesh.Session{
+						ID:       identifier,
+						UserID:   identifier,
+						IdleAt:   now().UTC().Add(-1 * time.Hour),
+						ExpireAt: now().UTC().Add(-1 * time.Hour),
+					}, nil)
+					return
+				}
+				session := &gosesh.Session{
+					ID:       identifier,
+					UserID:   identifier,
+					IdleAt:   now().UTC().Add(1 * time.Hour),
+					ExpireAt: now().UTC().Add(24 * time.Hour),
+				}
+				store.EXPECT().GetSession(r.Context(), identifier).Return(session, nil)
+				ctx := context.WithValue(r.Context(), gosesh.SessionContextKey, session)
+
+				if test.deleteAll {
+					urlValues := url.Values{}
+					urlValues.Add("all", "true")
+					r.URL.RawQuery = urlValues.Encode()
+				}
+				if test.step < testLogoutSuccess {
+					if test.deleteAll {
+						store.EXPECT().DeleteUserSessions(ctx, identifier).Return(0, fmt.Errorf("failed delete all sessions"))
+					} else {
+						store.EXPECT().DeleteSession(ctx, identifier).Return(fmt.Errorf("failed delete session"))
+					}
+					return
+				}
+				if test.deleteAll {
+					store.EXPECT().DeleteUserSessions(ctx, identifier).Return(1, nil)
+				} else {
+					store.EXPECT().DeleteSession(ctx, identifier).Return(nil)
+				}
+			}()
+
+			defer func() {
+				if test.step <= testLogoutSessionExpired {
+					assert.Equal(http.StatusUnauthorized, rr.Code)
+					return
+				}
+				if test.step < testLogoutSuccess {
+					assert.Equal(http.StatusInternalServerError, rr.Code)
+					return
+				}
+				if test.completeHandler {
+					assert.Equal(http.StatusTeapot, rr.Code)
+				} else {
+					assert.Equal(http.StatusNoContent, rr.Code)
+				}
+			}()
+
+			var handler http.HandlerFunc
+			if test.completeHandler {
+				handler = func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusTeapot)
+				}
+			}
+			sesh.LogoutHandler(handler).ServeHTTP(rr, r)
+		})
+	}
 }

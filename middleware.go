@@ -87,7 +87,7 @@ func (gs *Gosesh) authenticate(r *http.Request) *http.Request {
 		return r
 	}
 
-	if session.ExpireAt.Before(time.Now().UTC()) {
+	if session.ExpireAt.Before(gs.config.Now().UTC()) {
 		return r
 	}
 
