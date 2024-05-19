@@ -44,7 +44,12 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			identifier := mocks.NewIdentifier(t)
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)
-			sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
+			sesh := gosesh.New(parser, store,
+				gosesh.WithNow(func() time.Time { return now }),
+				gosesh.WithSessionCookieName("customName"),
+				gosesh.WithSessionActiveDuration(17*time.Minute),
+				gosesh.WithSessionIdleDuration(85*time.Minute),
+			)
 			rr := httptest.NewRecorder()
 
 			func() {
@@ -69,21 +74,21 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 
 				if test == CaseSessionIdleFailedUpdate {
 					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
-						IdleAt:   now.Add(1 * time.Hour),
-						ExpireAt: now.Add(24 * time.Hour),
+						IdleAt:   now.Add(17 * time.Minute),
+						ExpireAt: now.Add(85 * time.Minute),
 					}).Return(nil, errors.New("failed update"))
 					return
 				}
 
 				if test == CaseSessionIdleSuccess {
 					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
-						IdleAt:   now.Add(1 * time.Hour),
-						ExpireAt: now.Add(24 * time.Hour),
+						IdleAt:   now.Add(17 * time.Minute),
+						ExpireAt: now.Add(85 * time.Minute),
 					}).Return(&gosesh.Session{
 						ID:       identifier,
 						UserID:   identifier,
-						IdleAt:   now.Add(1 * time.Hour),
-						ExpireAt: now.Add(24 * time.Hour),
+						IdleAt:   now.Add(17 * time.Minute),
+						ExpireAt: now.Add(85 * time.Minute),
 					}, nil)
 				}
 			}()
@@ -97,10 +102,11 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			if test < CaseSessionIdleSuccess {
 				return
 			}
-			cookie := rr.Result().Cookies()[0]
-			assert.Equal("session", cookie.Name)
+			result := rr.Result()
+			cookie := result.Cookies()[0]
+			assert.Equal("customName", cookie.Name)
 			assert.Equal("aWRlbnRpZmllcg==", cookie.Value)
-			assert.Equal(now.Add(24*time.Hour), cookie.Expires)
+			assert.Equal(now.Add(85*time.Minute), cookie.Expires)
 			assert.Equal("localhost", cookie.Domain)
 			assert.Equal("/", cookie.Path)
 			assert.Equal(http.SameSiteLaxMode, cookie.SameSite)

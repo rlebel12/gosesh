@@ -93,14 +93,6 @@ func (gs *Gosesh) Config() Config {
 	return *gs.config
 }
 
-func (gs *Gosesh) Storer() Storer {
-	return gs.store
-}
-
-func (gs *Gosesh) IDParser() IDParser {
-	return gs.idParser
-}
-
 func (gs *Gosesh) Logger() *slog.Logger {
 	return gs.Config().Logger
 }

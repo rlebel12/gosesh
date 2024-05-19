@@ -51,9 +51,10 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 		"secure":   {secure: true},
 	} {
 		s.Run(name, func() {
-			opts := []gosesh.NewOpts{gosesh.WithNow(func() time.Time {
-				return now
-			})}
+			opts := []gosesh.NewOpts{
+				gosesh.WithNow(func() time.Time { return now }),
+				gosesh.WithOAuth2StateCookieName("customStateName"),
+			}
 			if test.secure {
 				url, err := url.Parse("https://localhost")
 				s.Require().NoError(err)
@@ -78,7 +79,7 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 			s.Equal(http.StatusTemporaryRedirect, response.StatusCode)
 			s.Require().Equal(1, len(response.Cookies()))
 			cookie := response.Cookies()[0]
-			s.Equal("oauthstate", cookie.Name)
+			s.Equal("customStateName", cookie.Name)
 			s.Equal("ZGV0ZXJtaW5pc3RpYyByYQ==", cookie.Value)
 			s.Equal(now.Add(5*time.Minute), cookie.Expires)
 			s.Equal("localhost", cookie.Domain)
