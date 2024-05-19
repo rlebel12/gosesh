@@ -58,7 +58,7 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 			if test.secure {
 				url, err := url.Parse("https://localhost")
 				s.Require().NoError(err)
-				opts = append(opts, gosesh.WithOrigin(*url))
+				opts = append(opts, gosesh.WithOrigin(url))
 			}
 			sesh := gosesh.New(nil, nil, opts...)
 			handler := sesh.OAuth2Begin(&oauth2.Config{
@@ -125,7 +125,7 @@ type Oauth2CallbackHandlerSuite struct {
 	suite.Suite
 	oauth2Server *httptest.Server
 	now          time.Time
-	withNow      func(*gosesh.Config)
+	withNow      func(*gosesh.Gosesh)
 }
 
 func (s *Oauth2CallbackHandlerSuite) SetupSuite() {
@@ -142,7 +142,7 @@ func (s *Oauth2CallbackHandlerSuite) SetupSuite() {
 		}
 	}))
 	s.now = time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
-	s.withNow = func(c *gosesh.Config) { c.Now = func() time.Time { return s.now } }
+	s.withNow = func(c *gosesh.Gosesh) { c.Now = func() time.Time { return s.now } }
 }
 
 func (s *Oauth2CallbackHandlerSuite) TearDownSuite() {

@@ -16,7 +16,7 @@ func NewGoogle(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2Credentials) Googl
 		ClientID:     providerConfig.ClientID,
 		ClientSecret: providerConfig.ClientSecret,
 		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/google/callback", gs.Config().Origin.Scheme, gs.Config().Origin.Host),
+			"%s://%s/auth/google/callback", gs.Scheme(), gs.Host()),
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 		},

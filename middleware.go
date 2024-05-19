@@ -26,7 +26,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		now := gs.config.Now().UTC()
+		now := gs.Now().UTC()
 		if session.IdleAt.After(now) {
 			next.ServeHTTP(w, r)
 			return
@@ -34,8 +34,8 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 
 		ctx := r.Context()
 		session, err := gs.store.UpdateSession(ctx, session.ID, UpdateSessionValues{
-			IdleAt:   now.Add(gs.config.SessionActiveDuration),
-			ExpireAt: now.Add(gs.config.SessionIdleDuration),
+			IdleAt:   now.Add(gs.sessionActiveDuration),
+			ExpireAt: now.Add(gs.sessionIdleDuration),
 		})
 		if err != nil {
 			gs.logError("failed updating session: %s", err.Error())
@@ -87,7 +87,7 @@ func (gs *Gosesh) authenticate(r *http.Request) *http.Request {
 		return r
 	}
 
-	if session.ExpireAt.Before(gs.config.Now().UTC()) {
+	if session.ExpireAt.Before(gs.Now().UTC()) {
 		return r
 	}
 

@@ -21,7 +21,7 @@ func (_m *NewOpts) EXPECT() *NewOpts_Expecter {
 }
 
 // Execute provides a mock function with given fields: _a0
-func (_m *NewOpts) Execute(_a0 *gosesh.Config) {
+func (_m *NewOpts) Execute(_a0 *gosesh.Gosesh) {
 	_m.Called(_a0)
 }
 
@@ -31,14 +31,14 @@ type NewOpts_Execute_Call struct {
 }
 
 // Execute is a helper method to define mock.On call
-//   - _a0 *gosesh.Config
+//   - _a0 *gosesh.Gosesh
 func (_e *NewOpts_Expecter) Execute(_a0 interface{}) *NewOpts_Execute_Call {
 	return &NewOpts_Execute_Call{Call: _e.mock.On("Execute", _a0)}
 }
 
-func (_c *NewOpts_Execute_Call) Run(run func(_a0 *gosesh.Config)) *NewOpts_Execute_Call {
+func (_c *NewOpts_Execute_Call) Run(run func(_a0 *gosesh.Gosesh)) *NewOpts_Execute_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*gosesh.Config))
+		run(args[0].(*gosesh.Gosesh))
 	})
 	return _c
 }
@@ -48,7 +48,7 @@ func (_c *NewOpts_Execute_Call) Return() *NewOpts_Execute_Call {
 	return _c
 }
 
-func (_c *NewOpts_Execute_Call) RunAndReturn(run func(*gosesh.Config)) *NewOpts_Execute_Call {
+func (_c *NewOpts_Execute_Call) RunAndReturn(run func(*gosesh.Gosesh)) *NewOpts_Execute_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -9,27 +9,27 @@ import (
 
 func (gs *Gosesh) OauthStateCookie(value string, expires time.Time) http.Cookie {
 	return http.Cookie{
-		Name:     gs.config.OAuth2StateCookieName,
+		Name:     gs.oAuth2StateCookieName,
 		Value:    value,
-		Domain:   gs.config.Origin.Hostname(),
+		Domain:   gs.origin.Hostname(),
 		Path:     "/",
 		Expires:  expires,
 		SameSite: http.SameSiteLaxMode,
 		HttpOnly: true,
-		Secure:   gs.config.Origin.Scheme == "https",
+		Secure:   gs.origin.Scheme == "https",
 	}
 }
 
 func (gs *Gosesh) SessionCookie(identifier Identifier, expires time.Time) http.Cookie {
 	return http.Cookie{
-		Name:     gs.config.SessionCookieName,
+		Name:     gs.sessionCookieName,
 		Value:    base64.URLEncoding.EncodeToString([]byte(identifier.String())),
-		Domain:   gs.config.Origin.Hostname(),
+		Domain:   gs.origin.Hostname(),
 		Path:     "/",
 		Expires:  expires,
 		SameSite: http.SameSiteLaxMode,
 		HttpOnly: true,
-		Secure:   gs.config.Origin.Scheme == "https",
+		Secure:   gs.origin.Scheme == "https",
 	}
 }
 
@@ -44,7 +44,7 @@ func (gs *Gosesh) ExpireSessionCookie() http.Cookie {
 }
 
 func (gs *Gosesh) parseIdentifierFromCookie(r *http.Request) (Identifier, error) {
-	sessionCookie, err := r.Cookie(gs.config.SessionCookieName)
+	sessionCookie, err := r.Cookie(gs.sessionCookieName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session cookie: %w", err)
 	}

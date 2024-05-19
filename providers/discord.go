@@ -15,7 +15,7 @@ func NewDiscord(gs *gosesh.Gosesh, scopes DiscordScopes, credentials gosesh.OAut
 		ClientID:     credentials.ClientID,
 		ClientSecret: credentials.ClientSecret,
 		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/discord/callback", gs.Config().Origin.Scheme, gs.Config().Origin.Host),
+			"%s://%s/auth/discord/callback", gs.Scheme(), gs.Host()),
 		Scopes: scopes.Strings(),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",

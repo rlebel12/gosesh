@@ -23,7 +23,7 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 		}
 		state := base64.URLEncoding.EncodeToString(b)
 
-		expiration := gs.config.Now().UTC().Add(5 * time.Minute)
+		expiration := gs.Now().UTC().Add(5 * time.Minute)
 		cookie := gs.OauthStateCookie(state, expiration)
 		http.SetCookie(w, &cookie)
 
@@ -43,12 +43,12 @@ var (
 
 func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OAuth2User, config *oauth2.Config) error {
 	ctx := r.Context()
-	oauthState, err := r.Cookie(gs.config.OAuth2StateCookieName)
+	oauthState, err := r.Cookie(gs.oAuth2StateCookieName)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err)
 	}
 
-	stateCookie := gs.OauthStateCookie("", gs.config.Now().UTC())
+	stateCookie := gs.OauthStateCookie("", gs.Now().UTC())
 	http.SetCookie(w, &stateCookie)
 
 	if r.FormValue("state") != oauthState.Value {
@@ -70,11 +70,11 @@ func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OA
 		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
 	}
 
-	now := gs.config.Now().UTC()
+	now := gs.Now().UTC()
 	session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
 		UserID:   id,
-		IdleAt:   now.Add(gs.config.SessionActiveDuration),
-		ExpireAt: now.Add(gs.config.SessionIdleDuration),
+		IdleAt:   now.Add(gs.sessionActiveDuration),
+		ExpireAt: now.Add(gs.sessionIdleDuration),
 	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrFailedCreatingSession, err)

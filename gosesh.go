@@ -11,38 +11,51 @@ import (
 
 func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 	url, _ := url.Parse("http://localhost")
-	config := &Config{
-		SessionCookieName:     "session",
-		OAuth2StateCookieName: "oauthstate",
-		SessionIdleDuration:   24 * time.Hour,
-		SessionActiveDuration: 1 * time.Hour,
-		Origin:                *url,
+	gs := &Gosesh{
+		store:                 store,
+		idParser:              parser,
+		sessionCookieName:     "session",
+		oAuth2StateCookieName: "oauthstate",
+		sessionIdleDuration:   24 * time.Hour,
+		sessionActiveDuration: 1 * time.Hour,
+		origin:                url,
 		Now:                   time.Now,
 	}
 	for _, opt := range opts {
-		opt(config)
-	}
-
-	gs := &Gosesh{
-		config:   config,
-		store:    store,
-		idParser: parser,
+		opt(gs)
 	}
 
 	return gs
 }
 
-func WithLogger(logger *slog.Logger) func(*Config) {
-	return func(cfg *Config) {
-		cfg.Logger = logger
+func WithLogger(logger *slog.Logger) func(*Gosesh) {
+	return func(gs *Gosesh) {
+		gs.logger = logger
 	}
+}
+
+func (gs *Gosesh) Host() string {
+	return gs.origin.Host
+}
+
+func (gs *Gosesh) Scheme() string {
+	return gs.origin.Scheme
 }
 
 type (
 	Gosesh struct {
-		config   *Config
 		store    Storer
 		idParser IDParser
+
+		logger *slog.Logger
+		origin *url.URL
+
+		sessionCookieName     string
+		oAuth2StateCookieName string
+
+		sessionIdleDuration   time.Duration
+		sessionActiveDuration time.Duration
+		Now                   func() time.Time
 	}
 
 	IDParser interface {
@@ -86,76 +99,55 @@ type (
 		Unmarshal(b []byte) error
 	}
 
-	NewOpts func(*Config)
+	NewOpts func(*Gosesh)
 )
 
-func (gs *Gosesh) Config() Config {
-	return *gs.config
-}
-
-func (gs *Gosesh) Logger() *slog.Logger {
-	return gs.Config().Logger
-}
-
 func (gs *Gosesh) logError(msg string, args ...any) {
-	if gs.Logger() == nil {
+	if gs.logger == nil {
 		return
 	}
-	gs.Logger().Error(msg, args...)
+	gs.logger.Error(msg, args...)
+}
+
+func WithSessionCookieName(name string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.sessionCookieName = name
+	}
+}
+
+func WithOAuth2StateCookieName(name string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.oAuth2StateCookieName = name
+	}
+}
+
+func WithSessionIdleDuration(d time.Duration) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.sessionIdleDuration = d
+	}
+}
+
+func WithSessionActiveDuration(d time.Duration) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.sessionActiveDuration = d
+	}
+}
+
+func WithOrigin(origin *url.URL) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.origin = origin
+	}
+}
+
+func WithNow(fn func() time.Time) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.Now = fn
+	}
 }
 
 type (
-	Config struct {
-		Origin url.URL
-
-		SessionCookieName     string
-		OAuth2StateCookieName string
-
-		SessionIdleDuration   time.Duration
-		SessionActiveDuration time.Duration
-
-		Logger *slog.Logger
-		Now    func() time.Time
-	}
-
 	OAuth2Credentials struct {
 		ClientID     string
 		ClientSecret string
 	}
 )
-
-func WithSessionCookieName(name string) func(*Config) {
-	return func(c *Config) {
-		c.SessionCookieName = name
-	}
-}
-
-func WithOAuth2StateCookieName(name string) func(*Config) {
-	return func(c *Config) {
-		c.OAuth2StateCookieName = name
-	}
-}
-
-func WithSessionIdleDuration(d time.Duration) func(*Config) {
-	return func(c *Config) {
-		c.SessionIdleDuration = d
-	}
-}
-
-func WithSessionActiveDuration(d time.Duration) func(*Config) {
-	return func(c *Config) {
-		c.SessionActiveDuration = d
-	}
-}
-
-func WithOrigin(origin url.URL) func(*Config) {
-	return func(c *Config) {
-		c.Origin = origin
-	}
-}
-
-func WithNow(fn func() time.Time) func(*Config) {
-	return func(c *Config) {
-		c.Now = fn
-	}
-}
