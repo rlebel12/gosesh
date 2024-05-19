@@ -99,11 +99,13 @@ func (gs *Gosesh) unmarshalUserData(ctx context.Context, data OAuth2User, access
 	return data.Unmarshal(contents)
 }
 
+var errUnauthorized = errors.New("unauthorized")
+
 func (gs *Gosesh) LogoutHandler(completeHandler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r, err := gs.Logout(w, r)
 		if err != nil {
-			if errors.Is(err, ErrUnauthorized) {
+			if errors.Is(err, errUnauthorized) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -119,13 +121,11 @@ func (gs *Gosesh) LogoutHandler(completeHandler http.HandlerFunc) http.HandlerFu
 	}
 }
 
-var ErrUnauthorized = errors.New("unauthorized")
-
 func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
 	r = gs.authenticate(r)
 	session, ok := CurrentSession(r)
 	if !ok {
-		return r, ErrUnauthorized
+		return r, errUnauthorized
 	}
 
 	var err error

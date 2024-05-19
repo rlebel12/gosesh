@@ -131,8 +131,6 @@ type Oauth2CallbackHandlerSuite struct {
 func (s *Oauth2CallbackHandlerSuite) SetupSuite() {
 	s.oauth2Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/auth":
-			http.Redirect(w, r, "http://localhost/auth/callback?code=code&state="+r.FormValue("state"), http.StatusTemporaryRedirect)
 		case "/token":
 			w.Header().Set("Content-Type", "application/json")
 			_, err := w.Write([]byte(`{"access_token":"access_token","token_type":"bearer","refresh_token":"refresh_token","expiry":"2021-01-01T00:00:00Z"}`))

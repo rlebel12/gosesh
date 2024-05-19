@@ -39,7 +39,7 @@ func (p *Discord) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Discord) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
-	return p.gs.OAuth2Callback(w, r, new(discordUser), p.cfg)
+	return p.gs.OAuth2Callback(w, r, new(DiscordUser), p.cfg)
 }
 
 type DiscordScopes struct {
@@ -54,14 +54,18 @@ func (s DiscordScopes) Strings() []string {
 	return scopes
 }
 
-type discordUser struct {
+type DiscordUser struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email,omitempty"`
 	Verified bool   `json:"verified,omitempty"`
 }
 
-func (*discordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+func (user *DiscordUser) String() string {
+	return user.ID
+}
+
+func (*DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
 	const oauthDiscordUrlAPI = "https://discord.com/api/v9/users/@me"
 	req, err := http.NewRequest("GET", oauthDiscordUrlAPI, nil)
 	if err != nil {
@@ -72,10 +76,6 @@ func (*discordUser) Request(ctx context.Context, accessToken string) (*http.Resp
 	return client.Do(req)
 }
 
-func (user *discordUser) Unmarshal(b []byte) error {
+func (user *DiscordUser) Unmarshal(b []byte) error {
 	return json.Unmarshal(b, user)
-}
-
-func (user *discordUser) String() string {
-	return user.ID
 }

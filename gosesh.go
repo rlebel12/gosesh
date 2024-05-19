@@ -64,6 +64,7 @@ func WithOrigin(origin *url.URL) func(*Gosesh) {
 	}
 }
 
+// This is intended primarily to facilitate testing.
 func WithNow(fn func() time.Time) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.now = fn
