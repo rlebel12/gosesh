@@ -3,7 +3,6 @@ package gosesh
 import (
 	"context"
 	"net/http"
-	"time"
 )
 
 type contextKey string
@@ -27,7 +26,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		now := time.Now().UTC()
+		now := gs.config.Now().UTC()
 		if session.IdleAt.After(now) {
 			next.ServeHTTP(w, r)
 			return
@@ -39,6 +38,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			ExpireAt: now.Add(gs.config.SessionIdleDuration),
 		})
 		if err != nil {
+			gs.logError("failed updating session: %s", err.Error())
 			next.ServeHTTP(w, r)
 			return
 		}

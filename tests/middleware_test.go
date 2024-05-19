@@ -1,50 +1,110 @@
 package tests
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
 
 	"github.com/rlebel12/gosesh"
-	"github.com/stretchr/testify/suite"
+	"github.com/rlebel12/gosesh/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-type MiddlewareSuite struct {
-	suite.Suite
-}
+type TestAuthenticateAndRefreshCase int
 
-// func (s *MiddlewareSuite) TestCurrentSession() {
-// 	s.Run("valid", func() {
-// 		r := new(http.Request)
-// 		session := new(Session)
-// 		ctx := context.WithValue(r.Context(), SessionContextKey, session)
-// 		r = r.WithContext(ctx)
+const (
+	CaseNoSession TestAuthenticateAndRefreshCase = iota
+	CaseSessionActive
+	CaseSessionIdleFailedUpdate
+	CaseSessionIdleSuccess
+)
 
-// 		actual, ok := CurrentSession(r)
-// 		s.True(ok)
-// 		s.Equal(session, actual)
-// 	})
+func TestAuthenticateAndRefresh(t *testing.T) {
+	require := require.New(t)
+	assert := assert.New(t)
+	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// 	s.Run("invalid", func() {
-// 		r := new(http.Request)
+	t.Run("no current session", func(t *testing.T) {
 
-// 		_, ok := CurrentSession(r)
-// 		s.False(ok)
-// 	})
-// }
+	})
 
-// func (s *MiddlewareSuite) TestAuthenticatePrivate() {
-// 	s.Run("already authenticated", func() {
-// 		gs := new(Gosesh)
-// 		r := new(http.Request)
-// 		w := httptest.NewRecorder()
-// 		session := new(Session)
-// 		ctx := context.WithValue(r.Context(), SessionContextKey, session)
-// 		result := gs.authenticate(w, r.WithContext(ctx))
-// 		s.EqualRequestSession(session, result)
-// 	})
-// }
+	for name, test := range map[string]TestAuthenticateAndRefreshCase{
+		"no current session":         CaseNoSession,
+		"session active":             CaseSessionActive,
+		"session idle failed update": CaseSessionIdleFailedUpdate,
+		"session idle success":       CaseSessionIdleSuccess,
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := mocks.NewStorer(t)
+			parser := mocks.NewIDParser(t)
+			identifier := mocks.NewIdentifier(t)
+			r, err := http.NewRequest(http.MethodGet, "/", nil)
+			require.NoError(err)
+			sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
+			rr := httptest.NewRecorder()
 
-func (s *MiddlewareSuite) EqualRequestSession(expected *gosesh.Session, actual *http.Request) {
-	session, ok := gosesh.CurrentSession(actual)
-	s.True(ok)
-	s.Equal(expected, session)
+			func() {
+				if test == CaseNoSession {
+					return
+				}
+
+				if test == CaseSessionActive {
+					session := &gosesh.Session{
+						IdleAt: now.Add(5 * time.Minute),
+					}
+					r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
+					return
+				}
+				session := &gosesh.Session{
+					ID:     identifier,
+					UserID: identifier,
+					IdleAt: now.Add(-5 * time.Minute),
+				}
+				identifier.EXPECT().String().Return("identifier")
+				r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
+
+				if test == CaseSessionIdleFailedUpdate {
+					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
+						IdleAt:   now.Add(1 * time.Hour),
+						ExpireAt: now.Add(24 * time.Hour),
+					}).Return(nil, errors.New("failed update"))
+					return
+				}
+
+				if test == CaseSessionIdleSuccess {
+					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
+						IdleAt:   now.Add(1 * time.Hour),
+						ExpireAt: now.Add(24 * time.Hour),
+					}).Return(&gosesh.Session{
+						ID:       identifier,
+						UserID:   identifier,
+						IdleAt:   now.Add(1 * time.Hour),
+						ExpireAt: now.Add(24 * time.Hour),
+					}, nil)
+				}
+			}()
+
+			handlerCalled := false
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handlerCalled = true
+			})
+			sesh.AuthenticateAndRefresh(handler).ServeHTTP(rr, r)
+			assert.True(handlerCalled)
+			if test < CaseSessionIdleSuccess {
+				return
+			}
+			cookie := rr.Result().Cookies()[0]
+			assert.Equal("session", cookie.Name)
+			assert.Equal("aWRlbnRpZmllcg==", cookie.Value)
+			assert.Equal(now.Add(24*time.Hour), cookie.Expires)
+			assert.Equal("localhost", cookie.Domain)
+			assert.Equal("/", cookie.Path)
+			assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+			assert.False(cookie.Secure)
+		})
+	}
 }
