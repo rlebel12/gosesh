@@ -57,29 +57,29 @@ func (s *DiscordSuite) TestOAuth2Callback() {
 
 func (s *DiscordSuite) TestUserRequest() {
 	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	defer server.Close()
 	expectedUser := DiscordUser{
 		ID:       "123",
 		Username: "username",
 		Email:    "gosesh@example.com",
 		Verified: true,
+		testHost: &server.URL,
 	}
 	mux.HandleFunc("GET /api/v9/users/@me", func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewEncoder(w).Encode(expectedUser); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		err := json.NewEncoder(w).Encode(expectedUser)
+		s.Require().NoError(err)
 	})
-	server := httptest.NewServer(mux)
-	defer server.Close()
 
 	user := DiscordUser{testHost: &server.URL}
 
 	resp, err := user.Request(context.Background(), "accessToken")
 	s.Require().NoError(err)
-	var actualUser DiscordUser
 	content, err := io.ReadAll(resp.Body)
 	s.Require().NoError(err)
-	err = actualUser.Unmarshal(content)
+	err = user.Unmarshal(content)
 	s.Require().NoError(err)
+	s.Equal(expectedUser, user)
 
 	s.T().Run("TestFailedCreatingRequest", func(t *testing.T) {
 		badURL := "\n"

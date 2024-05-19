@@ -57,11 +57,11 @@ func (s DiscordScopes) strings() []string {
 }
 
 type DiscordUser struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email,omitempty"`
-	Verified bool   `json:"verified,omitempty"`
-	testHost *string
+	ID       string  `json:"id"`
+	Username string  `json:"username"`
+	Email    string  `json:"email,omitempty"`
+	Verified bool    `json:"verified,omitempty"`
+	testHost *string `json:"-"`
 }
 
 func (user *DiscordUser) String() string {
