@@ -35,7 +35,7 @@ type Discord struct {
 }
 
 func (p *Discord) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
-	p.gs.OAuth2Begin(p.cfg)(w, r)
+	p.gs.OAuth2Begin(p.cfg).ServeHTTP(w, r)
 }
 
 func (p *Discord) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {

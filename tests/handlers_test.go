@@ -2,6 +2,7 @@ package tests
 
 import (
 	"crypto/rand"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -104,20 +105,29 @@ func TestHandlersSuite(t *testing.T) {
 
 type Oauth2CallbackHandlerSuite struct {
 	suite.Suite
+	oauth2Server *httptest.Server
 }
 
-func (s *Oauth2CallbackHandlerSuite) config() *oauth2.Config {
-	return &oauth2.Config{
-		ClientID:     "client_id",
-		ClientSecret: "client_secret",
-		RedirectURL:  "http://localhost/auth/callback",
-		Scopes:       []string{"email"},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:   "http://localhost/auth",
-			TokenURL:  "http://localhost/token",
-			AuthStyle: oauth2.AuthStyleInParams,
-		},
-	}
+func (s *Oauth2CallbackHandlerSuite) SetupSuite() {
+	s.oauth2Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/auth":
+			http.Redirect(w, r, "http://localhost/auth/callback?code=code&state="+r.FormValue("state"), http.StatusTemporaryRedirect)
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"access_token":"access_token","token_type":"bearer","refresh_token":"refresh_token","expiry":"2021-01-01T00:00:00Z"}`))
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+}
+
+func (s *Oauth2CallbackHandlerSuite) TearDownSuite() {
+	s.oauth2Server.Close()
+}
+
+func (s *Oauth2CallbackHandlerSuite) SetupTest() {
+
 }
 
 type testCallbackRequestMode int
@@ -125,39 +135,73 @@ type testCallbackRequestMode int
 const (
 	testCallbackErrNoStateCookie testCallbackRequestMode = iota
 	testCallbackInvalidStateCookie
+	testFailedExchange
 )
 
-func (s *Oauth2CallbackHandlerSuite) request(mode testCallbackRequestMode) *http.Request {
-	req, err := http.NewRequest(http.MethodGet, "http://localhost/auth/callback", nil)
+func (s *Oauth2CallbackHandlerSuite) makeInputs(mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config) {
+	var err error
+	callbackURL := fmt.Sprintf("%s/auth/callback", s.oauth2Server.URL)
+	r, err = http.NewRequest(http.MethodGet, callbackURL, nil)
 	s.Require().NoError(err)
 
 	if mode == testCallbackErrNoStateCookie {
-		return req
+		return
 	}
-
-	req.AddCookie(&http.Cookie{
+	r.AddCookie(&http.Cookie{
 		Name:  "oauthstate",
 		Value: "ZGV0ZXJtaW5pc3RpYyByYQ==",
 	})
+
 	if mode == testCallbackInvalidStateCookie {
-		return req
+		return
+	}
+	urlValues := url.Values{}
+	urlValues.Add("state", "ZGV0ZXJtaW5pc3RpYyByYQ==")
+	urlValues.Add("code", "code")
+	urlValuesEncoded := urlValues.Encode()
+	r.URL.RawQuery = urlValuesEncoded
+	config = &oauth2.Config{
+		ClientID:     "client_id",
+		ClientSecret: "client_secret",
+		RedirectURL:  callbackURL,
+		Scopes:       []string{"email"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:   fmt.Sprintf("%s/auth", s.oauth2Server.URL),
+			TokenURL:  fmt.Sprintf("%s/fail-exchange", s.oauth2Server.URL),
+			AuthStyle: oauth2.AuthStyleInParams,
+		},
 	}
 
-	return req
+	if mode == testFailedExchange {
+		return
+	}
+	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
+
+	return
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil)
-	err := sesh.OAuth2Callback(rr, s.request(testCallbackErrNoStateCookie), nil, &oauth2.Config{})
+	request, config := s.makeInputs(testCallbackErrNoStateCookie)
+	err := sesh.OAuth2Callback(rr, request, nil, config)
 	s.EqualError(err, "failed getting state cookie: http: named cookie not present")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil)
-	err := sesh.OAuth2Callback(rr, s.request(testCallbackInvalidStateCookie), nil, &oauth2.Config{})
+	request, config := s.makeInputs(testCallbackInvalidStateCookie)
+	err := sesh.OAuth2Callback(rr, request, nil, config)
 	s.EqualError(err, "invalid state cookie")
+}
+
+func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
+	rr := httptest.NewRecorder()
+	sesh := gosesh.New(nil, nil)
+	request, config := s.makeInputs(testFailedExchange)
+	err := sesh.OAuth2Callback(rr, request, nil, config)
+	s.EqualError(err, "failed exchanging token: oauth2: cannot fetch token: 404 Not Found\nResponse: not found\n")
 }
 
 func TestOauth2CallbackHandlerSuite(t *testing.T) {
