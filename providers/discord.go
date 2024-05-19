@@ -10,13 +10,13 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscord(gs *gosesh.Gosesh, scopes DiscordScopes, credentials gosesh.OAuth2Credentials) Discord {
+func NewDiscord(sesh gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials) Discord {
 	oauth2Config := &oauth2.Config{
 		ClientID:     credentials.ClientID,
 		ClientSecret: credentials.ClientSecret,
 		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/discord/callback", gs.Scheme(), gs.Host()),
-		Scopes: scopes.Strings(),
+			"%s://%s/auth/discord/callback", sesh.Scheme(), sesh.Host()),
+		Scopes: scopes.strings(),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
 			TokenURL:  "https://discord.com/api/oauth2/token",
@@ -24,13 +24,13 @@ func NewDiscord(gs *gosesh.Gosesh, scopes DiscordScopes, credentials gosesh.OAut
 		},
 	}
 	return Discord{
-		gs:  gs,
+		gs:  sesh,
 		cfg: oauth2Config,
 	}
 }
 
 type Discord struct {
-	gs  *gosesh.Gosesh
+	gs  gosesher
 	cfg *oauth2.Config
 }
 
@@ -46,7 +46,7 @@ type DiscordScopes struct {
 	Email bool
 }
 
-func (s DiscordScopes) Strings() []string {
+func (s DiscordScopes) strings() []string {
 	scopes := []string{"identify"}
 	if s.Email {
 		scopes = append(scopes, "email")
