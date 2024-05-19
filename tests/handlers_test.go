@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/rlebel12/gosesh"
-	"github.com/rlebel12/gosesh/mocks"
+	mock_gosesh "github.com/rlebel12/gosesh/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -171,7 +171,7 @@ func (m *failReader) Read(p []byte) (n int, err error) {
 	return 0, fmt.Errorf("failed read")
 }
 
-func (s *Oauth2CallbackHandlerSuite) makeInputs(mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *mocks.OAuth2User, store *mocks.Storer) {
+func (s *Oauth2CallbackHandlerSuite) makeInputs(mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *mock_gosesh.OAuth2User, store *mock_gosesh.Storer) {
 	var err error
 	callbackURL := fmt.Sprintf("%s/auth/callback", s.oauth2Server.URL)
 	r, err = http.NewRequest(http.MethodGet, callbackURL, nil)
@@ -209,7 +209,7 @@ func (s *Oauth2CallbackHandlerSuite) makeInputs(mode testCallbackRequestMode) (r
 		return
 	}
 	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
-	user = mocks.NewOAuth2User(s.T())
+	user = mock_gosesh.NewOAuth2User(s.T())
 
 	if mode == testFailedUnmarshalRequest {
 		user.EXPECT().Request(r.Context(), "access_token").Return(nil, fmt.Errorf("failed request"))
@@ -234,13 +234,13 @@ func (s *Oauth2CallbackHandlerSuite) makeInputs(mode testCallbackRequestMode) (r
 	}
 	user.EXPECT().Unmarshal([]byte{}).Return(nil)
 	user.EXPECT().String().Return("user")
-	store = mocks.NewStorer(s.T())
+	store = mock_gosesh.NewStorer(s.T())
 
 	if mode == testCallbackErrUpsertUser {
 		store.EXPECT().UpsertUser(r.Context(), user).Return(nil, fmt.Errorf("failed upsert"))
 		return
 	}
-	identifier := mocks.NewIdentifier(s.T())
+	identifier := mock_gosesh.NewIdentifier(s.T())
 	identifier.EXPECT().String().Return("identifier")
 	store.EXPECT().UpsertUser(r.Context(), user).Return(identifier, nil)
 	createSessionRequest := gosesh.CreateSessionRequest{
@@ -403,8 +403,8 @@ func TestLogoutHandler(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			now := func() time.Time { return time.Now() }
-			store := mocks.NewStorer(t)
-			parser := mocks.NewIDParser(t)
+			store := mock_gosesh.NewStorer(t)
+			parser := mock_gosesh.NewIDParser(t)
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)
 			sesh := gosesh.New(parser, store, gosesh.WithNow(now))
@@ -431,7 +431,7 @@ func TestLogoutHandler(t *testing.T) {
 					parser.EXPECT().Parse([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
 					return
 				}
-				identifier := mocks.NewIdentifier(t)
+				identifier := mock_gosesh.NewIdentifier(t)
 				identifier.EXPECT().String().Return("identifier")
 				parser.EXPECT().Parse([]byte("identifier")).Return(identifier, nil)
 

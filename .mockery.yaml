@@ -1,8 +1,8 @@
 with-expecter: true
 dir: "mocks/{{.InterfaceDirRelative}}"
-filename: "{{.InterfaceName | lower}}.go"
+filename: "{{.InterfaceName | snakecase | lower}}.go"
 mockname: "{{.InterfaceName}}"
-outpkg: "mocks"
+outpkg: "mock_{{.PackageName}}"
 packages:
     github.com/rlebel12/gosesh:
         config:

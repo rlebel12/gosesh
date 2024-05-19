@@ -10,7 +10,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscord(sesh gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials) Discord {
+func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials) Discord {
 	oauth2Config := &oauth2.Config{
 		ClientID:     credentials.ClientID,
 		ClientSecret: credentials.ClientSecret,
@@ -24,14 +24,16 @@ func NewDiscord(sesh gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Cr
 		},
 	}
 	return Discord{
-		gs:  sesh,
-		cfg: oauth2Config,
+		gs:          sesh,
+		cfg:         oauth2Config,
+		discordHost: "https://discord.com",
 	}
 }
 
 type Discord struct {
-	gs  gosesher
-	cfg *oauth2.Config
+	gs          Gosesher
+	cfg         *oauth2.Config
+	discordHost string
 }
 
 func (p *Discord) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
@@ -59,15 +61,20 @@ type DiscordUser struct {
 	Username string `json:"username"`
 	Email    string `json:"email,omitempty"`
 	Verified bool   `json:"verified,omitempty"`
+	testHost *string
 }
 
 func (user *DiscordUser) String() string {
 	return user.ID
 }
 
-func (*DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
-	const oauthDiscordUrlAPI = "https://discord.com/api/v9/users/@me"
-	req, err := http.NewRequest("GET", oauthDiscordUrlAPI, nil)
+func (user *DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+	discordHost := "https://discord.com"
+	if user.testHost != nil {
+		discordHost = *user.testHost
+	}
+	url := fmt.Sprintf("%s/api/v9/users/@me", discordHost)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating request: %s", err.Error())
 	}

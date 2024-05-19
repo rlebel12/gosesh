@@ -1,4 +1,9 @@
 cover:
-	@go test -cover -coverpkg "." "./tests" -coverprofile=coverage.out ./...
-	@go tool cover -html=coverage.out -o coverage.html
-	@rm coverage.out
+	@go test -cover -coverpkg "." "./tests" -coverprofile=gosesh_coverage.out .
+	@go tool cover -html=gosesh_coverage.out -o gosesh_coverage.html
+	@rm gosesh_coverage.out
+
+	@go test -cover "./providers" -coverprofile=providers_coverage.out ./providers
+	@go tool cover -html=providers_coverage.out -o providers_coverage.html
+	@rm providers_coverage.out
+

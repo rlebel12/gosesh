@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/rlebel12/gosesh"
-	"github.com/rlebel12/gosesh/mocks"
+	mock_gosesh "github.com/rlebel12/gosesh/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,9 +35,9 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		"session idle success":       CaseSessionIdleSuccess,
 	} {
 		t.Run(name, func(t *testing.T) {
-			store := mocks.NewStorer(t)
-			parser := mocks.NewIDParser(t)
-			identifier := mocks.NewIdentifier(t)
+			store := mock_gosesh.NewStorer(t)
+			parser := mock_gosesh.NewIDParser(t)
+			identifier := mock_gosesh.NewIdentifier(t)
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)
 			sesh := gosesh.New(parser, store,
@@ -117,9 +117,9 @@ func TestRequireAuthentication(t *testing.T) {
 	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	t.Run("authenticated", func(t *testing.T) {
-		store := mocks.NewStorer(t)
-		parser := mocks.NewIDParser(t)
-		identifier := mocks.NewIdentifier(t)
+		store := mock_gosesh.NewStorer(t)
+		parser := mock_gosesh.NewIDParser(t)
+		identifier := mock_gosesh.NewIdentifier(t)
 		r, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(err)
 		sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
@@ -143,8 +143,8 @@ func TestRequireAuthentication(t *testing.T) {
 	t.Run("unauthenticated", func(t *testing.T) {
 		r, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(err)
-		store := mocks.NewStorer(t)
-		parser := mocks.NewIDParser(t)
+		store := mock_gosesh.NewStorer(t)
+		parser := mock_gosesh.NewIDParser(t)
 		sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
