@@ -8,8 +8,8 @@ import (
 )
 
 type gosesher interface {
-	OAuth2Begin(cfg *oauth2.Config) http.Handler
-	OAuth2Callback(w http.ResponseWriter, r *http.Request, id gosesh.Identifier, cfg *oauth2.Config) error
+	OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc
+	OAuth2Callback(w http.ResponseWriter, r *http.Request, user gosesh.OAuth2User, cfg *oauth2.Config) error
 	Scheme() string
 	Host() string
 }
