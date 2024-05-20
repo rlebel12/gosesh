@@ -122,7 +122,7 @@ func (gs *Gosesh) LogoutHandler(completeHandler http.HandlerFunc) http.HandlerFu
 }
 
 func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
-	r = gs.authenticate(r)
+	r = gs.authenticate(w, r)
 	session, ok := CurrentSession(r)
 	if !ok {
 		return r, errUnauthorized
@@ -140,8 +140,7 @@ func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request,
 		return r, err
 	}
 
-	sessionCookie := gs.ExpireSessionCookie()
-	http.SetCookie(w, &sessionCookie)
+	http.SetCookie(w, gs.ExpireSessionCookie())
 
 	ctx := context.WithValue(r.Context(), SessionContextKey, nil)
 	return r.WithContext(ctx), nil

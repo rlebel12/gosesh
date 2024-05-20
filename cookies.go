@@ -39,8 +39,9 @@ func (emptyIdentifier) String() string {
 	return ""
 }
 
-func (gs *Gosesh) ExpireSessionCookie() http.Cookie {
-	return gs.SessionCookie(emptyIdentifier{}, gs.now().UTC())
+func (gs *Gosesh) ExpireSessionCookie() *http.Cookie {
+	cookie := gs.SessionCookie(emptyIdentifier{}, gs.now().UTC())
+	return &cookie
 }
 
 func (gs *Gosesh) parseIdentifierFromCookie(r *http.Request) (Identifier, error) {
