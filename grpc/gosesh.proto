@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package gosesh;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "gosesh/grpc";
+
+service Gosesh {
+  rpc GetSession (GetSessionRequest) returns (Session);
+}
+
+message Session {
+  bytes id = 1;
+  bytes user_id = 2;
+  google.protobuf.Timestamp idle_at = 3;
+  google.protobuf.Timestamp expire_at = 4;
+}
+
+message GetSessionRequest {
+  bytes id = 1;
+}
