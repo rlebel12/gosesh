@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -22,7 +23,9 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GoseshClient interface {
-	GetSession(ctx context.Context, in *GetSessionRequest, opts ...grpc.CallOption) (*Session, error)
+	GetSession(ctx context.Context, in *ID, opts ...grpc.CallOption) (*Session, error)
+	DeleteSession(ctx context.Context, in *ID, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteUserSessions(ctx context.Context, in *ID, opts ...grpc.CallOption) (*DeleteUserSessionsResponse, error)
 }
 
 type goseshClient struct {
@@ -33,9 +36,27 @@ func NewGoseshClient(cc grpc.ClientConnInterface) GoseshClient {
 	return &goseshClient{cc}
 }
 
-func (c *goseshClient) GetSession(ctx context.Context, in *GetSessionRequest, opts ...grpc.CallOption) (*Session, error) {
+func (c *goseshClient) GetSession(ctx context.Context, in *ID, opts ...grpc.CallOption) (*Session, error) {
 	out := new(Session)
 	err := c.cc.Invoke(ctx, "/gosesh.Gosesh/GetSession", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *goseshClient) DeleteSession(ctx context.Context, in *ID, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/gosesh.Gosesh/DeleteSession", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *goseshClient) DeleteUserSessions(ctx context.Context, in *ID, opts ...grpc.CallOption) (*DeleteUserSessionsResponse, error) {
+	out := new(DeleteUserSessionsResponse)
+	err := c.cc.Invoke(ctx, "/gosesh.Gosesh/DeleteUserSessions", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +67,9 @@ func (c *goseshClient) GetSession(ctx context.Context, in *GetSessionRequest, op
 // All implementations must embed UnimplementedGoseshServer
 // for forward compatibility
 type GoseshServer interface {
-	GetSession(context.Context, *GetSessionRequest) (*Session, error)
+	GetSession(context.Context, *ID) (*Session, error)
+	DeleteSession(context.Context, *ID) (*emptypb.Empty, error)
+	DeleteUserSessions(context.Context, *ID) (*DeleteUserSessionsResponse, error)
 	mustEmbedUnimplementedGoseshServer()
 }
 
@@ -54,8 +77,14 @@ type GoseshServer interface {
 type UnimplementedGoseshServer struct {
 }
 
-func (UnimplementedGoseshServer) GetSession(context.Context, *GetSessionRequest) (*Session, error) {
+func (UnimplementedGoseshServer) GetSession(context.Context, *ID) (*Session, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSession not implemented")
+}
+func (UnimplementedGoseshServer) DeleteSession(context.Context, *ID) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteSession not implemented")
+}
+func (UnimplementedGoseshServer) DeleteUserSessions(context.Context, *ID) (*DeleteUserSessionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteUserSessions not implemented")
 }
 func (UnimplementedGoseshServer) mustEmbedUnimplementedGoseshServer() {}
 
@@ -71,7 +100,7 @@ func RegisterGoseshServer(s grpc.ServiceRegistrar, srv GoseshServer) {
 }
 
 func _Gosesh_GetSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetSessionRequest)
+	in := new(ID)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -83,7 +112,43 @@ func _Gosesh_GetSession_Handler(srv interface{}, ctx context.Context, dec func(i
 		FullMethod: "/gosesh.Gosesh/GetSession",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GoseshServer).GetSession(ctx, req.(*GetSessionRequest))
+		return srv.(GoseshServer).GetSession(ctx, req.(*ID))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gosesh_DeleteSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ID)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GoseshServer).DeleteSession(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/gosesh.Gosesh/DeleteSession",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GoseshServer).DeleteSession(ctx, req.(*ID))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Gosesh_DeleteUserSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ID)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GoseshServer).DeleteUserSessions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/gosesh.Gosesh/DeleteUserSessions",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GoseshServer).DeleteUserSessions(ctx, req.(*ID))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -98,6 +163,14 @@ var Gosesh_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSession",
 			Handler:    _Gosesh_GetSession_Handler,
+		},
+		{
+			MethodName: "DeleteSession",
+			Handler:    _Gosesh_DeleteSession_Handler,
+		},
+		{
+			MethodName: "DeleteUserSessions",
+			Handler:    _Gosesh_DeleteUserSessions_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -3,11 +3,14 @@ syntax = "proto3";
 package gosesh;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 option go_package = "gosesh/grpc";
 
 service Gosesh {
-  rpc GetSession (GetSessionRequest) returns (Session);
+  rpc GetSession (ID) returns (Session);
+  rpc DeleteSession(ID) returns (google.protobuf.Empty);
+  rpc DeleteUserSessions(ID) returns (DeleteUserSessionsResponse);
 }
 
 message Session {
@@ -17,6 +20,10 @@ message Session {
   google.protobuf.Timestamp expire_at = 4;
 }
 
-message GetSessionRequest {
+message ID {
   bytes id = 1;
+}
+
+message DeleteUserSessionsResponse {
+  int32 count = 1;
 }
