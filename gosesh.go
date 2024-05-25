@@ -64,13 +64,6 @@ func WithOrigin(origin *url.URL) func(*Gosesh) {
 	}
 }
 
-// This is intended primarily to facilitate testing.
-func WithNow(fn func() time.Time) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.now = fn
-	}
-}
-
 func (gs *Gosesh) Host() string {
 	return gs.origin.Host
 }
@@ -146,4 +139,11 @@ func (gs *Gosesh) logError(msg string, args ...any) {
 		return
 	}
 	gs.logger.Error(msg, args...)
+}
+
+// Do not use: this is exported for testing-purposes only.
+func WithNow(fn func() time.Time) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.now = fn
+	}
 }

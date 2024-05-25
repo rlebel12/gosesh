@@ -10,12 +10,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials) Discord {
+func NewDiscord(sesh gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string) Discord {
 	oauth2Config := &oauth2.Config{
 		ClientID:     credentials.ClientID,
 		ClientSecret: credentials.ClientSecret,
 		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/discord/callback", sesh.Scheme(), sesh.Host()),
+			"%s://%s/%s", sesh.Scheme(), sesh.Host(), redirectPath),
 		Scopes: scopes.strings(),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
@@ -31,7 +31,7 @@ func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Cr
 }
 
 type Discord struct {
-	gs          Gosesher
+	gs          gosesher
 	cfg         *oauth2.Config
 	discordHost string
 }

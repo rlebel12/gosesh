@@ -9,48 +9,67 @@ import (
 	"testing"
 
 	"github.com/rlebel12/gosesh"
-	mock_providers "github.com/rlebel12/gosesh/mocks/providers"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/oauth2"
 )
 
 type DiscordSuite struct {
 	suite.Suite
 }
 
+func (s *DiscordSuite) TestNewDiscord() {
+	for name, test := range map[string]struct {
+		scopes         DiscordScopes
+		expectedScopes []string
+	}{
+		"noScopes": {
+			scopes:         DiscordScopes{},
+			expectedScopes: []string{"identify"},
+		},
+		"emailScope": {
+			scopes:         DiscordScopes{Email: true},
+			expectedScopes: []string{"identify", "email"},
+		},
+	} {
+		s.Run(name, func() {
+			sesh := newGosesher(s.T())
+			discord := NewDiscord(sesh, test.scopes, gosesh.OAuth2Credentials{
+				ClientID:     "clientID",
+				ClientSecret: "clientSecret",
+			}, "callback")
+
+			s.Equal(&oauth2.Config{
+				ClientID:     "clientID",
+				ClientSecret: "clientSecret",
+				RedirectURL:  "http://localhost/callback",
+				Scopes:       test.expectedScopes,
+				Endpoint: oauth2.Endpoint{
+					AuthURL:   "https://discord.com/oauth2/authorize",
+					TokenURL:  "https://discord.com/api/oauth2/token",
+					AuthStyle: oauth2.AuthStyleInParams,
+				},
+			}, discord.cfg)
+		})
+	}
+}
+
 func (s *DiscordSuite) TestOAuth2Begin() {
-	var success bool
-	sesh := mock_providers.NewGosesher(s.T())
-	sesh.EXPECT().Scheme().Return("http")
-	sesh.EXPECT().Host().Return("localhost")
-	discord := NewDiscord(sesh, DiscordScopes{Email: true}, gosesh.OAuth2Credentials{
-		ClientID:     "clientID",
-		ClientSecret: "clientSecret",
-	})
-	sesh.EXPECT().OAuth2Begin(discord.cfg).Return(func(w http.ResponseWriter, r *http.Request) {
-		success = true
-	})
-
-	rr := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
-	discord.OAuth2Begin(rr, r)
-
-	result := rr.Result()
-	s.True(success)
-	_ = result
+	sesh := newGosesher(s.T())
+	discord := NewDiscord(sesh, DiscordScopes{}, gosesh.OAuth2Credentials{}, "")
+	var called bool
+	sesh.EXPECT().OAuth2Begin(discord.cfg).Return(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	discord.OAuth2Begin(nil, httptest.NewRequest("GET", "/", nil))
+	s.True(called)
 }
 
 func (s *DiscordSuite) TestOAuth2Callback() {
-	sesh := mock_providers.NewGosesher(s.T())
-	sesh.EXPECT().Scheme().Return("http")
-	sesh.EXPECT().Host().Return("localhost")
-	discord := NewDiscord(sesh, DiscordScopes{Email: true}, gosesh.OAuth2Credentials{
-		ClientID:     "clientID",
-		ClientSecret: "clientSecret",
-	})
+	sesh := newGosesher(s.T())
+	discord := NewDiscord(sesh, DiscordScopes{}, gosesh.OAuth2Credentials{}, "")
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 	sesh.EXPECT().OAuth2Callback(rr, r, new(DiscordUser), discord.cfg).Return(nil)
-
 	err := discord.OAuth2Callback(rr, r)
 	s.NoError(err)
 }
