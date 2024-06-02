@@ -33,12 +33,12 @@ type GoogleProvider struct {
 	cfg *oauth2.Config
 }
 
-func (p *GoogleProvider) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
-	p.gs.OAuth2Begin(p.cfg)(w, r)
+func (p *GoogleProvider) OAuth2Begin() http.HandlerFunc {
+	return p.gs.OAuth2Begin(p.cfg)
 }
 
-func (p *GoogleProvider) Callback(w http.ResponseWriter, r *http.Request) error {
-	return p.gs.OAuth2Callback(w, r, new(googleUser), p.cfg)
+func (p *GoogleProvider) OAuth2Callback(handler gosesh.CallbackHandler) http.HandlerFunc {
+	return p.gs.OAuth2Callback(new(googleUser), p.cfg, handler)
 }
 
 type googleUser struct {

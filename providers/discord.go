@@ -10,12 +10,13 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func NewDiscord(sesh gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string) Discord {
+// Creates a new Discord OAuth2 provider. redirectPath should have a leading slash.
+func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string) Discord {
 	oauth2Config := &oauth2.Config{
 		ClientID:     credentials.ClientID,
 		ClientSecret: credentials.ClientSecret,
 		RedirectURL: fmt.Sprintf(
-			"%s://%s/%s", sesh.Scheme(), sesh.Host(), redirectPath),
+			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
 		Scopes: scopes.strings(),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
@@ -31,17 +32,17 @@ func NewDiscord(sesh gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Cr
 }
 
 type Discord struct {
-	gs          gosesher
+	gs          Gosesher
 	cfg         *oauth2.Config
 	discordHost string
 }
 
-func (p *Discord) OAuth2Begin(w http.ResponseWriter, r *http.Request) {
-	p.gs.OAuth2Begin(p.cfg).ServeHTTP(w, r)
+func (p *Discord) OAuth2Begin() http.HandlerFunc {
+	return p.gs.OAuth2Begin(p.cfg)
 }
 
-func (p *Discord) OAuth2Callback(w http.ResponseWriter, r *http.Request) error {
-	return p.gs.OAuth2Callback(w, r, new(DiscordUser), p.cfg)
+func (p *Discord) OAuth2Callback(handler gosesh.CallbackHandler) http.HandlerFunc {
+	return p.gs.OAuth2Callback(new(DiscordUser), p.cfg, handler)
 }
 
 type DiscordScopes struct {

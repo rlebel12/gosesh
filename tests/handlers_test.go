@@ -171,7 +171,7 @@ func (m *failReader) Read(p []byte) (n int, err error) {
 	return 0, fmt.Errorf("failed read")
 }
 
-func (s *Oauth2CallbackHandlerSuite) makeInputs(mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *mock_gosesh.OAuth2User, store *mock_gosesh.Storer) {
+func (s *Oauth2CallbackHandlerSuite) prepareTest(mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *mock_gosesh.OAuth2User, store *mock_gosesh.Storer) {
 	var err error
 	callbackURL := fmt.Sprintf("%s/auth/callback", s.oauth2Server.URL)
 	r, err = http.NewRequest(http.MethodGet, callbackURL, nil)
@@ -264,83 +264,120 @@ func (s *Oauth2CallbackHandlerSuite) makeInputs(mode testCallbackRequestMode) (r
 	return
 }
 
+func (s *Oauth2CallbackHandlerSuite) errCallback(errString string) func(w http.ResponseWriter, r *http.Request, err error) {
+	return func(w http.ResponseWriter, r *http.Request, err error) {
+		s.EqualError(err, errString)
+	}
+}
+
 func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
-	request, config, _, _ := s.makeInputs(testCallbackErrNoStateCookie)
-	err := sesh.OAuth2Callback(rr, request, nil, config)
-	s.EqualError(err, "failed getting state cookie: http: named cookie not present")
+	request, config, _, _ := s.prepareTest(testCallbackErrNoStateCookie)
+	sesh.OAuth2Callback(
+		nil,
+		config,
+		s.errCallback("failed getting state cookie: http: named cookie not present"),
+	).ServeHTTP(rr, request)
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
-	request, config, _, _ := s.makeInputs(testCallbackInvalidStateCookie)
-	err := sesh.OAuth2Callback(rr, request, nil, config)
+	request, config, _, _ := s.prepareTest(testCallbackInvalidStateCookie)
+	sesh.OAuth2Callback(
+		nil,
+		config,
+		s.errCallback("invalid state cookie"),
+	).ServeHTTP(rr, request)
 	s.assertStateCookieReset(rr.Result())
-	s.EqualError(err, "invalid state cookie")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
-	request, config, _, _ := s.makeInputs(testFailedExchange)
-	err := sesh.OAuth2Callback(rr, request, nil, config)
+	request, config, _, _ := s.prepareTest(testFailedExchange)
+	sesh.OAuth2Callback(
+		nil,
+		config,
+		s.errCallback("failed exchanging token: oauth2: cannot fetch token: 404 Not Found\nResponse: not found\n"),
+	).ServeHTTP(rr, request)
 	s.assertStateCookieReset(rr.Result())
-	s.EqualError(err, "failed exchanging token: oauth2: cannot fetch token: 404 Not Found\nResponse: not found\n")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataRequest() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
-	request, config, user, _ := s.makeInputs(testFailedUnmarshalRequest)
-	err := sesh.OAuth2Callback(rr, request, user, config)
+	request, config, user, _ := s.prepareTest(testFailedUnmarshalRequest)
+	sesh.OAuth2Callback(
+		user,
+		config,
+		s.errCallback("failed unmarshalling data: failed getting user info: failed request"),
+	).ServeHTTP(rr, request)
 	s.assertStateCookieReset(rr.Result())
-	s.EqualError(err, "failed unmarshalling data: failed getting user info: failed request")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataReadBody() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
-	request, config, user, _ := s.makeInputs(testFailedUnmarshalReadBody)
-	err := sesh.OAuth2Callback(rr, request, user, config)
+	request, config, user, _ := s.prepareTest(testFailedUnmarshalReadBody)
+	sesh.OAuth2Callback(
+		user,
+		config,
+		s.errCallback("failed unmarshalling data: failed read response: failed read"),
+	).ServeHTTP(rr, request)
 	s.assertStateCookieReset(rr.Result())
-	s.EqualError(err, "failed unmarshalling data: failed read response: failed read")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalDataFinal() {
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
-	request, config, user, _ := s.makeInputs(testFailedUnmarshalDataFinal)
-	err := sesh.OAuth2Callback(rr, request, user, config)
+	request, config, user, _ := s.prepareTest(testFailedUnmarshalDataFinal)
+	sesh.OAuth2Callback(
+		user,
+		config,
+		s.errCallback("failed unmarshalling data: failed unmarshal"),
+	).ServeHTTP(rr, request)
 	s.assertStateCookieReset(rr.Result())
-	s.EqualError(err, "failed unmarshalling data: failed unmarshal")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
-	request, config, user, store := s.makeInputs(testCallbackErrUpsertUser)
+	request, config, user, store := s.prepareTest(testCallbackErrUpsertUser)
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, store, gosesh.WithNow(s.withNow))
-	err := sesh.OAuth2Callback(rr, request, user, config)
+	sesh.OAuth2Callback(
+		user,
+		config,
+		s.errCallback("failed upserting user: failed upsert"),
+	).ServeHTTP(rr, request)
 	s.assertStateCookieReset(rr.Result())
-	s.EqualError(err, "failed upserting user: failed upsert")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
-	request, config, user, store := s.makeInputs(testCallbackErrCreateSession)
+	request, config, user, store := s.prepareTest(testCallbackErrCreateSession)
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, store, gosesh.WithNow(s.withNow))
-	err := sesh.OAuth2Callback(rr, request, user, config)
+	sesh.OAuth2Callback(
+		user,
+		config,
+		s.errCallback("failed creating session: failed create session"),
+	).ServeHTTP(rr, request)
 	s.assertStateCookieReset(rr.Result())
-	s.EqualError(err, "failed creating session: failed create session")
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
-	request, config, user, store := s.makeInputs(testCallbackSuccess)
+	request, config, user, store := s.prepareTest(testCallbackSuccess)
 	rr := httptest.NewRecorder()
 	sesh := gosesh.New(nil, store, gosesh.WithNow(s.withNow))
-	err := sesh.OAuth2Callback(rr, request, user, config)
-	s.Require().NoError(err)
+
+	var success bool
+	sesh.OAuth2Callback(user, config, func(w http.ResponseWriter, r *http.Request, err error) {
+		s.NoError(err)
+		success = true
+		w.WriteHeader(http.StatusOK)
+	})(rr, request)
+
+	s.True(success)
 	response := rr.Result()
 	s.Equal(2, len(response.Cookies()))
 	sessionCookie := response.Cookies()[1]

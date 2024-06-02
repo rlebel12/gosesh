@@ -41,48 +41,61 @@ var (
 	ErrFailedCreatingSession    = errors.New("failed creating session")
 )
 
-func (gs *Gosesh) OAuth2Callback(w http.ResponseWriter, r *http.Request, user OAuth2User, config *oauth2.Config) error {
-	ctx := r.Context()
-	oauthState, err := r.Cookie(gs.oAuth2StateCookieName)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err)
+type CallbackHandler func(http.ResponseWriter, *http.Request, error)
+
+// Create a handler that will handle the OAuth2 callback. This handler performs the token exchange and retrieves
+// user data from the provider. When the OAuth2 flow has completed, the input `handler` will be invoked, with
+// the error value set to nil if the flow was successful, or an error if it was not.
+func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, handler CallbackHandler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		oauthState, err := r.Cookie(gs.oAuth2StateCookieName)
+		if err != nil {
+			handler(w, r, fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err))
+			return
+		}
+
+		now := gs.now().UTC()
+		stateCookie := gs.OauthStateCookie("", now)
+		http.SetCookie(w, &stateCookie)
+
+		if r.FormValue("state") != oauthState.Value {
+			handler(w, r, ErrInvalidStateCookie)
+			return
+		}
+
+		token, err := config.Exchange(ctx, r.FormValue("code"))
+		if err != nil {
+			handler(w, r, fmt.Errorf("%w: %w", ErrFailedExchangingToken, err))
+			return
+		}
+
+		err = gs.unmarshalUserData(ctx, user, token.AccessToken)
+		if err != nil {
+			handler(w, r, fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err))
+			return
+		}
+
+		id, err := gs.store.UpsertUser(ctx, user)
+		if err != nil {
+			handler(w, r, fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err))
+			return
+		}
+
+		session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
+			UserID:   id,
+			IdleAt:   now.Add(gs.sessionActiveDuration),
+			ExpireAt: now.Add(gs.sessionIdleDuration),
+		})
+		if err != nil {
+			handler(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
+			return
+		}
+
+		sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
+		http.SetCookie(w, &sessionCookie)
+		handler(w, r, nil)
 	}
-
-	now := gs.now().UTC()
-	stateCookie := gs.OauthStateCookie("", now)
-	http.SetCookie(w, &stateCookie)
-
-	if r.FormValue("state") != oauthState.Value {
-		return ErrInvalidStateCookie
-	}
-
-	token, err := config.Exchange(ctx, r.FormValue("code"))
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedExchangingToken, err)
-	}
-
-	err = gs.unmarshalUserData(ctx, user, token.AccessToken)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err)
-	}
-
-	id, err := gs.store.UpsertUser(ctx, user)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
-	}
-
-	session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
-		UserID:   id,
-		IdleAt:   now.Add(gs.sessionActiveDuration),
-		ExpireAt: now.Add(gs.sessionIdleDuration),
-	})
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrFailedCreatingSession, err)
-	}
-
-	sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
-	http.SetCookie(w, &sessionCookie)
-	return nil
 }
 
 func (gs *Gosesh) unmarshalUserData(ctx context.Context, data OAuth2User, accessToken string) error {

@@ -9,9 +9,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type gosesher interface {
+type Gosesher interface {
 	OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc
-	OAuth2Callback(w http.ResponseWriter, r *http.Request, user gosesh.OAuth2User, cfg *oauth2.Config) error
+	OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.CallbackHandler) http.HandlerFunc
 	Scheme() string
 	Host() string
 }
