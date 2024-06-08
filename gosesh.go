@@ -94,7 +94,7 @@ type (
 	}
 
 	Storer interface {
-		UpsertUser(ctx context.Context, udr OAuth2User) (Identifier, error)
+		UpsertUser(ctx context.Context, user OAuth2User) (Identifier, error)
 		CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
 		GetSession(ctx context.Context, sessionID Identifier) (*Session, error)
 		UpdateSession(ctx context.Context, sessionID Identifier, req UpdateSessionValues) (*Session, error)

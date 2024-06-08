@@ -43,7 +43,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
+		sessionCookie := gs.sessionCookie(session.ID, session.ExpireAt)
 		http.SetCookie(w, &sessionCookie)
 
 		ctx = context.WithValue(ctx, SessionContextKey, session)
@@ -79,18 +79,18 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	id, err := gs.parseIdentifierFromCookie(r)
 	if err != nil {
-		http.SetCookie(w, gs.ExpireSessionCookie())
+		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
 	session, err := gs.store.GetSession(ctx, id)
 	if err != nil {
-		http.SetCookie(w, gs.ExpireSessionCookie())
+		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
 	if session.ExpireAt.Before(gs.now().UTC()) {
-		http.SetCookie(w, gs.ExpireSessionCookie())
+		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 

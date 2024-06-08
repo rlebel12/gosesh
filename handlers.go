@@ -24,7 +24,7 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 		state := base64.URLEncoding.EncodeToString(b)
 
 		expiration := gs.now().UTC().Add(5 * time.Minute)
-		cookie := gs.OauthStateCookie(state, expiration)
+		cookie := gs.oauthStateCookie(state, expiration)
 		http.SetCookie(w, &cookie)
 
 		url := oauthCfg.AuthCodeURL(state)
@@ -56,7 +56,7 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, handler
 		}
 
 		now := gs.now().UTC()
-		stateCookie := gs.OauthStateCookie("", now)
+		stateCookie := gs.oauthStateCookie("", now)
 		http.SetCookie(w, &stateCookie)
 
 		if r.FormValue("state") != oauthState.Value {
@@ -92,7 +92,7 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, handler
 			return
 		}
 
-		sessionCookie := gs.SessionCookie(session.ID, session.ExpireAt)
+		sessionCookie := gs.sessionCookie(session.ID, session.ExpireAt)
 		http.SetCookie(w, &sessionCookie)
 		handler(w, r, nil)
 	}
@@ -153,7 +153,7 @@ func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request,
 		return r, err
 	}
 
-	http.SetCookie(w, gs.ExpireSessionCookie())
+	http.SetCookie(w, gs.expireSessionCookie())
 
 	ctx := context.WithValue(r.Context(), SessionContextKey, nil)
 	return r.WithContext(ctx), nil

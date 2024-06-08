@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func (gs *Gosesh) OauthStateCookie(value string, expires time.Time) http.Cookie {
+func (gs *Gosesh) oauthStateCookie(value string, expires time.Time) http.Cookie {
 	return http.Cookie{
 		Name:     gs.oAuth2StateCookieName,
 		Value:    value,
@@ -20,7 +20,7 @@ func (gs *Gosesh) OauthStateCookie(value string, expires time.Time) http.Cookie 
 	}
 }
 
-func (gs *Gosesh) SessionCookie(identifier Identifier, expires time.Time) http.Cookie {
+func (gs *Gosesh) sessionCookie(identifier Identifier, expires time.Time) http.Cookie {
 	return http.Cookie{
 		Name:     gs.sessionCookieName,
 		Value:    base64.URLEncoding.EncodeToString([]byte(identifier.String())),
@@ -39,8 +39,8 @@ func (emptyIdentifier) String() string {
 	return ""
 }
 
-func (gs *Gosesh) ExpireSessionCookie() *http.Cookie {
-	cookie := gs.SessionCookie(emptyIdentifier{}, gs.now().UTC())
+func (gs *Gosesh) expireSessionCookie() *http.Cookie {
+	cookie := gs.sessionCookie(emptyIdentifier{}, gs.now().UTC())
 	return &cookie
 }
 
