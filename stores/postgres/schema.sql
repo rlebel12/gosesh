@@ -1,6 +1,6 @@
 CREATE TABLE users (
     id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
-    identifier VARCHAR(200)
+    identifier VARCHAR(200) NOT NULL UNIQUE
 );
 
 CREATE TABLE sessions (
