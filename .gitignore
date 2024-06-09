@@ -4,3 +4,6 @@ tmp/
 dev/
 *coverage.html
 *coverage.out
+
+# tmp
+stores/postgres/migrations

@@ -7,3 +7,5 @@ cover:
 	@go tool cover -html=providers_coverage.out -o providers_coverage.html
 	@rm providers_coverage.out
 
+migrate:
+	atlas migrate apply --dir "file://stores/postgres/migrations" --url "postgresql://postgres:root@localhost:14001/gosesh?sslmode=disable"
