@@ -47,7 +47,7 @@ func (s *TestPostgresSuite) SetupSuite() {
 
 	tx, err := s.db.Begin(ctx)
 	s.NoError(err)
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }() // satisfying linter for rollback return value
 
 	schemaRaw, err := os.ReadFile("schema.sql")
 	s.NoError(err)
