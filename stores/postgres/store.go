@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rlebel12/gosesh"
-	"github.com/rlebel12/gosesh/providers"
 	"github.com/rlebel12/gosesh/stores/postgres/sqlc"
 )
 
@@ -22,14 +21,7 @@ type (
 )
 
 func (s *Store) UpsertUser(ctx context.Context, gsUser gosesh.OAuth2User) (gosesh.Identifier, error) {
-	discordUser, ok := gsUser.(*providers.DiscordUser)
-	if !ok {
-		return uuid.Nil, fmt.Errorf("expected discord user, got %T", gsUser)
-	}
-	return s.repo.UpsertUser(ctx, sqlc.UpsertUserParams{
-		DiscordID: discordUser.ID,
-		Name:      discordUser.Username,
-	})
+	return s.repo.UpsertUser(ctx, gsUser.String())
 }
 
 func (s *Store) CreateSession(ctx context.Context, r gosesh.CreateSessionRequest) (*gosesh.Session, error) {

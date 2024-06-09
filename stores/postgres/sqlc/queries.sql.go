@@ -81,8 +81,7 @@ func (q *Queries) GetSession(ctx context.Context, id pgtype.UUID) (Session, erro
 
 const getUser = `-- name: GetUser :one
 SELECT id,
-    discord_id,
-    name
+    identifier
 FROM users
 WHERE id = $1
 `
@@ -90,7 +89,7 @@ WHERE id = $1
 func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
 	row := q.db.QueryRow(ctx, getUser, id)
 	var i User
-	err := row.Scan(&i.ID, &i.DiscordID, &i.Name)
+	err := row.Scan(&i.ID, &i.Identifier)
 	return i, err
 }
 
@@ -121,21 +120,15 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 }
 
 const upsertUser = `-- name: UpsertUser :one
-INSERT INTO users (discord_id, name)
-VALUES ($1, $2) ON CONFLICT (discord_id) DO
+INSERT INTO users (identifier)
+VALUES ($1) ON CONFLICT (identifier) DO
 UPDATE
-SET discord_id = EXCLUDED.discord_id,
-    name = $2
+SET identifier = EXCLUDED.identifier
 RETURNING id
 `
 
-type UpsertUserParams struct {
-	DiscordID string
-	Name      string
-}
-
-func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, upsertUser, arg.DiscordID, arg.Name)
+func (q *Queries) UpsertUser(ctx context.Context, identifier pgtype.Text) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertUser, identifier)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err

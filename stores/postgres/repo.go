@@ -33,11 +33,8 @@ func uuidToPGTYPE(id uuid.UUID) pgtype.UUID {
 	}
 }
 
-func (s *PostgresRepository) UpsertUser(ctx context.Context, args sqlc.UpsertUserParams) (uuid.UUID, error) {
-	id, err := s.Q.UpsertUser(ctx, sqlc.UpsertUserParams{
-		DiscordID: args.DiscordID,
-		Name:      args.Name,
-	})
+func (s *PostgresRepository) UpsertUser(ctx context.Context, identifier string) (uuid.UUID, error) {
+	id, err := s.Q.UpsertUser(ctx, pgtype.Text{String: identifier, Valid: true})
 	if err != nil {
 		return uuid.UUID{}, fmt.Errorf("failed to upsert user: %w", err)
 	}
