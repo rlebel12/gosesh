@@ -43,10 +43,7 @@ func (s *Store) GetSession(ctx context.Context, identifier gosesh.Identifier) (*
 		return nil, err
 	}
 	session, err := s.repo.GetSession(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return s.sessionToGosesh(session), nil
+	return s.sessionToGosesh(session), err
 }
 
 func (s *Store) UpdateSession(ctx context.Context, identifier gosesh.Identifier, r gosesh.UpdateSessionValues) (*gosesh.Session, error) {
@@ -78,6 +75,10 @@ func (s *Store) DeleteUserSessions(ctx context.Context, identifier gosesh.Identi
 }
 
 func (s *Store) sessionToGosesh(sess *sqlc.Session) *gosesh.Session {
+	if sess == nil {
+		return nil
+	}
+
 	return &gosesh.Session{
 		ID:       uuidFromPGTYPE(sess.ID),
 		UserID:   uuidFromPGTYPE(sess.UserID),

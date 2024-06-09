@@ -35,14 +35,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 	return i, err
 }
 
-const deleteSession = `-- name: DeleteSession :exec
+const deleteSession = `-- name: DeleteSession :execrows
 DELETE FROM sessions
 WHERE id = $1
 `
 
-func (q *Queries) DeleteSession(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSession, id)
-	return err
+func (q *Queries) DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSession, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteUserSessions = `-- name: DeleteUserSessions :execrows
@@ -127,7 +130,7 @@ SET identifier = EXCLUDED.identifier
 RETURNING id
 `
 
-func (q *Queries) UpsertUser(ctx context.Context, identifier pgtype.Text) (pgtype.UUID, error) {
+func (q *Queries) UpsertUser(ctx context.Context, identifier string) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertUser, identifier)
 	var id pgtype.UUID
 	err := row.Scan(&id)

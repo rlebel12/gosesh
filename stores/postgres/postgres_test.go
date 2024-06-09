@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rlebel12/gosesh"
@@ -62,6 +63,16 @@ func (s *TestPostgresSuite) TearDownSuite() {
 	s.Require().NoError(s.pool.Purge(s.postgresResource))
 }
 
+func (s *TestPostgresSuite) SetupTest() {
+	_, err := s.db.Exec(context.Background(), "TRUNCATE TABLE sessions, users CASCADE;")
+	s.Require().NoError(err)
+}
+
+func (s *TestPostgresSuite) SetupSubTest() {
+	_, err := s.db.Exec(context.Background(), "TRUNCATE TABLE sessions, users CASCADE;")
+	s.Require().NoError(err)
+}
+
 func (s *TestPostgresSuite) TestUpsertUser() {
 	ctx := context.Background()
 	user := mock_gosesh.NewOAuth2User(s.T())
@@ -110,6 +121,192 @@ func (s *TestPostgresSuite) TestCreateSession() {
 		s.Equal(idleAt, session.IdleAt)
 		s.Equal(expireAt, session.ExpireAt)
 	})
+}
+
+func (s *TestPostgresSuite) TestGetSession() {
+	s.Run("bad UUID", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		identifier.EXPECT().String().Return("bad")
+		_, err := s.store.GetSession(ctx, identifier)
+		s.EqualError(err, "failed to parse identifier: invalid UUID length: 3")
+	})
+
+	s.Run("failed getting session", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		id := uuid.New()
+		identifier.EXPECT().String().Return(id.String())
+		_, err := s.store.GetSession(ctx, identifier)
+		s.EqualError(err, "failed to get session: no rows in result set")
+	})
+
+	s.Run("success", func() {
+		ctx := context.Background()
+		user := mock_gosesh.NewOAuth2User(s.T())
+		user.EXPECT().String().Return("test")
+
+		identifier, err := s.store.UpsertUser(ctx, user)
+		s.Require().NoError(err)
+
+		now := time.Now().Truncate(time.Microsecond).Local()
+		idleAt := now
+		expireAt := now.Add(time.Hour)
+		session, err := s.store.CreateSession(ctx, gosesh.CreateSessionRequest{
+			UserID:   identifier,
+			IdleAt:   idleAt,
+			ExpireAt: expireAt,
+		})
+		s.Require().NoError(err)
+
+		actual, err := s.store.GetSession(ctx, session.ID)
+		s.Require().NoError(err)
+		s.Require().NotNil(actual)
+		s.Equal(identifier.String(), actual.UserID.String())
+		s.Equal(idleAt, actual.IdleAt)
+		s.Equal(expireAt, actual.ExpireAt)
+	})
+}
+
+func (s *TestPostgresSuite) TestUpdateSession() {
+	s.Run("bad UUID", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		identifier.EXPECT().String().Return("bad")
+		_, err := s.store.UpdateSession(ctx, identifier, gosesh.UpdateSessionValues{})
+		s.EqualError(err, "failed to parse identifier: invalid UUID length: 3")
+	})
+
+	s.Run("failed updating session", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		id := uuid.New()
+		identifier.EXPECT().String().Return(id.String())
+		_, err := s.store.UpdateSession(ctx, identifier, gosesh.UpdateSessionValues{})
+		s.EqualError(err, "failed to update session: no rows in result set")
+	})
+
+	s.Run("success", func() {
+		ctx := context.Background()
+		user := mock_gosesh.NewOAuth2User(s.T())
+		user.EXPECT().String().Return("test")
+
+		identifier, err := s.store.UpsertUser(ctx, user)
+		s.Require().NoError(err)
+
+		now := time.Now().Truncate(time.Microsecond).Local()
+		idleAt := now
+		expireAt := now.Add(time.Hour)
+		session, err := s.store.CreateSession(ctx, gosesh.CreateSessionRequest{
+			UserID:   identifier,
+			IdleAt:   idleAt,
+			ExpireAt: expireAt,
+		})
+		s.Require().NoError(err)
+
+		newIdleAt := now.Add(time.Minute)
+		newExpireAt := now.Add(time.Hour * 2)
+		actual, err := s.store.UpdateSession(ctx, session.ID, gosesh.UpdateSessionValues{
+			IdleAt:   newIdleAt,
+			ExpireAt: newExpireAt,
+		})
+		s.Require().NoError(err)
+		s.Require().NotNil(actual)
+		s.Equal(identifier.String(), actual.UserID.String())
+		s.Equal(newIdleAt, actual.IdleAt)
+		s.Equal(newExpireAt, actual.ExpireAt)
+	})
+}
+
+func (s *TestPostgresSuite) TestDeleteSession() {
+	s.Run("bad UUID", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		identifier.EXPECT().String().Return("bad")
+		err := s.store.DeleteSession(ctx, identifier)
+		s.EqualError(err, "failed to parse identifier: invalid UUID length: 3")
+	})
+
+	s.Run("failed deleting session", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		id := uuid.New()
+		identifier.EXPECT().String().Return(id.String())
+		err := s.store.DeleteSession(ctx, identifier)
+		s.EqualError(err, "failed to delete session: no rows in result set")
+	})
+
+	s.Run("success", func() {
+		ctx := context.Background()
+		user := mock_gosesh.NewOAuth2User(s.T())
+		user.EXPECT().String().Return("test")
+
+		identifier, err := s.store.UpsertUser(ctx, user)
+		s.Require().NoError(err)
+
+		now := time.Now().Truncate(time.Microsecond).Local()
+		idleAt := now
+		expireAt := now.Add(time.Hour)
+		session, err := s.store.CreateSession(ctx, gosesh.CreateSessionRequest{
+			UserID:   identifier,
+			IdleAt:   idleAt,
+			ExpireAt: expireAt,
+		})
+		s.Require().NoError(err)
+
+		err = s.store.DeleteSession(ctx, session.ID)
+		s.Require().NoError(err)
+
+		_, err = s.store.GetSession(ctx, session.ID)
+		s.EqualError(err, "failed to get session: no rows in result set")
+	})
+}
+
+func (s *TestPostgresSuite) TestDeleteUserSessions() {
+	s.Run("bad UUID", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		identifier.EXPECT().String().Return("bad")
+		_, err := s.store.DeleteUserSessions(ctx, identifier)
+		s.EqualError(err, "failed to parse identifier: invalid UUID length: 3")
+	})
+
+	s.Run("no sessions", func() {
+		ctx := context.Background()
+		identifier := mock_gosesh.NewIdentifier(s.T())
+		id := uuid.New()
+		identifier.EXPECT().String().Return(id.String())
+		count, err := s.store.DeleteUserSessions(ctx, identifier)
+		s.Require().NoError(err)
+		s.Zero(count)
+	})
+
+	s.Run("success", func() {
+		ctx := context.Background()
+		user := mock_gosesh.NewOAuth2User(s.T())
+		user.EXPECT().String().Return("test")
+
+		identifier, err := s.store.UpsertUser(ctx, user)
+		s.Require().NoError(err)
+
+		now := time.Now().Truncate(time.Microsecond).Local()
+		idleAt := now
+		expireAt := now.Add(time.Hour)
+		session, err := s.store.CreateSession(ctx, gosesh.CreateSessionRequest{
+			UserID:   identifier,
+			IdleAt:   idleAt,
+			ExpireAt: expireAt,
+		})
+		s.Require().NoError(err)
+
+		count, err := s.store.DeleteUserSessions(ctx, identifier)
+		s.Require().NoError(err)
+		s.Equal(1, count)
+
+		_, err = s.store.GetSession(ctx, session.ID)
+		s.EqualError(err, "failed to get session: no rows in result set")
+	})
+
 }
 
 func TestPostgres(t *testing.T) {

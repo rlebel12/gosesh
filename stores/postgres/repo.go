@@ -34,12 +34,8 @@ func uuidToPGTYPE(id uuid.UUID) pgtype.UUID {
 }
 
 func (s *PostgresRepository) UpsertUser(ctx context.Context, identifier string) (uuid.UUID, error) {
-	id, err := s.Q.UpsertUser(ctx, pgtype.Text{String: identifier, Valid: true})
-	if err != nil {
-		return uuid.UUID{}, fmt.Errorf("failed to upsert user: %w", err)
-	}
-
-	return uuidFromPGTYPE(id), nil
+	id, err := s.Q.UpsertUser(ctx, identifier)
+	return uuidFromPGTYPE(id), err
 }
 
 type CreateSessionRequest struct {
@@ -55,11 +51,7 @@ func (s *PostgresRepository) CreateSession(ctx context.Context, r CreateSessionR
 		ExpireAt: timestampToPGTYPE(r.ExpireAt),
 	}
 	sess, err := s.Q.CreateSession(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
-	}
-
-	return &sess, nil
+	return &sess, err
 }
 
 func (s *PostgresRepository) GetSession(ctx context.Context, id uuid.UUID) (*sqlc.Session, error) {
@@ -91,7 +83,11 @@ func (s *PostgresRepository) UpdateSession(ctx context.Context, id uuid.UUID, r 
 }
 
 func (s *PostgresRepository) DeleteSession(ctx context.Context, id uuid.UUID) error {
-	return s.Q.DeleteSession(ctx, uuidToPGTYPE(id))
+	count, err := s.Q.DeleteSession(ctx, uuidToPGTYPE(id))
+	if count == 0 {
+		return fmt.Errorf("failed to delete session: no rows in result set")
+	}
+	return err
 }
 
 func (s *PostgresRepository) DeleteUserSessions(ctx context.Context, id uuid.UUID) (int, error) {

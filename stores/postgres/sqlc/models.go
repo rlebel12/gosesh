@@ -17,5 +17,5 @@ type Session struct {
 
 type User struct {
 	ID         pgtype.UUID
-	Identifier pgtype.Text
+	Identifier string
 }

@@ -31,7 +31,7 @@ SET idle_at = $1,
 WHERE id = $3
 RETURNING *;
 
--- name: DeleteSession :exec
+-- name: DeleteSession :execrows
 DELETE FROM sessions
 WHERE id = $1;
 
