@@ -13,5 +13,9 @@ jobs:
           go-version: '1.22.x'
       - name: Install dependencies
         run: go get .
-      - name: Test with the Go CLI
-        run: go test -coverpkg "." "./tests"
+      - name: Test Gosesh
+        run: go test -coverpkg=. ./tests
+      - name: Test Providers
+        run: go test -coverpkg=./providers ./providers
+      - name: Test Stores (Postgres)
+        run: go test -coverpkg=./stores/postgres ./stores/postgres
