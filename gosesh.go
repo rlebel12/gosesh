@@ -121,8 +121,10 @@ type (
 		ExpireAt time.Time
 	}
 
+	// Represents a user presented by an OAuth2 provider.
+	// Note that this is separate from a user as persisted in your system.
 	OAuth2User interface {
-		Identifier
+		Identifier // Uniquely identifies the user within the OAuth2 provider's system.
 		Request(ctx context.Context, accessToken string) (*http.Response, error)
 		Unmarshal(b []byte) error
 	}
