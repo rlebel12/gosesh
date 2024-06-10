@@ -23,6 +23,51 @@ func (_m *OAuth2User) EXPECT() *OAuth2User_Expecter {
 	return &OAuth2User_Expecter{mock: &_m.Mock}
 }
 
+// ID provides a mock function with given fields:
+func (_m *OAuth2User) ID() string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for ID")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// OAuth2User_ID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ID'
+type OAuth2User_ID_Call struct {
+	*mock.Call
+}
+
+// ID is a helper method to define mock.On call
+func (_e *OAuth2User_Expecter) ID() *OAuth2User_ID_Call {
+	return &OAuth2User_ID_Call{Call: _e.mock.On("ID")}
+}
+
+func (_c *OAuth2User_ID_Call) Run(run func()) *OAuth2User_ID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *OAuth2User_ID_Call) Return(_a0 string) *OAuth2User_ID_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *OAuth2User_ID_Call) RunAndReturn(run func() string) *OAuth2User_ID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Request provides a mock function with given fields: ctx, accessToken
 func (_m *OAuth2User) Request(ctx context.Context, accessToken string) (*http.Response, error) {
 	ret := _m.Called(ctx, accessToken)
@@ -78,51 +123,6 @@ func (_c *OAuth2User_Request_Call) Return(_a0 *http.Response, _a1 error) *OAuth2
 }
 
 func (_c *OAuth2User_Request_Call) RunAndReturn(run func(context.Context, string) (*http.Response, error)) *OAuth2User_Request_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// String provides a mock function with given fields:
-func (_m *OAuth2User) String() string {
-	ret := _m.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for String")
-	}
-
-	var r0 string
-	if rf, ok := ret.Get(0).(func() string); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-
-	return r0
-}
-
-// OAuth2User_String_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'String'
-type OAuth2User_String_Call struct {
-	*mock.Call
-}
-
-// String is a helper method to define mock.On call
-func (_e *OAuth2User_Expecter) String() *OAuth2User_String_Call {
-	return &OAuth2User_String_Call{Call: _e.mock.On("String")}
-}
-
-func (_c *OAuth2User_String_Call) Run(run func()) *OAuth2User_String_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *OAuth2User_String_Call) Return(_a0 string) *OAuth2User_String_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *OAuth2User_String_Call) RunAndReturn(run func() string) *OAuth2User_String_Call {
 	_c.Call.Return(run)
 	return _c
 }

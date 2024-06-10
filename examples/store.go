@@ -26,7 +26,7 @@ type (
 	}
 )
 
-func (ci *CustomIdentifier) String() string {
+func (ci *CustomIdentifier) ID() string {
 	return fmt.Sprintf("%d (%s)", ci.id, ci.email)
 }
 
@@ -38,14 +38,14 @@ type MemoryStore struct {
 func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
 	switch d := user.(type) {
 	case *providers.DiscordUser:
-		slog.Info("Discord user", "id", d.ID, "username", d.Username, "email", d.Email, "verified", d.Verified)
+		slog.Info("Discord user", "id", d.Id, "username", d.Username, "email", d.Email, "verified", d.Verified)
 	// case providers.GoogleUser:
 	// 	slog.Info("Google user", "id", d.ID, "email", d.Email)
 	default:
-		slog.Info("Unknown user", "id", user.String())
+		slog.Info("Unknown user", "id", user.ID())
 	}
 	for _, user := range ms.Users {
-		if user.email == user.String() {
+		if user.email == user.ID() {
 			return user, nil
 		}
 	}
@@ -59,15 +59,15 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (
 
 func (ms *MemoryStore) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (*gosesh.Session, error) {
 	s := &gosesh.Session{
-		ID: &CustomIdentifier{
+		Identifier: &CustomIdentifier{
 			id:    sequenceID,
 			email: "foo",
 		},
-		UserID:   req.UserID,
+		User:     req.User,
 		IdleAt:   req.IdleAt,
 		ExpireAt: req.ExpireAt,
 	}
-	ms.Sessions[s.ID] = s
+	ms.Sessions[s.Identifier] = s
 	return s, nil
 }
 
@@ -86,7 +86,7 @@ func (ms *MemoryStore) UpdateSession(ctx context.Context, sessionID gosesh.Ident
 	}
 	s.IdleAt = req.IdleAt
 	s.ExpireAt = req.ExpireAt
-	ms.Sessions[s.ID] = s
+	ms.Sessions[s.Identifier] = s
 	return s, nil
 }
 
@@ -98,8 +98,8 @@ func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID gosesh.Ident
 func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID gosesh.Identifier) (int, error) {
 	var count int
 	for _, s := range ms.Sessions {
-		if s.UserID == userID {
-			delete(ms.Sessions, s.ID)
+		if s.User == userID {
+			delete(ms.Sessions, s.Identifier)
 			count++
 		}
 	}

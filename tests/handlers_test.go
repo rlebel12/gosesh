@@ -233,7 +233,6 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(mode testCallbackRequestMode) (
 		return
 	}
 	user.EXPECT().Unmarshal([]byte{}).Return(nil)
-	user.EXPECT().String().Return("user")
 	store = mock_gosesh.NewStorer(s.T())
 
 	if mode == testCallbackErrUpsertUser {
@@ -241,10 +240,9 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(mode testCallbackRequestMode) (
 		return
 	}
 	identifier := mock_gosesh.NewIdentifier(s.T())
-	identifier.EXPECT().String().Return("identifier")
 	store.EXPECT().UpsertUser(r.Context(), user).Return(identifier, nil)
 	createSessionRequest := gosesh.CreateSessionRequest{
-		UserID:   identifier,
+		User:     identifier,
 		IdleAt:   s.now.Add(1 * time.Hour),
 		ExpireAt: s.now.Add(24 * time.Hour),
 	}
@@ -254,11 +252,12 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(mode testCallbackRequestMode) (
 			Return(nil, fmt.Errorf("failed create session"))
 		return
 	}
+	identifier.EXPECT().ID().Return("identifier")
 	store.EXPECT().CreateSession(r.Context(), createSessionRequest).Return(&gosesh.Session{
-		ID:       identifier,
-		UserID:   identifier,
-		IdleAt:   s.now.Add(1 * time.Hour),
-		ExpireAt: s.now.Add(24 * time.Hour),
+		Identifier: identifier,
+		User:       identifier,
+		IdleAt:     s.now.Add(1 * time.Hour),
+		ExpireAt:   s.now.Add(24 * time.Hour),
 	}, nil)
 
 	return
@@ -469,7 +468,6 @@ func TestLogoutHandler(t *testing.T) {
 					return
 				}
 				identifier := mock_gosesh.NewIdentifier(t)
-				identifier.EXPECT().String().Return("identifier")
 				parser.EXPECT().Parse([]byte("identifier")).Return(identifier, nil)
 
 				if test.step == testLogoutFailedGettingSession {
@@ -479,18 +477,18 @@ func TestLogoutHandler(t *testing.T) {
 
 				if test.step == testLogoutSessionExpired {
 					store.EXPECT().GetSession(r.Context(), identifier).Return(&gosesh.Session{
-						ID:       identifier,
-						UserID:   identifier,
-						IdleAt:   now().UTC().Add(-1 * time.Hour),
-						ExpireAt: now().UTC().Add(-1 * time.Hour),
+						Identifier: identifier,
+						User:       identifier,
+						IdleAt:     now().UTC().Add(-1 * time.Hour),
+						ExpireAt:   now().UTC().Add(-1 * time.Hour),
 					}, nil)
 					return
 				}
 				session := &gosesh.Session{
-					ID:       identifier,
-					UserID:   identifier,
-					IdleAt:   now().UTC().Add(1 * time.Hour),
-					ExpireAt: now().UTC().Add(24 * time.Hour),
+					Identifier: identifier,
+					User:       identifier,
+					IdleAt:     now().UTC().Add(1 * time.Hour),
+					ExpireAt:   now().UTC().Add(24 * time.Hour),
 				}
 				store.EXPECT().GetSession(r.Context(), identifier).Return(session, nil)
 				ctx := context.WithValue(r.Context(), gosesh.SessionContextKey, session)

@@ -23,7 +23,7 @@ func (gs *Gosesh) oauthStateCookie(value string, expires time.Time) http.Cookie 
 func (gs *Gosesh) sessionCookie(identifier Identifier, expires time.Time) http.Cookie {
 	return http.Cookie{
 		Name:     gs.sessionCookieName,
-		Value:    base64.URLEncoding.EncodeToString([]byte(identifier.String())),
+		Value:    base64.URLEncoding.EncodeToString([]byte(identifier.ID())),
 		Domain:   gs.origin.Hostname(),
 		Path:     "/",
 		Expires:  expires,
@@ -35,7 +35,7 @@ func (gs *Gosesh) sessionCookie(identifier Identifier, expires time.Time) http.C
 
 type emptyIdentifier struct{}
 
-func (emptyIdentifier) String() string {
+func (emptyIdentifier) ID() string {
 	return ""
 }
 

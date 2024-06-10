@@ -27,15 +27,23 @@ type (
 	PostgresRepository struct {
 		*sqlc.Queries
 	}
+
+	UUID struct {
+		uuid.UUID
+	}
 )
 
+func (u UUID) ID() string {
+	return u.String()
+}
+
 func (s *Store) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
-	id, err := s.repo.UpsertUser(ctx, user.String())
+	id, err := s.repo.UpsertUser(ctx, user.ID())
 	return s.uuidFromPGTYPE(id), err
 }
 
 func (s *Store) CreateSession(ctx context.Context, r gosesh.CreateSessionRequest) (*gosesh.Session, error) {
-	userID, err := s.identifierToUUID(r.UserID)
+	userID, err := s.identifierToUUID(r.User)
 	if err != nil {
 		return nil, err
 	}
@@ -104,23 +112,23 @@ func (s *Store) DeleteUserSessions(ctx context.Context, identifier gosesh.Identi
 
 func (s *Store) sessionToGosesh(sess sqlc.Session) *gosesh.Session {
 	return &gosesh.Session{
-		ID:       s.uuidFromPGTYPE(sess.ID),
-		UserID:   s.uuidFromPGTYPE(sess.UserID),
-		IdleAt:   sess.IdleAt.Time,
-		ExpireAt: sess.ExpireAt.Time,
+		Identifier: s.uuidFromPGTYPE(sess.ID),
+		User:       s.uuidFromPGTYPE(sess.UserID),
+		IdleAt:     sess.IdleAt.Time,
+		ExpireAt:   sess.ExpireAt.Time,
 	}
 }
 
-func (s *Store) identifierToUUID(identifier gosesh.Identifier) (uuid.UUID, error) {
-	id, err := uuid.Parse(identifier.String())
+func (s *Store) identifierToUUID(identifier gosesh.Identifier) (UUID, error) {
+	id, err := uuid.Parse(identifier.ID())
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to parse identifier: %w", err)
+		return UUID{}, fmt.Errorf("failed to parse identifier: %w", err)
 	}
-	return id, nil
+	return UUID{id}, nil
 }
 
-func (s *Store) uuidFromPGTYPE(id pgtype.UUID) uuid.UUID {
-	return uuid.UUID(id.Bytes)
+func (s *Store) uuidFromPGTYPE(id pgtype.UUID) UUID {
+	return UUID{uuid.UUID(id.Bytes)}
 }
 
 func (s *Store) timestampToPGTYPE(ts time.Time) pgtype.Timestamptz {
@@ -130,9 +138,9 @@ func (s *Store) timestampToPGTYPE(ts time.Time) pgtype.Timestamptz {
 	}
 }
 
-func (s *Store) uuidToPGTYPE(id uuid.UUID) pgtype.UUID {
+func (s *Store) uuidToPGTYPE(id UUID) pgtype.UUID {
 	return pgtype.UUID{
-		Bytes: id,
+		Bytes: id.UUID,
 		Valid: true,
 	}
 }

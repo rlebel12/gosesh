@@ -42,7 +42,7 @@ func (p *GoogleProvider) OAuth2Callback(handler gosesh.CallbackHandler) http.Han
 }
 
 type googleUser struct {
-	ID            string `json:"id"`
+	Id            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
 	Picture       string `json:"picture"`
@@ -57,6 +57,6 @@ func (user *googleUser) Unmarshal(b []byte) error {
 	return json.Unmarshal(b, user)
 }
 
-func (user *googleUser) String() string {
-	return user.ID
+func (user *googleUser) ID() string {
+	return user.Id
 }

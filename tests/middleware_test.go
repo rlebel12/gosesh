@@ -61,11 +61,10 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 					return
 				}
 				session := &gosesh.Session{
-					ID:     identifier,
-					UserID: identifier,
-					IdleAt: now.Add(-5 * time.Minute),
+					Identifier: identifier,
+					User:       identifier,
+					IdleAt:     now.Add(-5 * time.Minute),
 				}
-				identifier.EXPECT().String().Return("identifier")
 				r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
 
 				if test == CaseSessionIdleFailedUpdate {
@@ -77,14 +76,15 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				}
 
 				if test == CaseSessionIdleSuccess {
+					identifier.EXPECT().ID().Return("identifier")
 					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
 						IdleAt:   now.Add(17 * time.Minute),
 						ExpireAt: now.Add(85 * time.Minute),
 					}).Return(&gosesh.Session{
-						ID:       identifier,
-						UserID:   identifier,
-						IdleAt:   now.Add(17 * time.Minute),
-						ExpireAt: now.Add(85 * time.Minute),
+						Identifier: identifier,
+						User:       identifier,
+						IdleAt:     now.Add(17 * time.Minute),
+						ExpireAt:   now.Add(85 * time.Minute),
 					}, nil)
 				}
 			}()
@@ -126,9 +126,9 @@ func TestRequireAuthentication(t *testing.T) {
 		rr := httptest.NewRecorder()
 
 		session := &gosesh.Session{
-			ID:     identifier,
-			UserID: identifier,
-			IdleAt: now.Add(-5 * time.Minute),
+			Identifier: identifier,
+			User:       identifier,
+			IdleAt:     now.Add(-5 * time.Minute),
 		}
 		r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
 

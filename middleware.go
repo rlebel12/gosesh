@@ -33,7 +33,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 		}
 
 		ctx := r.Context()
-		session, err := gs.store.UpdateSession(ctx, session.ID, UpdateSessionValues{
+		session, err := gs.store.UpdateSession(ctx, session.Identifier, UpdateSessionValues{
 			IdleAt:   now.Add(gs.sessionActiveDuration),
 			ExpireAt: now.Add(gs.sessionIdleDuration),
 		})
@@ -43,7 +43,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		sessionCookie := gs.sessionCookie(session.ID, session.ExpireAt)
+		sessionCookie := gs.sessionCookie(session.Identifier, session.ExpireAt)
 		http.SetCookie(w, &sessionCookie)
 
 		ctx = context.WithValue(ctx, SessionContextKey, session)

@@ -2,7 +2,6 @@ package gosesh
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -89,9 +88,9 @@ type (
 		Parse([]byte) (Identifier, error)
 	}
 
-	// Key used to uniquely identify a user or session.
+	// Can uniquely identify a user or session.
 	Identifier interface {
-		fmt.Stringer
+		ID() string
 	}
 
 	Storer interface {
@@ -104,14 +103,14 @@ type (
 	}
 
 	Session struct {
-		ID       Identifier
-		UserID   Identifier
+		Identifier
+		User     Identifier
 		IdleAt   time.Time
 		ExpireAt time.Time
 	}
 
 	CreateSessionRequest struct {
-		UserID   Identifier
+		User     Identifier
 		IdleAt   time.Time
 		ExpireAt time.Time
 	}
