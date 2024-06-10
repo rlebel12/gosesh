@@ -28,7 +28,7 @@ func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Cr
 		gosesh:      sesh,
 		config:      oauth2Config,
 		discordHost: "https://discord.com",
-		keyMode:     discordKeyModeID,
+		keyMode:     DiscordKeyModeID,
 	}
 	for _, opt := range opts {
 		opt(discord)
@@ -56,8 +56,8 @@ type (
 )
 
 const (
-	discordKeyModeID discordKeyMode = iota
-	discordKeyModeEmail
+	DiscordKeyModeID discordKeyMode = iota
+	DiscordKeyModeEmail
 )
 
 func (d *Discord) OAuth2Begin() http.HandlerFunc {
@@ -93,9 +93,9 @@ type DiscordUser struct {
 
 func (user *DiscordUser) String() string {
 	switch user.discord.keyMode {
-	case discordKeyModeID:
+	case DiscordKeyModeID:
 		return user.ID
-	case discordKeyModeEmail:
+	case DiscordKeyModeEmail:
 		return user.Email
 	default:
 		return user.ID

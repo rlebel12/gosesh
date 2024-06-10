@@ -133,11 +133,11 @@ func (s *DiscordSuite) TestDiscordUserString() {
 			expected: userID,
 		},
 		"discord ID": {
-			opts:     []discordOpt{WithDiscordKeyMode(discordKeyModeID)},
+			opts:     []discordOpt{WithDiscordKeyMode(DiscordKeyModeID)},
 			expected: userID,
 		},
 		"email": {
-			opts:     []discordOpt{WithDiscordKeyMode(discordKeyModeEmail)},
+			opts:     []discordOpt{WithDiscordKeyMode(DiscordKeyModeEmail)},
 			expected: userEmail,
 		},
 	} {

@@ -89,7 +89,7 @@ type (
 		Parse([]byte) (Identifier, error)
 	}
 
-	// Key used  to uniquely identify a user or session.
+	// Key used to uniquely identify a user or session.
 	Identifier interface {
 		fmt.Stringer
 	}
