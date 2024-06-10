@@ -29,8 +29,8 @@ type (
 	}
 )
 
-func (s *Store) UpsertUser(ctx context.Context, gsUser gosesh.OAuth2User) (gosesh.Identifier, error) {
-	id, err := s.repo.UpsertUser(ctx, gsUser.String())
+func (s *Store) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
+	id, err := s.repo.UpsertUser(ctx, user.String())
 	return s.uuidFromPGTYPE(id), err
 }
 
