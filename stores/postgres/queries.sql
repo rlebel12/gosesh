@@ -1,15 +1,9 @@
 -- name: UpsertUser :one
-INSERT INTO users (identifier)
-VALUES ($1) ON CONFLICT (identifier) DO
+INSERT INTO users (key)
+VALUES ($1) ON CONFLICT (key) DO
 UPDATE
-SET identifier = EXCLUDED.identifier
+SET key = EXCLUDED.key
 RETURNING id;
-
--- name: GetUser :one
-SELECT id,
-    identifier
-FROM users
-WHERE id = $1;
 
 -- name: CreateSession :one
 INSERT INTO sessions (user_id, idle_at, expire_at)

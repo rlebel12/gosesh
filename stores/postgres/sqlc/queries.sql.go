@@ -82,20 +82,6 @@ func (q *Queries) GetSession(ctx context.Context, id pgtype.UUID) (Session, erro
 	return i, err
 }
 
-const getUser = `-- name: GetUser :one
-SELECT id,
-    identifier
-FROM users
-WHERE id = $1
-`
-
-func (q *Queries) GetUser(ctx context.Context, id pgtype.UUID) (User, error) {
-	row := q.db.QueryRow(ctx, getUser, id)
-	var i User
-	err := row.Scan(&i.ID, &i.Identifier)
-	return i, err
-}
-
 const updateSession = `-- name: UpdateSession :one
 UPDATE sessions
 SET idle_at = $1,
@@ -123,15 +109,15 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) (S
 }
 
 const upsertUser = `-- name: UpsertUser :one
-INSERT INTO users (identifier)
-VALUES ($1) ON CONFLICT (identifier) DO
+INSERT INTO users (key)
+VALUES ($1) ON CONFLICT (key) DO
 UPDATE
-SET identifier = EXCLUDED.identifier
+SET key = EXCLUDED.key
 RETURNING id
 `
 
-func (q *Queries) UpsertUser(ctx context.Context, identifier string) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, upsertUser, identifier)
+func (q *Queries) UpsertUser(ctx context.Context, key string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertUser, key)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err

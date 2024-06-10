@@ -4,7 +4,7 @@ sql:
     queries: "stores/postgres/queries.sql"
     engine: "postgresql"
     database:
-      uri: postgresql://postgres:root@localhost:14001/gosesh?sslmode=disable
+      uri: postgresql://postgres:root@localhost:16001/gosesh?sslmode=disable
     gen:
       go:
         out: "stores/postgres/sqlc"
