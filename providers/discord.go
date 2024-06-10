@@ -11,7 +11,7 @@ import (
 )
 
 // Creates a new Discord OAuth2 provider. redirectPath should have a leading slash.
-func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string) Discord {
+func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...discordOpt) *Discord {
 	oauth2Config := &oauth2.Config{
 		ClientID:     credentials.ClientID,
 		ClientSecret: credentials.ClientSecret,
@@ -24,25 +24,49 @@ func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Cr
 			AuthStyle: oauth2.AuthStyleInParams,
 		},
 	}
-	return Discord{
-		gs:          sesh,
-		cfg:         oauth2Config,
+	discord := &Discord{
+		gosesh:      sesh,
+		config:      oauth2Config,
 		discordHost: "https://discord.com",
+		keyMode:     DiscordKeyModeID,
+	}
+	for _, opt := range opts {
+		opt(discord)
+	}
+	return discord
+}
+
+func WithDiscordKeyMode(mode discordKeyMode) discordOpt {
+	return func(d *Discord) {
+		d.keyMode = mode
 	}
 }
 
-type Discord struct {
-	gs          Gosesher
-	cfg         *oauth2.Config
-	discordHost string
+type (
+	Discord struct {
+		gosesh      Gosesher
+		config      *oauth2.Config
+		discordHost string
+		keyMode     discordKeyMode
+	}
+
+	discordOpt func(*Discord)
+
+	discordKeyMode int
+)
+
+const (
+	DiscordKeyModeID discordKeyMode = iota
+	DiscordKeyModeEmail
+)
+
+func (d *Discord) OAuth2Begin() http.HandlerFunc {
+	return d.gosesh.OAuth2Begin(d.config)
 }
 
-func (p *Discord) OAuth2Begin() http.HandlerFunc {
-	return p.gs.OAuth2Begin(p.cfg)
-}
-
-func (p *Discord) OAuth2Callback(handler gosesh.CallbackHandler) http.HandlerFunc {
-	return p.gs.OAuth2Callback(new(DiscordUser), p.cfg, handler)
+func (d *Discord) OAuth2Callback(handler gosesh.CallbackHandler) http.HandlerFunc {
+	user := &DiscordUser{discord: d}
+	return d.gosesh.OAuth2Callback(user, d.config, handler)
 }
 
 type DiscordScopes struct {
@@ -58,15 +82,24 @@ func (s DiscordScopes) strings() []string {
 }
 
 type DiscordUser struct {
-	ID       string  `json:"id"`
-	Username string  `json:"username"`
-	Email    string  `json:"email,omitempty"`
-	Verified bool    `json:"verified,omitempty"`
-	testHost *string `json:"-"`
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email,omitempty"`
+	Verified bool   `json:"verified,omitempty"`
+
+	discord  *Discord `json:"-"`
+	testHost *string  `json:"-"`
 }
 
 func (user *DiscordUser) String() string {
-	return user.ID
+	switch user.discord.keyMode {
+	case DiscordKeyModeID:
+		return user.ID
+	case DiscordKeyModeEmail:
+		return user.Email
+	default:
+		return user.ID
+	}
 }
 
 func (user *DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {

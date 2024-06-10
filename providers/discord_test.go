@@ -49,7 +49,7 @@ func (s *DiscordSuite) TestNewDiscord() {
 					TokenURL:  "https://discord.com/api/oauth2/token",
 					AuthStyle: oauth2.AuthStyleInParams,
 				},
-			}, discord.cfg)
+			}, discord.config)
 		})
 	}
 }
@@ -58,7 +58,7 @@ func (s *DiscordSuite) TestOAuth2Begin() {
 	sesh := newGosesher(s.T())
 	discord := NewDiscord(sesh, DiscordScopes{}, gosesh.OAuth2Credentials{}, "")
 	var called bool
-	sesh.EXPECT().OAuth2Begin(discord.cfg).Return(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	sesh.EXPECT().OAuth2Begin(discord.config).Return(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 	}))
 	discord.OAuth2Begin().ServeHTTP(nil, httptest.NewRequest("GET", "/", nil))
@@ -68,9 +68,10 @@ func (s *DiscordSuite) TestOAuth2Begin() {
 func (s *DiscordSuite) TestOAuth2Callback() {
 	sesh := newGosesher(s.T())
 	discord := NewDiscord(sesh, DiscordScopes{}, gosesh.OAuth2Credentials{}, "")
+	user := &DiscordUser{discord: discord}
 	sesh.
 		EXPECT().
-		OAuth2Callback(new(DiscordUser), discord.cfg, mock.AnythingOfType("gosesh.CallbackHandler")).
+		OAuth2Callback(user, discord.config, mock.AnythingOfType("gosesh.CallbackHandler")).
 		RunAndReturn(func(ou gosesh.OAuth2User, c *oauth2.Config, ch gosesh.CallbackHandler) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) {
 				ch(w, r, nil)
@@ -118,6 +119,39 @@ func (s *DiscordSuite) TestUserRequest() {
 		_, err := user.Request(context.Background(), "accessToken")
 		s.Error(err)
 	})
+}
+
+func (s *DiscordSuite) TestDiscordUserString() {
+	const userID = "123"
+	const userEmail = "123@example.com"
+	for name, test := range map[string]struct {
+		opts     []discordOpt
+		expected string
+	}{
+		"default": {
+			opts:     nil,
+			expected: userID,
+		},
+		"discord ID": {
+			opts:     []discordOpt{WithDiscordKeyMode(DiscordKeyModeID)},
+			expected: userID,
+		},
+		"email": {
+			opts:     []discordOpt{WithDiscordKeyMode(DiscordKeyModeEmail)},
+			expected: userEmail,
+		},
+	} {
+		s.Run(name, func() {
+			sesh := newGosesher(s.T())
+			discord := NewDiscord(sesh, DiscordScopes{}, gosesh.OAuth2Credentials{}, "", test.opts...)
+			user := &DiscordUser{
+				ID:      userID,
+				Email:   userEmail,
+				discord: discord,
+			}
+			s.Equal(test.expected, user.String())
+		})
+	}
 }
 
 func TestDiscordSuite(t *testing.T) {
