@@ -22,3 +22,6 @@ migrate:
 
 migration:
 	atlas migrate diff --dir "file://stores/postgres/migrations" --to "file://stores/postgres/schema.sql" --dev-url "postgresql://postgres:root@localhost:16001/gosesh?search_path=public&sslmode=disable"
+
+gen:
+	@go generate ./...

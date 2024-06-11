@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package proto;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "gosesh/proto/";
+
+message User {
+    bytes id = 1;
+}
+
+message Session {
+    bytes id = 1;
+    User user = 2;
+    google.protobuf.Timestamp idle_at = 3;
+    google.protobuf.Timestamp expires_at = 4;
+  }
+
+message GetSessionRequest {
+    bytes session_id = 1;
+}
+
+message GetSessionResponse {
+    Session session = 1;
+}
+
+message DeleteSessionsForUserRequest {
+    bytes user_id = 1;
+}
+
+message DeleteSessionsForUserResponse {
+    int32 count = 1;
+}
+
+service Gosesh {
+  rpc GetSession ( GetSessionRequest ) returns ( GetSessionResponse );
+  rpc DeleteSessionsForUser (DeleteSessionsForUserRequest) returns (DeleteSessionsForUserResponse);
+}
