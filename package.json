@@ -1,6 +1,0 @@
-{
-  "name": "gosesh-proto",
-  "dependencies": {
-    "ts-proto": "^1.178.0"
-  }
-}

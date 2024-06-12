@@ -4,4 +4,3 @@ tmp/
 dev/
 *coverage.html
 *coverage.outs
-node_modules/
