@@ -40,7 +40,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			identifier := mock_gosesh.NewIdentifier(t)
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)
-			sesh := gosesh.New(parser, store,
+			sesh := gosesh.New(parser.Execute, store,
 				gosesh.WithNow(func() time.Time { return now }),
 				gosesh.WithSessionCookieName("customName"),
 				gosesh.WithSessionActiveDuration(17*time.Minute),
@@ -122,7 +122,7 @@ func TestRequireAuthentication(t *testing.T) {
 		identifier := mock_gosesh.NewIdentifier(t)
 		r, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(err)
-		sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
+		sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
 		session := &gosesh.Session{
@@ -145,7 +145,7 @@ func TestRequireAuthentication(t *testing.T) {
 		require.NoError(err)
 		store := mock_gosesh.NewStorer(t)
 		parser := mock_gosesh.NewIDParser(t)
-		sesh := gosesh.New(parser, store, gosesh.WithNow(func() time.Time { return now }))
+		sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
 		handlerCalled := false

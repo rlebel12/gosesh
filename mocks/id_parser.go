@@ -20,12 +20,12 @@ func (_m *IDParser) EXPECT() *IDParser_Expecter {
 	return &IDParser_Expecter{mock: &_m.Mock}
 }
 
-// ParseBytes provides a mock function with given fields: _a0
-func (_m *IDParser) ParseBytes(_a0 []byte) (gosesh.Identifier, error) {
+// Execute provides a mock function with given fields: _a0
+func (_m *IDParser) Execute(_a0 []byte) (gosesh.Identifier, error) {
 	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
-		panic("no return value specified for ParseBytes")
+		panic("no return value specified for Execute")
 	}
 
 	var r0 gosesh.Identifier
@@ -50,30 +50,30 @@ func (_m *IDParser) ParseBytes(_a0 []byte) (gosesh.Identifier, error) {
 	return r0, r1
 }
 
-// IDParser_ParseBytes_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ParseBytes'
-type IDParser_ParseBytes_Call struct {
+// IDParser_Execute_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Execute'
+type IDParser_Execute_Call struct {
 	*mock.Call
 }
 
-// ParseBytes is a helper method to define mock.On call
+// Execute is a helper method to define mock.On call
 //   - _a0 []byte
-func (_e *IDParser_Expecter) ParseBytes(_a0 interface{}) *IDParser_ParseBytes_Call {
-	return &IDParser_ParseBytes_Call{Call: _e.mock.On("ParseBytes", _a0)}
+func (_e *IDParser_Expecter) Execute(_a0 interface{}) *IDParser_Execute_Call {
+	return &IDParser_Execute_Call{Call: _e.mock.On("Execute", _a0)}
 }
 
-func (_c *IDParser_ParseBytes_Call) Run(run func(_a0 []byte)) *IDParser_ParseBytes_Call {
+func (_c *IDParser_Execute_Call) Run(run func(_a0 []byte)) *IDParser_Execute_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].([]byte))
 	})
 	return _c
 }
 
-func (_c *IDParser_ParseBytes_Call) Return(_a0 gosesh.Identifier, _a1 error) *IDParser_ParseBytes_Call {
+func (_c *IDParser_Execute_Call) Return(_a0 gosesh.Identifier, _a1 error) *IDParser_Execute_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *IDParser_ParseBytes_Call) RunAndReturn(run func([]byte) (gosesh.Identifier, error)) *IDParser_ParseBytes_Call {
+func (_c *IDParser_Execute_Call) RunAndReturn(run func([]byte) (gosesh.Identifier, error)) *IDParser_Execute_Call {
 	_c.Call.Return(run)
 	return _c
 }

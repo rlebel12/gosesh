@@ -13,7 +13,7 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 	url, _ := url.Parse("http://localhost")
 	gs := &Gosesh{
 		store:                 store,
-		idParser:              parser,
+		identifierFromBytes:   parser,
 		sessionCookieName:     "session",
 		oAuth2StateCookieName: "oauthstate",
 		sessionIdleDuration:   24 * time.Hour,
@@ -75,7 +75,7 @@ func (gs *Gosesh) Scheme() string {
 type (
 	Gosesh struct {
 		store                 Storer
-		idParser              IDParser
+		identifierFromBytes   IDParser
 		logger                *slog.Logger
 		origin                *url.URL
 		sessionCookieName     string
@@ -85,9 +85,7 @@ type (
 		now                   func() time.Time
 	}
 
-	IDParser interface {
-		ParseBytes([]byte) (Identifier, error)
-	}
+	IDParser func([]byte) (Identifier, error)
 
 	Identifier interface {
 		fmt.Stringer

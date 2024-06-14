@@ -444,7 +444,7 @@ func TestLogoutHandler(t *testing.T) {
 			parser := mock_gosesh.NewIDParser(t)
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)
-			sesh := gosesh.New(parser, store, gosesh.WithNow(now))
+			sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(now))
 			rr := httptest.NewRecorder()
 
 			func() {
@@ -465,12 +465,12 @@ func TestLogoutHandler(t *testing.T) {
 				})
 
 				if test.step == testLogoutFailedParsingID {
-					parser.EXPECT().ParseBytes([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
+					parser.EXPECT().Execute([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
 					return
 				}
 				identifier := mock_gosesh.NewIdentifier(t)
 				identifier.EXPECT().String().Return("identifier")
-				parser.EXPECT().ParseBytes([]byte("identifier")).Return(identifier, nil)
+				parser.EXPECT().Execute([]byte("identifier")).Return(identifier, nil)
 
 				if test.step == testLogoutFailedGettingSession {
 					store.EXPECT().GetSession(r.Context(), identifier).Return(nil, fmt.Errorf("failed get session"))
