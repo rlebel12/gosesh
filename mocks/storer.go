@@ -304,9 +304,9 @@ func (_c *Storer_UpdateSession_Call) RunAndReturn(run func(context.Context, gose
 	return _c
 }
 
-// UpsertUser provides a mock function with given fields: ctx, udr
-func (_m *Storer) UpsertUser(ctx context.Context, udr gosesh.OAuth2User) (gosesh.Identifier, error) {
-	ret := _m.Called(ctx, udr)
+// UpsertUser provides a mock function with given fields: ctx, user
+func (_m *Storer) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
+	ret := _m.Called(ctx, user)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpsertUser")
@@ -315,10 +315,10 @@ func (_m *Storer) UpsertUser(ctx context.Context, udr gosesh.OAuth2User) (gosesh
 	var r0 gosesh.Identifier
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, gosesh.OAuth2User) (gosesh.Identifier, error)); ok {
-		return rf(ctx, udr)
+		return rf(ctx, user)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, gosesh.OAuth2User) gosesh.Identifier); ok {
-		r0 = rf(ctx, udr)
+		r0 = rf(ctx, user)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(gosesh.Identifier)
@@ -326,7 +326,7 @@ func (_m *Storer) UpsertUser(ctx context.Context, udr gosesh.OAuth2User) (gosesh
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, gosesh.OAuth2User) error); ok {
-		r1 = rf(ctx, udr)
+		r1 = rf(ctx, user)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -341,12 +341,12 @@ type Storer_UpsertUser_Call struct {
 
 // UpsertUser is a helper method to define mock.On call
 //   - ctx context.Context
-//   - udr gosesh.OAuth2User
-func (_e *Storer_Expecter) UpsertUser(ctx interface{}, udr interface{}) *Storer_UpsertUser_Call {
-	return &Storer_UpsertUser_Call{Call: _e.mock.On("UpsertUser", ctx, udr)}
+//   - user gosesh.OAuth2User
+func (_e *Storer_Expecter) UpsertUser(ctx interface{}, user interface{}) *Storer_UpsertUser_Call {
+	return &Storer_UpsertUser_Call{Call: _e.mock.On("UpsertUser", ctx, user)}
 }
 
-func (_c *Storer_UpsertUser_Call) Run(run func(ctx context.Context, udr gosesh.OAuth2User)) *Storer_UpsertUser_Call {
+func (_c *Storer_UpsertUser_Call) Run(run func(ctx context.Context, user gosesh.OAuth2User)) *Storer_UpsertUser_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context), args[1].(gosesh.OAuth2User))
 	})

@@ -55,5 +55,5 @@ func (gs *Gosesh) parseIdentifierFromCookie(r *http.Request) (Identifier, error)
 		return nil, fmt.Errorf("failed to decode session cookie: %w", err)
 	}
 
-	return gs.idParser.Parse(sessionIDRaw)
+	return gs.idParser.ParseBytes(sessionIDRaw)
 }

@@ -465,12 +465,12 @@ func TestLogoutHandler(t *testing.T) {
 				})
 
 				if test.step == testLogoutFailedParsingID {
-					parser.EXPECT().Parse([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
+					parser.EXPECT().ParseBytes([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
 					return
 				}
 				identifier := mock_gosesh.NewIdentifier(t)
 				identifier.EXPECT().String().Return("identifier")
-				parser.EXPECT().Parse([]byte("identifier")).Return(identifier, nil)
+				parser.EXPECT().ParseBytes([]byte("identifier")).Return(identifier, nil)
 
 				if test.step == testLogoutFailedGettingSession {
 					store.EXPECT().GetSession(r.Context(), identifier).Return(nil, fmt.Errorf("failed get session"))

@@ -86,7 +86,7 @@ type (
 	}
 
 	IDParser interface {
-		Parse([]byte) (Identifier, error)
+		ParseBytes([]byte) (Identifier, error)
 	}
 
 	Identifier interface {
