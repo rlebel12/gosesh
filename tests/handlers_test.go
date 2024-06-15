@@ -425,7 +425,7 @@ type logoutTest struct {
 	parser     *mock_gosesh.IDParser
 	r          *http.Request
 	sesh       *gosesh.Gosesh
-	rr         *httptest.ResponseRecorder
+	w          *httptest.ResponseRecorder
 	handler    *mock_gosesh.HandlerDone
 	identifier *mock_gosesh.Identifier
 	session    *gosesh.Session
@@ -448,14 +448,14 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 		parser:     parser,
 		r:          r,
 		sesh:       sesh,
-		rr:         rr,
+		w:          rr,
 		handler:    handler,
 		identifier: identifier,
 	}
 }
 
 func (t *logoutTest) execute() {
-	t.sesh.Logout(t.handler.Execute).ServeHTTP(t.rr, t.r)
+	t.sesh.Logout(t.handler.Execute).ServeHTTP(t.w, t.r)
 }
 
 func (t *logoutTest) setValidCOokie() {
@@ -492,11 +492,11 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("no session cookie", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		test.handler.EXPECT().Execute(test.rr, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.rr.Code)
+		assert.Equal(http.StatusUnauthorized, test.w.Code)
 	})
 
 	t.Run("bad session cookie", func(t *testing.T) {
@@ -506,11 +506,11 @@ func TestLogoutHandler(t *testing.T) {
 			Name:  "session",
 			Value: "bad",
 		})
-		test.handler.EXPECT().Execute(test.rr, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.rr.Code)
+		assert.Equal(http.StatusUnauthorized, test.w.Code)
 	})
 
 	t.Run("failed parsing ID", func(t *testing.T) {
@@ -518,22 +518,22 @@ func TestLogoutHandler(t *testing.T) {
 
 		test.setValidCOokie()
 		test.parser.EXPECT().Execute([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
-		test.handler.EXPECT().Execute(test.rr, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.rr.Code)
+		assert.Equal(http.StatusUnauthorized, test.w.Code)
 	})
 
 	t.Run("failed getting session", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 		test.succeedParsingID()
 		test.store.EXPECT().GetSession(test.r.Context(), test.identifier).Return(nil, fmt.Errorf("failed get session"))
-		test.handler.EXPECT().Execute(test.rr, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.rr.Code)
+		assert.Equal(http.StatusUnauthorized, test.w.Code)
 	})
 
 	t.Run("session expired", func(t *testing.T) {
@@ -545,11 +545,11 @@ func TestLogoutHandler(t *testing.T) {
 			IdleAt:   test.now().UTC().Add(-1 * time.Hour),
 			ExpireAt: test.now().UTC().Add(-1 * time.Hour),
 		}, nil)
-		test.handler.EXPECT().Execute(test.rr, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.rr.Code)
+		assert.Equal(http.StatusUnauthorized, test.w.Code)
 	})
 
 	t.Run("failed deleting one session", func(t *testing.T) {
@@ -558,12 +558,12 @@ func TestLogoutHandler(t *testing.T) {
 		test.authenticated()
 		err := fmt.Errorf("failed delete session")
 		test.store.EXPECT().DeleteSession(test.r.Context(), test.identifier).Return(err)
-		test.handler.EXPECT().Execute(test.rr, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
 		test.execute()
-		assert.Equal(http.StatusInternalServerError, test.rr.Code)
+		assert.Equal(http.StatusInternalServerError, test.w.Code)
 	})
 
 	t.Run("failed deleting all sessions", func(t *testing.T) {
@@ -572,7 +572,7 @@ func TestLogoutHandler(t *testing.T) {
 		test.authenticated()
 		err := fmt.Errorf("failed delete session")
 		test.store.EXPECT().DeleteUserSessions(test.r.Context(), test.identifier).Return(0, err)
-		test.handler.EXPECT().Execute(test.rr, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
@@ -581,7 +581,7 @@ func TestLogoutHandler(t *testing.T) {
 		test.r.URL.RawQuery = urlValues.Encode()
 
 		test.execute()
-		assert.Equal(http.StatusInternalServerError, test.rr.Code)
+		assert.Equal(http.StatusInternalServerError, test.w.Code)
 	})
 
 	t.Run("success deleting one session", func(t *testing.T) {
@@ -589,13 +589,13 @@ func TestLogoutHandler(t *testing.T) {
 
 		doneR := test.authenticated().WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
 		test.store.EXPECT().DeleteSession(test.r.Context(), test.identifier).Return(nil)
-		test.handler.On("Execute", test.rr, doneR, nil).Run(func(args mock.Arguments) {
+		test.handler.On("Execute", test.w, doneR, nil).Run(func(args mock.Arguments) {
 			assert.Nil(args.Get(2))
 			args.Get(0).(http.ResponseWriter).WriteHeader(http.StatusNoContent)
 		})
 
 		test.execute()
-		assert.Equal(http.StatusNoContent, test.rr.Code)
+		assert.Equal(http.StatusNoContent, test.w.Code)
 	})
 
 	t.Run("success deleting all sessions", func(t *testing.T) {
@@ -603,7 +603,7 @@ func TestLogoutHandler(t *testing.T) {
 
 		doneR := test.authenticated().WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
 		test.store.EXPECT().DeleteUserSessions(test.r.Context(), test.identifier).Return(0, nil)
-		test.handler.On("Execute", test.rr, doneR, nil).Run(func(args mock.Arguments) {
+		test.handler.On("Execute", test.w, doneR, nil).Run(func(args mock.Arguments) {
 			assert.Nil(args.Get(2))
 			args.Get(0).(http.ResponseWriter).WriteHeader(http.StatusNoContent)
 		})
@@ -613,6 +613,6 @@ func TestLogoutHandler(t *testing.T) {
 		test.r.URL.RawQuery = urlValues.Encode()
 
 		test.execute()
-		assert.Equal(http.StatusNoContent, test.rr.Code)
+		assert.Equal(http.StatusNoContent, test.w.Code)
 	})
 }
