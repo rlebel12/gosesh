@@ -4,6 +4,9 @@
 
 An auth library that that abstracts away the OAuth2 flow.
 
+## ⚠️ Under Development ⚠️
+This library is currently under active development, and the API is subject to change.
+
 ## Installation
 ```bash
 go get github.com/rlebel12/gosesh

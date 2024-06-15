@@ -9,7 +9,7 @@ import (
 
 type Gosesher interface {
 	OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc
-	OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.CallbackHandler) http.HandlerFunc
+	OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.HandlerDone) http.HandlerFunc
 	Scheme() string
 	Host() string
 }

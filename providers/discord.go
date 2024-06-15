@@ -64,7 +64,7 @@ func (d *Discord) OAuth2Begin() http.HandlerFunc {
 	return d.Gosesh.OAuth2Begin(d.Config)
 }
 
-func (d *Discord) OAuth2Callback(handler gosesh.CallbackHandler) http.HandlerFunc {
+func (d *Discord) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
 	return d.Gosesh.OAuth2Callback(d.NewUser(), d.Config, handler)
 }
 

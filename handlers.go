@@ -41,17 +41,21 @@ var (
 	ErrFailedCreatingSession    = errors.New("failed creating session")
 )
 
-type CallbackHandler func(http.ResponseWriter, *http.Request, error)
+type HandlerDone func(http.ResponseWriter, *http.Request, error)
 
-// Create a handler that will handle the OAuth2 callback. This handler performs the token exchange and retrieves
-// user data from the provider. When the OAuth2 flow has completed, the input `handler` will be invoked, with
+// Create a handler for the OAuth2 callback. This handler performs the token exchange and retrieves
+// user data from the provider. When the OAuth2 flow has completed, the input `done` will be invoked, with
 // the error value set to nil if the flow was successful, or an error if it was not.
-func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, handler CallbackHandler) http.HandlerFunc {
+func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, done HandlerDone) http.HandlerFunc {
+	if done == nil {
+		gs.logWarn("no done handler provided for OAuth2Callback, using default")
+		done = defaultDoneHandler(gs, "OAuth2Callback")
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		oauthState, err := r.Cookie(gs.oAuth2StateCookieName)
 		if err != nil {
-			handler(w, r, fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err))
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedGettingStateCookie, err))
 			return
 		}
 
@@ -60,25 +64,25 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, handler
 		http.SetCookie(w, &stateCookie)
 
 		if r.FormValue("state") != oauthState.Value {
-			handler(w, r, ErrInvalidStateCookie)
+			done(w, r, ErrInvalidStateCookie)
 			return
 		}
 
 		token, err := config.Exchange(ctx, r.FormValue("code"))
 		if err != nil {
-			handler(w, r, fmt.Errorf("%w: %w", ErrFailedExchangingToken, err))
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedExchangingToken, err))
 			return
 		}
 
 		err = gs.unmarshalUserData(ctx, user, token.AccessToken)
 		if err != nil {
-			handler(w, r, fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err))
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err))
 			return
 		}
 
 		id, err := gs.store.UpsertUser(ctx, user)
 		if err != nil {
-			handler(w, r, fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err))
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err))
 			return
 		}
 
@@ -88,13 +92,13 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, handler
 			ExpireAt: now.Add(gs.sessionIdleDuration),
 		})
 		if err != nil {
-			handler(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
 			return
 		}
 
 		sessionCookie := gs.sessionCookie(session.ID, session.ExpireAt)
 		http.SetCookie(w, &sessionCookie)
-		handler(w, r, nil)
+		done(w, r, nil)
 	}
 }
 
@@ -112,49 +116,48 @@ func (gs *Gosesh) unmarshalUserData(ctx context.Context, data OAuth2User, access
 	return data.Unmarshal(contents)
 }
 
-var errUnauthorized = errors.New("unauthorized")
+var (
+	ErrUnauthorized          = errors.New("unauthorized")
+	ErrFailedDeletingSession = errors.New("failed deleting session(s)")
+)
 
-func (gs *Gosesh) LogoutHandler(completeHandler http.HandlerFunc) http.HandlerFunc {
+func (gs *Gosesh) Logout(done HandlerDone) http.HandlerFunc {
+	if done == nil {
+		gs.logWarn("no done handler provided for Logout, using default")
+		done = defaultDoneHandler(gs, "Logout")
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
-		r, err := gs.Logout(w, r)
-		if err != nil {
-			if errors.Is(err, errUnauthorized) {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			w.WriteHeader(http.StatusInternalServerError)
+		r = gs.authenticate(w, r)
+		session, ok := CurrentSession(r)
+		if !ok {
+			done(w, r, ErrUnauthorized)
 			return
 		}
 
-		if completeHandler == nil {
-			w.WriteHeader(http.StatusNoContent)
+		var err error
+		switch {
+		case r.URL.Query().Get("all") != "":
+			_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID)
+		default:
+			err = gs.store.DeleteSession(r.Context(), session.ID)
+		}
+		if err != nil {
+			gs.logError("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedDeletingSession, err))
 			return
 		}
-		completeHandler(w, r)
+
+		http.SetCookie(w, gs.expireSessionCookie())
+
+		ctx := context.WithValue(r.Context(), SessionContextKey, nil)
+		done(w, r.WithContext(ctx), nil)
 	}
 }
 
-func (gs *Gosesh) Logout(w http.ResponseWriter, r *http.Request) (*http.Request, error) {
-	r = gs.authenticate(w, r)
-	session, ok := CurrentSession(r)
-	if !ok {
-		return r, errUnauthorized
+func defaultDoneHandler(sesh *Gosesh, handlerName string) HandlerDone {
+	return func(w http.ResponseWriter, r *http.Request, err error) {
+		if err != nil {
+			sesh.logError("failed in handler", "name", handlerName, "err", err.Error())
+		}
 	}
-
-	var err error
-	switch {
-	case r.URL.Query().Get("all") != "":
-		_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID)
-	default:
-		err = gs.store.DeleteSession(r.Context(), session.ID)
-	}
-	if err != nil {
-		gs.logError("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
-		return r, err
-	}
-
-	http.SetCookie(w, gs.expireSessionCookie())
-
-	ctx := context.WithValue(r.Context(), SessionContextKey, nil)
-	return r.WithContext(ctx), nil
 }

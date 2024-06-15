@@ -141,6 +141,13 @@ func (gs *Gosesh) logError(msg string, args ...any) {
 	gs.logger.Error(msg, args...)
 }
 
+func (gs *Gosesh) logWarn(msg string, args ...any) {
+	if gs.logger == nil {
+		return
+	}
+	gs.logger.Warn(msg, args...)
+}
+
 // Do not use: this is exported for testing-purposes only.
 func WithNow(fn func() time.Time) func(*Gosesh) {
 	return func(c *Gosesh) {

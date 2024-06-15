@@ -119,7 +119,7 @@ func (_c *Gosesher_OAuth2Begin_Call) RunAndReturn(run func(*oauth2.Config) http.
 }
 
 // OAuth2Callback provides a mock function with given fields: user, cfg, handler
-func (_m *Gosesher) OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.CallbackHandler) http.HandlerFunc {
+func (_m *Gosesher) OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.HandlerDone) http.HandlerFunc {
 	ret := _m.Called(user, cfg, handler)
 
 	if len(ret) == 0 {
@@ -127,7 +127,7 @@ func (_m *Gosesher) OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, h
 	}
 
 	var r0 http.HandlerFunc
-	if rf, ok := ret.Get(0).(func(gosesh.OAuth2User, *oauth2.Config, gosesh.CallbackHandler) http.HandlerFunc); ok {
+	if rf, ok := ret.Get(0).(func(gosesh.OAuth2User, *oauth2.Config, gosesh.HandlerDone) http.HandlerFunc); ok {
 		r0 = rf(user, cfg, handler)
 	} else {
 		if ret.Get(0) != nil {
@@ -146,14 +146,14 @@ type Gosesher_OAuth2Callback_Call struct {
 // OAuth2Callback is a helper method to define mock.On call
 //   - user gosesh.OAuth2User
 //   - cfg *oauth2.Config
-//   - handler gosesh.CallbackHandler
+//   - handler gosesh.HandlerDone
 func (_e *Gosesher_Expecter) OAuth2Callback(user interface{}, cfg interface{}, handler interface{}) *Gosesher_OAuth2Callback_Call {
 	return &Gosesher_OAuth2Callback_Call{Call: _e.mock.On("OAuth2Callback", user, cfg, handler)}
 }
 
-func (_c *Gosesher_OAuth2Callback_Call) Run(run func(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.CallbackHandler)) *Gosesher_OAuth2Callback_Call {
+func (_c *Gosesher_OAuth2Callback_Call) Run(run func(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.HandlerDone)) *Gosesher_OAuth2Callback_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(gosesh.OAuth2User), args[1].(*oauth2.Config), args[2].(gosesh.CallbackHandler))
+		run(args[0].(gosesh.OAuth2User), args[1].(*oauth2.Config), args[2].(gosesh.HandlerDone))
 	})
 	return _c
 }
@@ -163,7 +163,7 @@ func (_c *Gosesher_OAuth2Callback_Call) Return(_a0 http.HandlerFunc) *Gosesher_O
 	return _c
 }
 
-func (_c *Gosesher_OAuth2Callback_Call) RunAndReturn(run func(gosesh.OAuth2User, *oauth2.Config, gosesh.CallbackHandler) http.HandlerFunc) *Gosesher_OAuth2Callback_Call {
+func (_c *Gosesher_OAuth2Callback_Call) RunAndReturn(run func(gosesh.OAuth2User, *oauth2.Config, gosesh.HandlerDone) http.HandlerFunc) *Gosesher_OAuth2Callback_Call {
 	_c.Call.Return(run)
 	return _c
 }

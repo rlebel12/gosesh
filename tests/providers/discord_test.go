@@ -72,8 +72,8 @@ func (s *DiscordSuite) TestOAuth2Callback() {
 	discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, gosesh.OAuth2Credentials{}, "")
 	sesh.
 		EXPECT().
-		OAuth2Callback(discord.NewUser(), discord.Config, mock.AnythingOfType("gosesh.CallbackHandler")).
-		RunAndReturn(func(ou gosesh.OAuth2User, c *oauth2.Config, ch gosesh.CallbackHandler) http.HandlerFunc {
+		OAuth2Callback(discord.NewUser(), discord.Config, mock.AnythingOfType("gosesh.HandlerDone")).
+		RunAndReturn(func(ou gosesh.OAuth2User, c *oauth2.Config, ch gosesh.HandlerDone) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) {
 				ch(w, r, nil)
 			}

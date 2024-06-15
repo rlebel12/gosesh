@@ -37,7 +37,7 @@ func (p *GoogleProvider) OAuth2Begin() http.HandlerFunc {
 	return p.gs.OAuth2Begin(p.cfg)
 }
 
-func (p *GoogleProvider) OAuth2Callback(handler gosesh.CallbackHandler) http.HandlerFunc {
+func (p *GoogleProvider) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
 	return p.gs.OAuth2Callback(new(googleUser), p.cfg, handler)
 }
 
