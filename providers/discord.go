@@ -15,9 +15,8 @@ func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Cr
 	oauth2Config := &oauth2.Config{
 		ClientID:     credentials.ClientID,
 		ClientSecret: credentials.ClientSecret,
-		RedirectURL: fmt.Sprintf(
-			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
-		Scopes: scopes.strings(),
+		RedirectURL:  redirectPath,
+		Scopes:       scopes.strings(),
 		Endpoint: oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
 			TokenURL:  "https://discord.com/api/oauth2/token",

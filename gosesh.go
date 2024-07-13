@@ -19,6 +19,7 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 		sessionIdleDuration:   24 * time.Hour,
 		sessionActiveDuration: 1 * time.Hour,
 		origin:                url,
+		CookieDomain:          url.Hostname(),
 		now:                   time.Now,
 	}
 	for _, opt := range opts {
@@ -64,6 +65,12 @@ func WithOrigin(origin *url.URL) func(*Gosesh) {
 	}
 }
 
+func WithCookieDomain(domain string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.CookieDomain = domain
+	}
+}
+
 func (gs *Gosesh) Host() string {
 	return gs.origin.Host
 }
@@ -83,6 +90,7 @@ type (
 		sessionIdleDuration   time.Duration
 		sessionActiveDuration time.Duration
 		now                   func() time.Time
+		CookieDomain          string
 	}
 
 	IDParser func([]byte) (Identifier, error)

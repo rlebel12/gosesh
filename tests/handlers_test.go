@@ -65,7 +65,7 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 			handler := sesh.OAuth2Begin(&oauth2.Config{
 				ClientID:     "client_id",
 				ClientSecret: "client_secret",
-				RedirectURL:  "http://localhost/auth/callback",
+				RedirectURL:  "/auth/callback",
 				Scopes:       []string{"email"},
 				Endpoint: oauth2.Endpoint{
 					AuthURL:   "http://localhost/auth",
@@ -74,7 +74,7 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 				},
 			})
 			rr := httptest.NewRecorder()
-			handler.ServeHTTP(rr, &http.Request{})
+			handler.ServeHTTP(rr, &http.Request{URL: &url.URL{Scheme: "http", Host: "localhost"}})
 
 			response := rr.Result()
 			s.Equal(http.StatusTemporaryRedirect, response.StatusCode)
@@ -110,7 +110,7 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginFailure() {
 	slogger := slog.New(slog.NewTextHandler(w, nil))
 	sesh := gosesh.New(nil, nil, gosesh.WithLogger(slogger))
 	rr := httptest.NewRecorder()
-	sesh.OAuth2Begin(&oauth2.Config{})(rr, &http.Request{})
+	sesh.OAuth2Begin(&oauth2.Config{})(rr, &http.Request{URL: &url.URL{Scheme: "http", Host: "localhost"}})
 	response := rr.Result()
 	s.Equal(http.StatusInternalServerError, response.StatusCode)
 	s.Equal("failed to create OAuth2 state\n", rr.Body.String())

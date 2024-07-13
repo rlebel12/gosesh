@@ -16,3 +16,8 @@ func TestGoseshScheme(t *testing.T) {
 	sesh := gosesh.New(nil, nil)
 	assert.Equal(t, "http", sesh.Scheme())
 }
+
+func TestWithCookieDomain(t *testing.T) {
+	sesh := gosesh.New(nil, nil, gosesh.WithCookieDomain("example.com"))
+	assert.Equal(t, "example.com", sesh.CookieDomain)
+}
