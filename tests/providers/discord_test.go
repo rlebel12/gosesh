@@ -44,7 +44,7 @@ func (s *DiscordSuite) TestNewDiscord() {
 			s.Equal(&oauth2.Config{
 				ClientID:     "clientID",
 				ClientSecret: "clientSecret",
-				RedirectURL:  "/callback",
+				RedirectURL:  "http://localhost/callback",
 				Scopes:       test.expectedScopes,
 				Endpoint: oauth2.Endpoint{
 					AuthURL:   "https://discord.com/oauth2/authorize",
@@ -161,5 +161,7 @@ func TestDiscordSuite(t *testing.T) {
 
 func newGosesher(t *testing.T) *mock_providers.Gosesher {
 	sesh := mock_providers.NewGosesher(t)
+	sesh.EXPECT().Scheme().Return("http")
+	sesh.EXPECT().Host().Return("localhost")
 	return sesh
 }

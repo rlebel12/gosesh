@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -16,10 +15,6 @@ import (
 
 func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(oauthCfg.RedirectURL, "://") {
-			oauthCfg.RedirectURL = fmt.Sprintf("%s://%s%s", r.URL.Scheme, r.URL.Host, oauthCfg.RedirectURL)
-		}
-
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
 			gs.logError("failed to create OAuth2 state", "err", err)
