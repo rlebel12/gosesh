@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -45,21 +46,34 @@ func (s *Oauth2BeginHandlerSuite) TearDownSuite() {
 
 func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
-	for name, test := range map[string]struct {
+	for _, test := range []struct {
+		name   string
 		secure bool
 	}{
-		"insecure": {secure: false},
-		"secure":   {secure: true},
+		{"insecure", false},
+		{"secure", true},
 	} {
-		s.Run(name, func() {
+		s.Run(test.name, func() {
+			const authURL = "http://localhost/auth"
+
+			var hostURL *url.URL
+			var err error
+			r := new(http.Request)
+
+			switch test.secure {
+			case true:
+				hostURL, err = hostURL.Parse("https://localhost")
+				r.TLS = &tls.ConnectionState{}
+			default:
+				hostURL, err = hostURL.Parse("http://localhost")
+			}
+			s.Require().NoError(err)
+			r.Host = hostURL.Host
+
 			opts := []gosesh.NewOpts{
 				gosesh.WithNow(func() time.Time { return now }),
 				gosesh.WithOAuth2StateCookieName("customStateName"),
-			}
-			if test.secure {
-				url, err := url.Parse("https://localhost")
-				s.Require().NoError(err)
-				opts = append(opts, gosesh.WithOrigin(url))
+				gosesh.WithOrigin(hostURL),
 			}
 			sesh := gosesh.New(nil, nil, opts...)
 			handler := sesh.OAuth2Begin(&oauth2.Config{
@@ -68,13 +82,13 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 				RedirectURL:  "/auth/callback",
 				Scopes:       []string{"email"},
 				Endpoint: oauth2.Endpoint{
-					AuthURL:   "http://localhost/auth",
+					AuthURL:   authURL,
 					TokenURL:  "http://localhost/token",
 					AuthStyle: oauth2.AuthStyleInParams,
 				},
 			})
 			rr := httptest.NewRecorder()
-			handler.ServeHTTP(rr, &http.Request{URL: &url.URL{Scheme: "http", Host: "localhost"}})
+			handler.ServeHTTP(rr, r)
 
 			response := rr.Result()
 			s.Equal(http.StatusTemporaryRedirect, response.StatusCode)
@@ -88,7 +102,7 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 			s.Equal(http.SameSiteLaxMode, cookie.SameSite)
 			s.Equal(test.secure, cookie.Secure)
 			s.Equal(
-				"http://localhost/auth?client_id=client_id&redirect_uri=http%3A%2F%2Flocalhost%2Fauth%2Fcallback&response_type=code&scope=email&state=ZGV0ZXJtaW5pc3RpYyByYQ%3D%3D",
+				authURL+"?client_id=client_id&redirect_uri="+hostURL.Scheme+"%3A%2F%2Flocalhost%2Fauth%2Fcallback&response_type=code&scope=email&state=ZGV0ZXJtaW5pc3RpYyByYQ%3D%3D",
 				response.Header.Get("Location"),
 			)
 		})
