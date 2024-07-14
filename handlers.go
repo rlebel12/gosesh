@@ -17,11 +17,7 @@ import (
 func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(oauthCfg.RedirectURL, "://") {
-			scheme := "http"
-			if r.TLS != nil {
-				scheme += "s"
-			}
-			oauthCfg.RedirectURL = fmt.Sprintf("%s://%s%s", scheme, r.Host, oauthCfg.RedirectURL)
+			oauthCfg.RedirectURL = fmt.Sprintf("%s://%s%s", r.URL.Scheme, r.URL.Host, oauthCfg.RedirectURL)
 		}
 
 		b := make([]byte, 16)
