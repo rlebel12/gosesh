@@ -38,25 +38,25 @@ func (p *Google) OAuth2Begin() http.HandlerFunc {
 }
 
 func (p *Google) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
-	return p.sesh.OAuth2Callback(new(googleUser), p.cfg, handler)
+	return p.sesh.OAuth2Callback(new(GoogleUser), p.cfg, handler)
 }
 
-type googleUser struct {
+type GoogleUser struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
 	Picture       string `json:"picture"`
 }
 
-func (*googleUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+func (*GoogleUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
 	const oauthGoogleUrlAPI = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
 	return http.Get(oauthGoogleUrlAPI + accessToken)
 }
 
-func (user *googleUser) Unmarshal(b []byte) error {
+func (user *GoogleUser) Unmarshal(b []byte) error {
 	return json.Unmarshal(b, user)
 }
 
-func (user *googleUser) String() string {
-	return user.ID
+func (user *GoogleUser) String() string {
+	return user.Email
 }
