@@ -9,6 +9,39 @@ import (
 	"time"
 )
 
+type (
+	Gosesh struct {
+		store                 Storer
+		identifierFromBytes   IDParser
+		logger                *slog.Logger
+		origin                *url.URL
+		sessionCookieName     string
+		oAuth2StateCookieName string
+		sessionIdleDuration   time.Duration
+		sessionActiveDuration time.Duration
+		now                   func() time.Time
+		cookieDomain          func() string
+	}
+
+	IDParser func([]byte) (Identifier, error)
+
+	Identifier interface {
+		fmt.Stringer
+	}
+)
+
+func (gs *Gosesh) Host() string {
+	return gs.origin.Host
+}
+
+func (gs *Gosesh) Scheme() string {
+	return gs.origin.Scheme
+}
+
+func (gs *Gosesh) CookieDomain() string {
+	return gs.cookieDomain()
+}
+
 func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 	url, _ := url.Parse("http://localhost")
 	gs := &Gosesh{
@@ -19,9 +52,9 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 		sessionIdleDuration:   24 * time.Hour,
 		sessionActiveDuration: 1 * time.Hour,
 		origin:                url,
-		CookieDomain:          url.Hostname(),
 		now:                   time.Now,
 	}
+	gs.cookieDomain = func() string { return gs.origin.Hostname() }
 	for _, opt := range opts {
 		opt(gs)
 	}
@@ -65,40 +98,13 @@ func WithOrigin(origin *url.URL) func(*Gosesh) {
 	}
 }
 
-func WithCookieDomain(domain string) func(*Gosesh) {
+func WithCookieDomain(fn func(*Gosesh) func() string) func(*Gosesh) {
 	return func(c *Gosesh) {
-		c.CookieDomain = domain
+		c.cookieDomain = fn(c)
 	}
-}
-
-func (gs *Gosesh) Host() string {
-	return gs.origin.Host
-}
-
-func (gs *Gosesh) Scheme() string {
-	return gs.origin.Scheme
 }
 
 type (
-	Gosesh struct {
-		store                 Storer
-		identifierFromBytes   IDParser
-		logger                *slog.Logger
-		origin                *url.URL
-		sessionCookieName     string
-		oAuth2StateCookieName string
-		sessionIdleDuration   time.Duration
-		sessionActiveDuration time.Duration
-		now                   func() time.Time
-		CookieDomain          string
-	}
-
-	IDParser func([]byte) (Identifier, error)
-
-	Identifier interface {
-		fmt.Stringer
-	}
-
 	Storer interface {
 		UpsertUser(ctx context.Context, user OAuth2User) (Identifier, error)
 		CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error)

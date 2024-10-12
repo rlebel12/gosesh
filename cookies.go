@@ -11,7 +11,7 @@ func (gs *Gosesh) oauthStateCookie(value string, expires time.Time) http.Cookie 
 	return http.Cookie{
 		Name:     gs.oAuth2StateCookieName,
 		Value:    value,
-		Domain:   gs.CookieDomain,
+		Domain:   gs.CookieDomain(),
 		Path:     "/",
 		Expires:  expires,
 		SameSite: http.SameSiteLaxMode,
@@ -24,7 +24,7 @@ func (gs *Gosesh) sessionCookie(identifier Identifier, expires time.Time) http.C
 	return http.Cookie{
 		Name:     gs.sessionCookieName,
 		Value:    base64.URLEncoding.EncodeToString([]byte(identifier.String())),
-		Domain:   gs.CookieDomain,
+		Domain:   gs.CookieDomain(),
 		Path:     "/",
 		Expires:  expires,
 		SameSite: http.SameSiteLaxMode,

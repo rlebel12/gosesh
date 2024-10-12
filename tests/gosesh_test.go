@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/rlebel12/gosesh"
@@ -18,6 +19,13 @@ func TestGoseshScheme(t *testing.T) {
 }
 
 func TestWithCookieDomain(t *testing.T) {
-	sesh := gosesh.New(nil, nil, gosesh.WithCookieDomain("example.com"))
-	assert.Equal(t, "example.com", sesh.CookieDomain)
+	origin, _ := url.Parse("https://example.com")
+	sesh := gosesh.New(nil, nil,
+		gosesh.WithOrigin(origin),
+		gosesh.WithCookieDomain(func(g *gosesh.Gosesh) func() string {
+			return func() string {
+				return "test." + g.Host()
+			}
+		}))
+	assert.Equal(t, "test.example.com", sesh.CookieDomain())
 }

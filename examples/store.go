@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/rlebel12/gosesh"
 	"github.com/rlebel12/gosesh/providers"
 )
@@ -15,24 +17,31 @@ var sequenceID int
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		Users:    map[gosesh.Identifier]*CustomIdentifier{},
-		Sessions: map[gosesh.Identifier]*gosesh.Session{},
+		Sessions: map[gosesh.Identifier]*Session{},
 	}
 }
 
 type (
+	MemoryStore struct {
+		Users    map[gosesh.Identifier]*CustomIdentifier
+		Sessions map[gosesh.Identifier]*Session
+	}
+
 	CustomIdentifier struct {
 		id    int
 		email string
 	}
+
+	Session struct {
+		id       uuid.UUID
+		userID   CustomIdentifier
+		idleAt   time.Time
+		expireAt time.Time
+	}
 )
 
-func (ci *CustomIdentifier) String() string {
+func (ci CustomIdentifier) String() string {
 	return fmt.Sprintf("%d (%s)", ci.id, ci.email)
-}
-
-type MemoryStore struct {
-	Users    map[gosesh.Identifier]*CustomIdentifier
-	Sessions map[gosesh.Identifier]*gosesh.Session
 }
 
 func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
@@ -57,21 +66,22 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (
 	return u, nil
 }
 
-func (ms *MemoryStore) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (*gosesh.Session, error) {
-	s := &gosesh.Session{
-		ID: &CustomIdentifier{
-			id:    sequenceID,
-			email: "foo",
-		},
-		UserID:   req.UserID,
-		IdleAt:   req.IdleAt,
-		ExpireAt: req.ExpireAt,
+func (ms *MemoryStore) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (gosesh.Session, error) {
+	userID, ok := req.UserID.(CustomIdentifier)
+	if !ok {
+		return nil, errors.New("invalid user id")
 	}
-	ms.Sessions[s.ID] = s
+	s := &Session{
+		id:       uuid.New(),
+		userID:   userID,
+		idleAt:   req.IdleAt,
+		expireAt: req.ExpireAt,
+	}
+	ms.Sessions[s.ID()] = s
 	return s, nil
 }
 
-func (ms *MemoryStore) GetSession(ctx context.Context, sessionID gosesh.Identifier) (*gosesh.Session, error) {
+func (ms *MemoryStore) GetSession(ctx context.Context, sessionID gosesh.Identifier) (gosesh.Session, error) {
 	s, ok := ms.Sessions[sessionID]
 	if !ok {
 		return nil, errors.New("session not found")
@@ -79,14 +89,14 @@ func (ms *MemoryStore) GetSession(ctx context.Context, sessionID gosesh.Identifi
 	return s, nil
 }
 
-func (ms *MemoryStore) UpdateSession(ctx context.Context, sessionID gosesh.Identifier, req gosesh.UpdateSessionValues) (*gosesh.Session, error) {
+func (ms *MemoryStore) UpdateSession(ctx context.Context, sessionID gosesh.Identifier, req gosesh.UpdateSessionValues) (gosesh.Session, error) {
 	s, ok := ms.Sessions[sessionID]
 	if !ok {
 		return nil, errors.New("session not found")
 	}
-	s.IdleAt = req.IdleAt
-	s.ExpireAt = req.ExpireAt
-	ms.Sessions[s.ID] = s
+	s.idleAt = req.IdleAt
+	s.expireAt = req.ExpireAt
+	ms.Sessions[s.id] = s
 	return s, nil
 }
 
@@ -98,10 +108,26 @@ func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID gosesh.Ident
 func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID gosesh.Identifier) (int, error) {
 	var count int
 	for _, s := range ms.Sessions {
-		if s.UserID == userID {
-			delete(ms.Sessions, s.ID)
+		if s.UserID() == userID {
+			delete(ms.Sessions, s.ID())
 			count++
 		}
 	}
 	return count, nil
+}
+
+func (s Session) ID() gosesh.Identifier {
+	return s.id
+}
+
+func (s Session) UserID() gosesh.Identifier {
+	return s.userID
+}
+
+func (s Session) IdleAt() time.Time {
+	return s.idleAt
+}
+
+func (s Session) ExpireAt() time.Time {
+	return s.expireAt
 }
