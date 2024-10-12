@@ -101,18 +101,18 @@ type (
 
 	Storer interface {
 		UpsertUser(ctx context.Context, user OAuth2User) (Identifier, error)
-		CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
-		GetSession(ctx context.Context, sessionID Identifier) (*Session, error)
-		UpdateSession(ctx context.Context, sessionID Identifier, req UpdateSessionValues) (*Session, error)
+		CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error)
+		GetSession(ctx context.Context, sessionID Identifier) (Session, error)
+		UpdateSession(ctx context.Context, sessionID Identifier, req UpdateSessionValues) (Session, error)
 		DeleteSession(ctx context.Context, sessionID Identifier) error
 		DeleteUserSessions(ctx context.Context, userID Identifier) (int, error)
 	}
 
-	Session struct {
-		ID       Identifier
-		UserID   Identifier
-		IdleAt   time.Time
-		ExpireAt time.Time
+	Session interface {
+		ID() Identifier
+		UserID() Identifier
+		IdleAt() time.Time
+		ExpireAt() time.Time
 	}
 
 	CreateSessionRequest struct {

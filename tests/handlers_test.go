@@ -255,12 +255,11 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(mode testCallbackRequestMode) (
 			Return(nil, fmt.Errorf("failed create session"))
 		return
 	}
-	store.EXPECT().CreateSession(r.Context(), createSessionRequest).Return(&gosesh.Session{
-		ID:       identifier,
-		UserID:   identifier,
-		IdleAt:   s.now.Add(1 * time.Hour),
-		ExpireAt: s.now.Add(24 * time.Hour),
-	}, nil)
+
+	session := mock_gosesh.NewSession(s.T())
+	session.EXPECT().ID().Return(identifier)
+	session.EXPECT().ExpireAt().Return(s.now.Add(24 * time.Hour))
+	store.EXPECT().CreateSession(r.Context(), createSessionRequest).Return(session, nil)
 
 	return
 }
@@ -428,7 +427,7 @@ type logoutTest struct {
 	w          *httptest.ResponseRecorder
 	handler    *mock_gosesh.HandlerDone
 	identifier *mock_gosesh.Identifier
-	session    *gosesh.Session
+	session    *mock_gosesh.Session
 }
 
 func prepareLogoutTest(t *testing.T) *logoutTest {
@@ -472,14 +471,11 @@ func (t *logoutTest) succeedParsingID() {
 }
 
 // Returns the original request
-func (t *logoutTest) authenticated() *http.Request {
+func (t *logoutTest) authenticated(test *testing.T) *http.Request {
 	original := t.r
-	t.session = &gosesh.Session{
-		ID:       t.identifier,
-		UserID:   t.identifier,
-		IdleAt:   t.now().UTC().Add(1 * time.Hour),
-		ExpireAt: t.now().UTC().Add(24 * time.Hour),
-	}
+	session := mock_gosesh.NewSession(test)
+	t.session = session
+
 	t.identifier.EXPECT().String().Return("identifier")
 	ctx := context.WithValue(t.r.Context(), gosesh.SessionContextKey, t.session)
 	t.r = t.r.WithContext(ctx)
@@ -539,12 +535,9 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("session expired", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 		test.succeedParsingID()
-		test.store.EXPECT().GetSession(test.r.Context(), test.identifier).Return(&gosesh.Session{
-			ID:       test.identifier,
-			UserID:   test.identifier,
-			IdleAt:   test.now().UTC().Add(-1 * time.Hour),
-			ExpireAt: test.now().UTC().Add(-1 * time.Hour),
-		}, nil)
+		session := mock_gosesh.NewSession(t)
+		session.EXPECT().ExpireAt().Return(test.now().UTC().Add(-1 * time.Hour))
+		test.store.EXPECT().GetSession(test.r.Context(), test.identifier).Return(session, nil)
 		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
@@ -555,7 +548,8 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("failed deleting one session", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		test.authenticated()
+		test.authenticated(t)
+		test.session.EXPECT().ID().Return(test.identifier)
 		err := fmt.Errorf("failed delete session")
 		test.store.EXPECT().DeleteSession(test.r.Context(), test.identifier).Return(err)
 		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
@@ -569,7 +563,9 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("failed deleting all sessions", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		test.authenticated()
+		test.authenticated(t)
+		test.session.EXPECT().UserID().Return(test.identifier)
+
 		err := fmt.Errorf("failed delete session")
 		test.store.EXPECT().DeleteUserSessions(test.r.Context(), test.identifier).Return(0, err)
 		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
@@ -587,7 +583,8 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("success deleting one session", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		doneR := test.authenticated().WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
+		doneR := test.authenticated(t).WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
+		test.session.EXPECT().ID().Return(test.identifier)
 		test.store.EXPECT().DeleteSession(test.r.Context(), test.identifier).Return(nil)
 		test.handler.On("Execute", test.w, doneR, nil).Run(func(args mock.Arguments) {
 			assert.Nil(args.Get(2))
@@ -601,7 +598,8 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("success deleting all sessions", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		doneR := test.authenticated().WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
+		doneR := test.authenticated(t).WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
+		test.session.EXPECT().UserID().Return(test.identifier)
 		test.store.EXPECT().DeleteUserSessions(test.r.Context(), test.identifier).Return(0, nil)
 		test.handler.On("Execute", test.w, doneR, nil).Run(func(args mock.Arguments) {
 			assert.Nil(args.Get(2))

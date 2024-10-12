@@ -31,62 +31,62 @@ type (
 
 func (s *Store) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
 	id, err := s.repo.UpsertUser(ctx, user.String())
-	return s.uuidFromPGTYPE(id), err
+	return uuidFromPGTYPE(id), err
 }
 
-func (s *Store) CreateSession(ctx context.Context, r gosesh.CreateSessionRequest) (*gosesh.Session, error) {
-	userID, err := s.identifierToUUID(r.UserID)
+func (s *Store) CreateSession(ctx context.Context, r gosesh.CreateSessionRequest) (gosesh.Session, error) {
+	userID, err := identifierToUUID(r.UserID)
 	if err != nil {
 		return nil, err
 	}
 
 	params := sqlc.CreateSessionParams{
-		UserID:   s.uuidToPGTYPE(userID),
-		IdleAt:   s.timestampToPGTYPE(r.IdleAt),
-		ExpireAt: s.timestampToPGTYPE(r.ExpireAt),
+		UserID:   uuidToPGTYPE(userID),
+		IdleAt:   timestampToPGTYPE(r.IdleAt),
+		ExpireAt: timestampToPGTYPE(r.ExpireAt),
 	}
 	session, err := s.repo.CreateSession(ctx, params)
-	return s.sessionToGosesh(session), err
+	return sessionToGosesh(session), err
 }
 
-func (s *Store) GetSession(ctx context.Context, identifier gosesh.Identifier) (*gosesh.Session, error) {
-	id, err := s.identifierToUUID(identifier)
+func (s *Store) GetSession(ctx context.Context, identifier gosesh.Identifier) (gosesh.Session, error) {
+	id, err := identifierToUUID(identifier)
 	if err != nil {
 		return nil, err
 	}
 
-	session, err := s.repo.GetSession(ctx, s.uuidToPGTYPE(id))
+	session, err := s.repo.GetSession(ctx, uuidToPGTYPE(id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
-	return s.sessionToGosesh(session), nil
+	return sessionToGosesh(session), nil
 }
 
-func (s *Store) UpdateSession(ctx context.Context, identifier gosesh.Identifier, r gosesh.UpdateSessionValues) (*gosesh.Session, error) {
-	id, err := s.identifierToUUID(identifier)
+func (s *Store) UpdateSession(ctx context.Context, identifier gosesh.Identifier, r gosesh.UpdateSessionValues) (gosesh.Session, error) {
+	id, err := identifierToUUID(identifier)
 	if err != nil {
 		return nil, err
 	}
 
 	params := sqlc.UpdateSessionParams{
-		ID:       s.uuidToPGTYPE(id),
-		IdleAt:   s.timestampToPGTYPE(r.IdleAt),
-		ExpireAt: s.timestampToPGTYPE(r.ExpireAt),
+		ID:       uuidToPGTYPE(id),
+		IdleAt:   timestampToPGTYPE(r.IdleAt),
+		ExpireAt: timestampToPGTYPE(r.ExpireAt),
 	}
 	session, err := s.repo.UpdateSession(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update session: %w", err)
 	}
 
-	return s.sessionToGosesh(session), nil
+	return sessionToGosesh(session), nil
 }
 
 func (s *Store) DeleteSession(ctx context.Context, identifier gosesh.Identifier) error {
-	id, err := s.identifierToUUID(identifier)
+	id, err := identifierToUUID(identifier)
 	if err != nil {
 		return err
 	}
-	count, err := s.repo.DeleteSession(ctx, s.uuidToPGTYPE(id))
+	count, err := s.repo.DeleteSession(ctx, uuidToPGTYPE(id))
 	if count == 0 {
 		return fmt.Errorf("failed to delete session: no rows in result set")
 	}
@@ -94,24 +94,41 @@ func (s *Store) DeleteSession(ctx context.Context, identifier gosesh.Identifier)
 }
 
 func (s *Store) DeleteUserSessions(ctx context.Context, identifier gosesh.Identifier) (int, error) {
-	id, err := s.identifierToUUID(identifier)
+	id, err := identifierToUUID(identifier)
 	if err != nil {
 		return 0, err
 	}
-	result, err := s.repo.DeleteUserSessions(ctx, s.uuidToPGTYPE(id))
+	result, err := s.repo.DeleteUserSessions(ctx, uuidToPGTYPE(id))
 	return int(result), err
 }
 
-func (s *Store) sessionToGosesh(sess sqlc.Session) *gosesh.Session {
-	return &gosesh.Session{
-		ID:       s.uuidFromPGTYPE(sess.ID),
-		UserID:   s.uuidFromPGTYPE(sess.UserID),
-		IdleAt:   sess.IdleAt.Time,
-		ExpireAt: sess.ExpireAt.Time,
+type Session struct {
+	sqlc.Session
+}
+
+func (s Session) ID() gosesh.Identifier {
+	return uuidFromPGTYPE(s.Session.ID)
+}
+
+func (s Session) UserID() gosesh.Identifier {
+	return uuidFromPGTYPE(s.Session.UserID)
+}
+
+func (s Session) IdleAt() time.Time {
+	return s.Session.IdleAt.Time
+}
+
+func (s Session) ExpireAt() time.Time {
+	return s.Session.ExpireAt.Time
+}
+
+func sessionToGosesh(sess sqlc.Session) gosesh.Session {
+	return Session{
+		Session: sess,
 	}
 }
 
-func (s *Store) identifierToUUID(identifier gosesh.Identifier) (uuid.UUID, error) {
+func identifierToUUID(identifier gosesh.Identifier) (uuid.UUID, error) {
 	id, err := uuid.Parse(identifier.String())
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to parse identifier: %w", err)
@@ -119,18 +136,18 @@ func (s *Store) identifierToUUID(identifier gosesh.Identifier) (uuid.UUID, error
 	return id, nil
 }
 
-func (s *Store) uuidFromPGTYPE(id pgtype.UUID) uuid.UUID {
+func uuidFromPGTYPE(id pgtype.UUID) uuid.UUID {
 	return uuid.UUID(id.Bytes)
 }
 
-func (s *Store) timestampToPGTYPE(ts time.Time) pgtype.Timestamptz {
+func timestampToPGTYPE(ts time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{
 		Time:  ts,
 		Valid: true,
 	}
 }
 
-func (s *Store) uuidToPGTYPE(id uuid.UUID) pgtype.UUID {
+func uuidToPGTYPE(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{
 		Bytes: id,
 		Valid: true,

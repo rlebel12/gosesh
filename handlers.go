@@ -96,7 +96,7 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, done Ha
 			return
 		}
 
-		sessionCookie := gs.sessionCookie(session.ID, session.ExpireAt)
+		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
 		http.SetCookie(w, &sessionCookie)
 		done(w, r, nil)
 	}
@@ -137,9 +137,9 @@ func (gs *Gosesh) Logout(done HandlerDone) http.HandlerFunc {
 		var err error
 		switch {
 		case r.URL.Query().Get("all") != "":
-			_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID)
+			_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID())
 		default:
-			err = gs.store.DeleteSession(r.Context(), session.ID)
+			err = gs.store.DeleteSession(r.Context(), session.ID())
 		}
 		if err != nil {
 			gs.logError("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")

@@ -23,23 +23,23 @@ func (_m *Storer) EXPECT() *Storer_Expecter {
 }
 
 // CreateSession provides a mock function with given fields: ctx, req
-func (_m *Storer) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (*gosesh.Session, error) {
+func (_m *Storer) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (gosesh.Session, error) {
 	ret := _m.Called(ctx, req)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateSession")
 	}
 
-	var r0 *gosesh.Session
+	var r0 gosesh.Session
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.CreateSessionRequest) (*gosesh.Session, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, gosesh.CreateSessionRequest) (gosesh.Session, error)); ok {
 		return rf(ctx, req)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.CreateSessionRequest) *gosesh.Session); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, gosesh.CreateSessionRequest) gosesh.Session); ok {
 		r0 = rf(ctx, req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*gosesh.Session)
+			r0 = ret.Get(0).(gosesh.Session)
 		}
 	}
 
@@ -71,12 +71,12 @@ func (_c *Storer_CreateSession_Call) Run(run func(ctx context.Context, req goses
 	return _c
 }
 
-func (_c *Storer_CreateSession_Call) Return(_a0 *gosesh.Session, _a1 error) *Storer_CreateSession_Call {
+func (_c *Storer_CreateSession_Call) Return(_a0 gosesh.Session, _a1 error) *Storer_CreateSession_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Storer_CreateSession_Call) RunAndReturn(run func(context.Context, gosesh.CreateSessionRequest) (*gosesh.Session, error)) *Storer_CreateSession_Call {
+func (_c *Storer_CreateSession_Call) RunAndReturn(run func(context.Context, gosesh.CreateSessionRequest) (gosesh.Session, error)) *Storer_CreateSession_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -186,23 +186,23 @@ func (_c *Storer_DeleteUserSessions_Call) RunAndReturn(run func(context.Context,
 }
 
 // GetSession provides a mock function with given fields: ctx, sessionID
-func (_m *Storer) GetSession(ctx context.Context, sessionID gosesh.Identifier) (*gosesh.Session, error) {
+func (_m *Storer) GetSession(ctx context.Context, sessionID gosesh.Identifier) (gosesh.Session, error) {
 	ret := _m.Called(ctx, sessionID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetSession")
 	}
 
-	var r0 *gosesh.Session
+	var r0 gosesh.Session
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier) (*gosesh.Session, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier) (gosesh.Session, error)); ok {
 		return rf(ctx, sessionID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier) *gosesh.Session); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier) gosesh.Session); ok {
 		r0 = rf(ctx, sessionID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*gosesh.Session)
+			r0 = ret.Get(0).(gosesh.Session)
 		}
 	}
 
@@ -234,34 +234,34 @@ func (_c *Storer_GetSession_Call) Run(run func(ctx context.Context, sessionID go
 	return _c
 }
 
-func (_c *Storer_GetSession_Call) Return(_a0 *gosesh.Session, _a1 error) *Storer_GetSession_Call {
+func (_c *Storer_GetSession_Call) Return(_a0 gosesh.Session, _a1 error) *Storer_GetSession_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Storer_GetSession_Call) RunAndReturn(run func(context.Context, gosesh.Identifier) (*gosesh.Session, error)) *Storer_GetSession_Call {
+func (_c *Storer_GetSession_Call) RunAndReturn(run func(context.Context, gosesh.Identifier) (gosesh.Session, error)) *Storer_GetSession_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // UpdateSession provides a mock function with given fields: ctx, sessionID, req
-func (_m *Storer) UpdateSession(ctx context.Context, sessionID gosesh.Identifier, req gosesh.UpdateSessionValues) (*gosesh.Session, error) {
+func (_m *Storer) UpdateSession(ctx context.Context, sessionID gosesh.Identifier, req gosesh.UpdateSessionValues) (gosesh.Session, error) {
 	ret := _m.Called(ctx, sessionID, req)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateSession")
 	}
 
-	var r0 *gosesh.Session
+	var r0 gosesh.Session
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) (*gosesh.Session, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) (gosesh.Session, error)); ok {
 		return rf(ctx, sessionID, req)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) *gosesh.Session); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) gosesh.Session); ok {
 		r0 = rf(ctx, sessionID, req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*gosesh.Session)
+			r0 = ret.Get(0).(gosesh.Session)
 		}
 	}
 
@@ -294,12 +294,12 @@ func (_c *Storer_UpdateSession_Call) Run(run func(ctx context.Context, sessionID
 	return _c
 }
 
-func (_c *Storer_UpdateSession_Call) Return(_a0 *gosesh.Session, _a1 error) *Storer_UpdateSession_Call {
+func (_c *Storer_UpdateSession_Call) Return(_a0 gosesh.Session, _a1 error) *Storer_UpdateSession_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Storer_UpdateSession_Call) RunAndReturn(run func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) (*gosesh.Session, error)) *Storer_UpdateSession_Call {
+func (_c *Storer_UpdateSession_Call) RunAndReturn(run func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) (gosesh.Session, error)) *Storer_UpdateSession_Call {
 	_c.Call.Return(run)
 	return _c
 }

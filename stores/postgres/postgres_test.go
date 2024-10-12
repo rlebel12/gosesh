@@ -117,9 +117,9 @@ func (s *TestPostgresSuite) TestCreateSession() {
 		})
 		s.Require().NoError(err)
 		s.Require().NotNil(session)
-		s.Equal(identifier.String(), session.UserID.String())
-		s.Equal(idleAt, session.IdleAt)
-		s.Equal(expireAt, session.ExpireAt)
+		s.Equal(identifier.String(), session.UserID().String())
+		s.Equal(idleAt, session.IdleAt())
+		s.Equal(expireAt, session.ExpireAt())
 	})
 }
 
@@ -159,12 +159,12 @@ func (s *TestPostgresSuite) TestGetSession() {
 		})
 		s.Require().NoError(err)
 
-		actual, err := s.store.GetSession(ctx, session.ID)
+		actual, err := s.store.GetSession(ctx, session.ID())
 		s.Require().NoError(err)
 		s.Require().NotNil(actual)
-		s.Equal(identifier.String(), actual.UserID.String())
-		s.Equal(idleAt, actual.IdleAt)
-		s.Equal(expireAt, actual.ExpireAt)
+		s.Equal(identifier.String(), actual.UserID().String())
+		s.Equal(idleAt, actual.IdleAt())
+		s.Equal(expireAt, actual.ExpireAt())
 	})
 }
 
@@ -206,15 +206,15 @@ func (s *TestPostgresSuite) TestUpdateSession() {
 
 		newIdleAt := now.Add(time.Minute)
 		newExpireAt := now.Add(time.Hour * 2)
-		actual, err := s.store.UpdateSession(ctx, session.ID, gosesh.UpdateSessionValues{
+		actual, err := s.store.UpdateSession(ctx, session.ID(), gosesh.UpdateSessionValues{
 			IdleAt:   newIdleAt,
 			ExpireAt: newExpireAt,
 		})
 		s.Require().NoError(err)
 		s.Require().NotNil(actual)
-		s.Equal(identifier.String(), actual.UserID.String())
-		s.Equal(newIdleAt, actual.IdleAt)
-		s.Equal(newExpireAt, actual.ExpireAt)
+		s.Equal(identifier.String(), actual.UserID().String())
+		s.Equal(newIdleAt, actual.IdleAt())
+		s.Equal(newExpireAt, actual.ExpireAt())
 	})
 }
 
@@ -254,10 +254,10 @@ func (s *TestPostgresSuite) TestDeleteSession() {
 		})
 		s.Require().NoError(err)
 
-		err = s.store.DeleteSession(ctx, session.ID)
+		err = s.store.DeleteSession(ctx, session.ID())
 		s.Require().NoError(err)
 
-		_, err = s.store.GetSession(ctx, session.ID)
+		_, err = s.store.GetSession(ctx, session.ID())
 		s.EqualError(err, "failed to get session: no rows in result set")
 	})
 }
@@ -303,7 +303,7 @@ func (s *TestPostgresSuite) TestDeleteUserSessions() {
 		s.Require().NoError(err)
 		s.Equal(1, count)
 
-		_, err = s.store.GetSession(ctx, session.ID)
+		_, err = s.store.GetSession(ctx, session.ID())
 		s.EqualError(err, "failed to get session: no rows in result set")
 	})
 

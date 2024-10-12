@@ -27,13 +27,13 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 		}
 
 		now := gs.now().UTC()
-		if session.IdleAt.After(now) {
+		if session.IdleAt().After(now) {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		ctx := r.Context()
-		session, err := gs.store.UpdateSession(ctx, session.ID, UpdateSessionValues{
+		session, err := gs.store.UpdateSession(ctx, session.ID(), UpdateSessionValues{
 			IdleAt:   now.Add(gs.sessionActiveDuration),
 			ExpireAt: now.Add(gs.sessionIdleDuration),
 		})
@@ -43,7 +43,7 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		sessionCookie := gs.sessionCookie(session.ID, session.ExpireAt)
+		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
 		http.SetCookie(w, &sessionCookie)
 
 		ctx = context.WithValue(ctx, SessionContextKey, session)
@@ -64,8 +64,8 @@ func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
 	})
 }
 
-func CurrentSession(r *http.Request) (*Session, bool) {
-	session, ok := r.Context().Value(SessionContextKey).(*Session)
+func CurrentSession(r *http.Request) (Session, bool) {
+	session, ok := r.Context().Value(SessionContextKey).(Session)
 	return session, ok
 }
 
@@ -89,7 +89,7 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 		return r
 	}
 
-	if session.ExpireAt.Before(gs.now().UTC()) {
+	if session.ExpireAt().Before(gs.now().UTC()) {
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}

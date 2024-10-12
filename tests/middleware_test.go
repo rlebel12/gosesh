@@ -54,17 +54,14 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				}
 
 				if test == CaseSessionActive {
-					session := &gosesh.Session{
-						IdleAt: now.Add(5 * time.Minute),
-					}
+					session := mock_gosesh.NewSession(t)
+					session.EXPECT().IdleAt().Return(now.Add(5 * time.Minute))
 					r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
 					return
 				}
-				session := &gosesh.Session{
-					ID:     identifier,
-					UserID: identifier,
-					IdleAt: now.Add(-5 * time.Minute),
-				}
+				session := mock_gosesh.NewSession(t)
+				session.EXPECT().ID().Return(identifier)
+				session.EXPECT().IdleAt().Return(now.Add(-5 * time.Minute))
 				identifier.EXPECT().String().Return("identifier")
 				r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
 
@@ -77,15 +74,13 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				}
 
 				if test == CaseSessionIdleSuccess {
+					session := mock_gosesh.NewSession(t)
+					session.EXPECT().ID().Return(identifier)
+					session.EXPECT().ExpireAt().Return(now.Add(85 * time.Minute))
 					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
 						IdleAt:   now.Add(17 * time.Minute),
 						ExpireAt: now.Add(85 * time.Minute),
-					}).Return(&gosesh.Session{
-						ID:       identifier,
-						UserID:   identifier,
-						IdleAt:   now.Add(17 * time.Minute),
-						ExpireAt: now.Add(85 * time.Minute),
-					}, nil)
+					}).Return(session, nil)
 				}
 			}()
 
@@ -119,17 +114,12 @@ func TestRequireAuthentication(t *testing.T) {
 	t.Run("authenticated", func(t *testing.T) {
 		store := mock_gosesh.NewStorer(t)
 		parser := mock_gosesh.NewIDParser(t)
-		identifier := mock_gosesh.NewIdentifier(t)
 		r, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(err)
 		sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
-		session := &gosesh.Session{
-			ID:     identifier,
-			UserID: identifier,
-			IdleAt: now.Add(-5 * time.Minute),
-		}
+		session := mock_gosesh.NewSession(t)
 		r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
 
 		handlerCalled := false
