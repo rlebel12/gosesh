@@ -13,8 +13,8 @@ import (
 // Creates a new Discord OAuth2 provider. redirectPath should have a leading slash.
 func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...DiscordOpt) *Discord {
 	oauth2Config := &oauth2.Config{
-		ClientID:     credentials.ClientID,
-		ClientSecret: credentials.ClientSecret,
+		ClientID:     credentials.ClientID(),
+		ClientSecret: credentials.ClientSecret(),
 		RedirectURL: fmt.Sprintf(
 			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
 		Scopes: scopes.strings(),

@@ -136,9 +136,9 @@ type (
 
 	NewOpts func(*Gosesh)
 
-	OAuth2Credentials struct {
-		ClientID     string
-		ClientSecret string
+	OAuth2Credentials interface {
+		ClientID() string
+		ClientSecret() string
 	}
 )
 

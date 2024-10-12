@@ -13,8 +13,8 @@ import (
 
 func NewGoogle(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2Credentials) GoogleProvider {
 	oauth2Config := &oauth2.Config{
-		ClientID:     providerConfig.ClientID,
-		ClientSecret: providerConfig.ClientSecret,
+		ClientID:     providerConfig.ClientID(),
+		ClientSecret: providerConfig.ClientSecret(),
 		RedirectURL: fmt.Sprintf(
 			"%s://%s/auth/google/callback", gs.Scheme(), gs.Host()),
 		Scopes: []string{

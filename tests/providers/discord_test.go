@@ -20,6 +20,19 @@ type DiscordSuite struct {
 	suite.Suite
 }
 
+type mockGoseshOAuth2Credentials struct {
+	clientID     string
+	clientSecret string
+}
+
+func (m mockGoseshOAuth2Credentials) ClientID() string {
+	return m.clientID
+}
+
+func (m mockGoseshOAuth2Credentials) ClientSecret() string {
+	return m.clientSecret
+}
+
 func (s *DiscordSuite) TestNewDiscord() {
 	for name, test := range map[string]struct {
 		scopes         providers.DiscordScopes
@@ -36,10 +49,7 @@ func (s *DiscordSuite) TestNewDiscord() {
 	} {
 		s.Run(name, func() {
 			sesh := newGosesher(s.T())
-			discord := providers.NewDiscord(sesh, test.scopes, gosesh.OAuth2Credentials{
-				ClientID:     "clientID",
-				ClientSecret: "clientSecret",
-			}, "/callback")
+			discord := providers.NewDiscord(sesh, test.scopes, mockGoseshOAuth2Credentials{"clientID", "clientSecret"}, "/callback")
 
 			s.Equal(&oauth2.Config{
 				ClientID:     "clientID",
@@ -58,7 +68,7 @@ func (s *DiscordSuite) TestNewDiscord() {
 
 func (s *DiscordSuite) TestOAuth2Begin() {
 	sesh := newGosesher(s.T())
-	discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, gosesh.OAuth2Credentials{}, "")
+	discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, mockGoseshOAuth2Credentials{}, "")
 	var called bool
 	sesh.EXPECT().OAuth2Begin(discord.Config).Return(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -69,7 +79,7 @@ func (s *DiscordSuite) TestOAuth2Begin() {
 
 func (s *DiscordSuite) TestOAuth2Callback() {
 	sesh := newGosesher(s.T())
-	discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, gosesh.OAuth2Credentials{}, "")
+	discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, mockGoseshOAuth2Credentials{}, "")
 	sesh.
 		EXPECT().
 		OAuth2Callback(discord.NewUser(), discord.Config, mock.AnythingOfType("gosesh.HandlerDone")).
@@ -144,7 +154,7 @@ func (s *DiscordSuite) TestDiscordUserString() {
 	} {
 		s.Run(name, func() {
 			sesh := newGosesher(s.T())
-			discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, gosesh.OAuth2Credentials{}, "", test.opts...)
+			discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, mockGoseshOAuth2Credentials{}, "", test.opts...)
 			user := &providers.DiscordUser{
 				ID:      userID,
 				Email:   userEmail,
