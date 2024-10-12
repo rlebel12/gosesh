@@ -10,6 +10,17 @@ import (
 	"golang.org/x/oauth2"
 )
 
+type (
+	Discord struct {
+		Gosesh      Gosesher
+		Config      *oauth2.Config
+		discordHost string
+		keyMode     discordKeyMode
+	}
+
+	DiscordOpt func(*Discord)
+)
+
 // Creates a new Discord OAuth2 provider. redirectPath should have a leading slash.
 func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...DiscordOpt) *Discord {
 	oauth2Config := &oauth2.Config{
@@ -42,18 +53,14 @@ func WithDiscordKeyMode(mode discordKeyMode) DiscordOpt {
 	}
 }
 
-type (
-	Discord struct {
-		Gosesh      Gosesher
-		Config      *oauth2.Config
-		discordHost string
-		keyMode     discordKeyMode
+// To help with testing, this function allows you to set the Discord host to a different value (i.e. httptest.Server.URL).
+func WithDiscodHost(host string) DiscordOpt {
+	return func(d *Discord) {
+		d.discordHost = host
 	}
+}
 
-	DiscordOpt func(*Discord)
-
-	discordKeyMode int
-)
+type discordKeyMode int
 
 const (
 	DiscordKeyModeID discordKeyMode = iota
@@ -69,7 +76,7 @@ func (d *Discord) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
 }
 
 func (d *Discord) NewUser() gosesh.OAuth2User {
-	return &DiscordUser{Discord: d, DiscordHost: "https://discord.com"}
+	return &DiscordUser{discord: d}
 }
 
 type DiscordScopes struct {
@@ -90,12 +97,11 @@ type DiscordUser struct {
 	Email    string `json:"email,omitempty"`
 	Verified bool   `json:"verified,omitempty"`
 
-	Discord     *Discord `json:"-"`
-	DiscordHost string   `json:"-"`
+	discord *Discord `json:"-"`
 }
 
 func (user *DiscordUser) String() string {
-	switch user.Discord.keyMode {
+	switch user.discord.keyMode {
 	case DiscordKeyModeID:
 		return user.ID
 	case DiscordKeyModeEmail:
@@ -106,7 +112,7 @@ func (user *DiscordUser) String() string {
 }
 
 func (user *DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
-	url := fmt.Sprintf("%s/api/v9/users/@me", user.DiscordHost)
+	url := fmt.Sprintf("%s/api/v9/users/@me", user.discord.discordHost)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating request: %s", err.Error())

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/rlebel12/gosesh"
+	mock_gosesh "github.com/rlebel12/gosesh/mocks"
 	mock_providers "github.com/rlebel12/gosesh/mocks/providers"
 	"github.com/rlebel12/gosesh/providers"
 	"github.com/stretchr/testify/mock"
@@ -102,31 +103,38 @@ func (s *DiscordSuite) TestUserRequest() {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	expectedUser := providers.DiscordUser{
-		ID:          "123",
-		Username:    "username",
-		Email:       "gosesh@example.com",
-		Verified:    true,
-		DiscordHost: server.URL,
-	}
+
+	sesh := newGosesher(s.T())
+	sesh.EXPECT().Scheme().Return("http")
+	sesh.EXPECT().Host().Return(server.URL)
+	creds := mock_gosesh.NewOAuth2Credentials(s.T())
+	creds.EXPECT().ClientID().Return("clientID")
+	creds.EXPECT().ClientSecret().Return("clientSecret")
+	discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, creds, "", providers.WithDiscodHost(server.URL))
+
+	expectedUser := discord.NewUser().(*providers.DiscordUser)
+	expectedUser.ID = "123"
+	expectedUser.Username = "username"
+	expectedUser.Email = "gosesh@example.com"
+	expectedUser.Verified = true
 	mux.HandleFunc("GET /api/v9/users/@me", func(w http.ResponseWriter, r *http.Request) {
 		err := json.NewEncoder(w).Encode(expectedUser)
 		s.Require().NoError(err)
 	})
 
-	user := providers.DiscordUser{DiscordHost: server.URL}
+	actualUser := discord.NewUser().(*providers.DiscordUser)
+	resp, err := actualUser.Request(context.Background(), "accessToken")
 
-	resp, err := user.Request(context.Background(), "accessToken")
 	s.Require().NoError(err)
 	content, err := io.ReadAll(resp.Body)
 	s.Require().NoError(err)
-	err = user.Unmarshal(content)
+	err = actualUser.Unmarshal(content)
 	s.Require().NoError(err)
-	s.Equal(expectedUser, user)
+	s.Equal(expectedUser, actualUser)
 
 	s.T().Run("TestFailedCreatingRequest", func(t *testing.T) {
-		badURL := "\n"
-		user := providers.DiscordUser{DiscordHost: badURL}
+		discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, creds, "", providers.WithDiscodHost("\n"))
+		user := discord.NewUser().(*providers.DiscordUser)
 		_, err := user.Request(context.Background(), "accessToken")
 		s.Error(err)
 	})
@@ -155,11 +163,9 @@ func (s *DiscordSuite) TestDiscordUserString() {
 		s.Run(name, func() {
 			sesh := newGosesher(s.T())
 			discord := providers.NewDiscord(sesh, providers.DiscordScopes{}, mockGoseshOAuth2Credentials{}, "", test.opts...)
-			user := &providers.DiscordUser{
-				ID:      userID,
-				Email:   userEmail,
-				Discord: discord,
-			}
+			user := discord.NewUser().(*providers.DiscordUser)
+			user.ID = userID
+			user.Email = userEmail
 			s.Equal(test.expected, user.String())
 		})
 	}

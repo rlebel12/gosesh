@@ -11,7 +11,17 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func NewGoogle(sesh Gosesher, credentials gosesh.OAuth2Credentials, redirectPath string) *Google {
+type (
+	Google struct {
+		sesh       Gosesher
+		cfg        *oauth2.Config
+		googleHost string
+	}
+
+	GoogleOpt func(*Google)
+)
+
+func NewGoogle(sesh Gosesher, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...GoogleOpt) *Google {
 	oauth2Config := &oauth2.Config{
 		ClientID:     credentials.ClientID(),
 		ClientSecret: credentials.ClientSecret(),
@@ -22,15 +32,22 @@ func NewGoogle(sesh Gosesher, credentials gosesh.OAuth2Credentials, redirectPath
 		},
 		Endpoint: google.Endpoint,
 	}
-	return &Google{
-		sesh: sesh,
-		cfg:  oauth2Config,
+	google := &Google{
+		sesh:       sesh,
+		cfg:        oauth2Config,
+		googleHost: "https://www.googleapis.com",
 	}
+	for _, opt := range opts {
+		opt(google)
+	}
+	return google
 }
 
-type Google struct {
-	sesh Gosesher
-	cfg  *oauth2.Config
+// To help with testing, this function allows you to set the Discord host to a different value (i.e. httptest.Server.URL).
+func WithGoogleHost(host string) GoogleOpt {
+	return func(d *Google) {
+		d.googleHost = host
+	}
 }
 
 func (p *Google) OAuth2Begin() http.HandlerFunc {
@@ -38,7 +55,13 @@ func (p *Google) OAuth2Begin() http.HandlerFunc {
 }
 
 func (p *Google) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
-	return p.sesh.OAuth2Callback(new(GoogleUser), p.cfg, handler)
+	return p.sesh.OAuth2Callback(p.NewUser(), p.cfg, handler)
+}
+
+func (p *Google) NewUser() gosesh.OAuth2User {
+	return &GoogleUser{
+		googleHost: p.googleHost,
+	}
 }
 
 type GoogleUser struct {
@@ -46,11 +69,13 @@ type GoogleUser struct {
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
 	Picture       string `json:"picture"`
+
+	googleHost string `json:"-"`
 }
 
-func (*GoogleUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
-	const oauthGoogleUrlAPI = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
-	return http.Get(oauthGoogleUrlAPI + accessToken)
+func (user *GoogleUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+	url := fmt.Sprintf("%s/oauth2/v2/userinfo?access_token=%s", user.googleHost, accessToken)
+	return http.Get(url)
 }
 
 func (user *GoogleUser) Unmarshal(b []byte) error {
