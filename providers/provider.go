@@ -13,3 +13,8 @@ type Gosesher interface {
 	Scheme() string
 	Host() string
 }
+
+type Provider interface {
+	OAuth2Begin() http.HandlerFunc
+	OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc
+}

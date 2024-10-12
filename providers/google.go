@@ -11,34 +11,34 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-func NewGoogle(gs *gosesh.Gosesh, providerConfig gosesh.OAuth2Credentials) GoogleProvider {
+func NewGoogle(sesh Gosesher, credentials gosesh.OAuth2Credentials, redirectPath string) *Google {
 	oauth2Config := &oauth2.Config{
-		ClientID:     providerConfig.ClientID(),
-		ClientSecret: providerConfig.ClientSecret(),
+		ClientID:     credentials.ClientID(),
+		ClientSecret: credentials.ClientSecret(),
 		RedirectURL: fmt.Sprintf(
-			"%s://%s/auth/google/callback", gs.Scheme(), gs.Host()),
+			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
 		Scopes: []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 		},
 		Endpoint: google.Endpoint,
 	}
-	return GoogleProvider{
-		gs:  gs,
-		cfg: oauth2Config,
+	return &Google{
+		sesh: sesh,
+		cfg:  oauth2Config,
 	}
 }
 
-type GoogleProvider struct {
-	gs  *gosesh.Gosesh
-	cfg *oauth2.Config
+type Google struct {
+	sesh Gosesher
+	cfg  *oauth2.Config
 }
 
-func (p *GoogleProvider) OAuth2Begin() http.HandlerFunc {
-	return p.gs.OAuth2Begin(p.cfg)
+func (p *Google) OAuth2Begin() http.HandlerFunc {
+	return p.sesh.OAuth2Begin(p.cfg)
 }
 
-func (p *GoogleProvider) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
-	return p.gs.OAuth2Callback(new(googleUser), p.cfg, handler)
+func (p *Google) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
+	return p.sesh.OAuth2Callback(new(googleUser), p.cfg, handler)
 }
 
 type googleUser struct {
