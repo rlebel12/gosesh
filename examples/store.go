@@ -48,8 +48,8 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (
 	switch d := user.(type) {
 	case *providers.DiscordUser:
 		slog.Info("Discord user", "id", d.ID, "username", d.Username, "email", d.Email, "verified", d.Verified)
-	// case providers.GoogleUser:
-	// 	slog.Info("Google user", "id", d.ID, "email", d.Email)
+	case *providers.GoogleUser:
+		slog.Info("Google user", "id", d.ID, "email", d.Email)
 	default:
 		slog.Info("Unknown user", "id", user.String())
 	}

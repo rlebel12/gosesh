@@ -18,13 +18,6 @@ SELECT id,
 FROM sessions
 WHERE id = $1;
 
--- name: UpdateSession :one
-UPDATE sessions
-SET idle_at = $1,
-    expire_at = $2
-WHERE id = $3
-RETURNING *;
-
 -- name: DeleteSession :execrows
 DELETE FROM sessions
 WHERE id = $1;

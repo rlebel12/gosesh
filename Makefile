@@ -25,4 +25,5 @@ migration:
 
 gen:
 	@go generate ./...
+	@sqlc generate
 	@mockery
