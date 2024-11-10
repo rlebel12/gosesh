@@ -168,56 +168,6 @@ func (s *TestPostgresSuite) TestGetSession() {
 	})
 }
 
-func (s *TestPostgresSuite) TestUpdateSession() {
-	s.Run("bad UUID", func() {
-		ctx := context.Background()
-		identifier := mock_gosesh.NewIdentifier(s.T())
-		identifier.EXPECT().String().Return("bad")
-		_, err := s.store.UpdateSession(ctx, identifier, gosesh.UpdateSessionValues{})
-		s.EqualError(err, "failed to parse identifier: invalid UUID length: 3")
-	})
-
-	s.Run("failed updating session", func() {
-		ctx := context.Background()
-		identifier := mock_gosesh.NewIdentifier(s.T())
-		id := uuid.New()
-		identifier.EXPECT().String().Return(id.String())
-		_, err := s.store.UpdateSession(ctx, identifier, gosesh.UpdateSessionValues{})
-		s.EqualError(err, "failed to update session: no rows in result set")
-	})
-
-	s.Run("success", func() {
-		ctx := context.Background()
-		user := mock_gosesh.NewOAuth2User(s.T())
-		user.EXPECT().String().Return("test")
-
-		identifier, err := s.store.UpsertUser(ctx, user)
-		s.Require().NoError(err)
-
-		now := time.Now().Truncate(time.Microsecond).Local()
-		idleAt := now
-		expireAt := now.Add(time.Hour)
-		session, err := s.store.CreateSession(ctx, gosesh.CreateSessionRequest{
-			UserID:   identifier,
-			IdleAt:   idleAt,
-			ExpireAt: expireAt,
-		})
-		s.Require().NoError(err)
-
-		newIdleAt := now.Add(time.Minute)
-		newExpireAt := now.Add(time.Hour * 2)
-		actual, err := s.store.UpdateSession(ctx, session.ID(), gosesh.UpdateSessionValues{
-			IdleAt:   newIdleAt,
-			ExpireAt: newExpireAt,
-		})
-		s.Require().NoError(err)
-		s.Require().NotNil(actual)
-		s.Equal(identifier.String(), actual.UserID().String())
-		s.Equal(newIdleAt, actual.IdleAt())
-		s.Equal(newExpireAt, actual.ExpireAt())
-	})
-}
-
 func (s *TestPostgresSuite) TestDeleteSession() {
 	s.Run("bad UUID", func() {
 		ctx := context.Background()

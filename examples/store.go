@@ -89,17 +89,6 @@ func (ms *MemoryStore) GetSession(ctx context.Context, sessionID gosesh.Identifi
 	return s, nil
 }
 
-func (ms *MemoryStore) UpdateSession(ctx context.Context, sessionID gosesh.Identifier, req gosesh.UpdateSessionValues) (gosesh.Session, error) {
-	s, ok := ms.Sessions[sessionID]
-	if !ok {
-		return nil, errors.New("session not found")
-	}
-	s.idleAt = req.IdleAt
-	s.expireAt = req.ExpireAt
-	ms.Sessions[s.id] = s
-	return s, nil
-}
-
 func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID gosesh.Identifier) error {
 	delete(ms.Sessions, sessionID)
 	return nil

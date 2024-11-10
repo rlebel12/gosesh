@@ -62,25 +62,6 @@ func (s *Store) GetSession(ctx context.Context, identifier gosesh.Identifier) (g
 	return sessionToGosesh(session), nil
 }
 
-func (s *Store) UpdateSession(ctx context.Context, identifier gosesh.Identifier, r gosesh.UpdateSessionValues) (gosesh.Session, error) {
-	id, err := identifierToUUID(identifier)
-	if err != nil {
-		return nil, err
-	}
-
-	params := sqlc.UpdateSessionParams{
-		ID:       uuidToPGTYPE(id),
-		IdleAt:   timestampToPGTYPE(r.IdleAt),
-		ExpireAt: timestampToPGTYPE(r.ExpireAt),
-	}
-	session, err := s.repo.UpdateSession(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update session: %w", err)
-	}
-
-	return sessionToGosesh(session), nil
-}
-
 func (s *Store) DeleteSession(ctx context.Context, identifier gosesh.Identifier) error {
 	id, err := identifierToUUID(identifier)
 	if err != nil {

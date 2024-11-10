@@ -244,66 +244,6 @@ func (_c *Storer_GetSession_Call) RunAndReturn(run func(context.Context, gosesh.
 	return _c
 }
 
-// UpdateSession provides a mock function with given fields: ctx, sessionID, req
-func (_m *Storer) UpdateSession(ctx context.Context, sessionID gosesh.Identifier, req gosesh.UpdateSessionValues) (gosesh.Session, error) {
-	ret := _m.Called(ctx, sessionID, req)
-
-	if len(ret) == 0 {
-		panic("no return value specified for UpdateSession")
-	}
-
-	var r0 gosesh.Session
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) (gosesh.Session, error)); ok {
-		return rf(ctx, sessionID, req)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) gosesh.Session); ok {
-		r0 = rf(ctx, sessionID, req)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(gosesh.Session)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) error); ok {
-		r1 = rf(ctx, sessionID, req)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// Storer_UpdateSession_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateSession'
-type Storer_UpdateSession_Call struct {
-	*mock.Call
-}
-
-// UpdateSession is a helper method to define mock.On call
-//   - ctx context.Context
-//   - sessionID gosesh.Identifier
-//   - req gosesh.UpdateSessionValues
-func (_e *Storer_Expecter) UpdateSession(ctx interface{}, sessionID interface{}, req interface{}) *Storer_UpdateSession_Call {
-	return &Storer_UpdateSession_Call{Call: _e.mock.On("UpdateSession", ctx, sessionID, req)}
-}
-
-func (_c *Storer_UpdateSession_Call) Run(run func(ctx context.Context, sessionID gosesh.Identifier, req gosesh.UpdateSessionValues)) *Storer_UpdateSession_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(gosesh.Identifier), args[2].(gosesh.UpdateSessionValues))
-	})
-	return _c
-}
-
-func (_c *Storer_UpdateSession_Call) Return(_a0 gosesh.Session, _a1 error) *Storer_UpdateSession_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *Storer_UpdateSession_Call) RunAndReturn(run func(context.Context, gosesh.Identifier, gosesh.UpdateSessionValues) (gosesh.Session, error)) *Storer_UpdateSession_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // UpsertUser provides a mock function with given fields: ctx, user
 func (_m *Storer) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
 	ret := _m.Called(ctx, user)
