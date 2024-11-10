@@ -2,7 +2,9 @@ package gosesh
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"time"
 )
 
 type contextKey string
@@ -32,24 +34,35 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := r.Context()
-		session, err := gs.store.UpdateSession(ctx, session.ID(), UpdateSessionValues{
-			IdleAt:   now.Add(gs.sessionActiveDuration),
-			ExpireAt: now.Add(gs.sessionIdleDuration),
-		})
+		session, err := gs.replaceSession(r.Context(), session, now)
 		if err != nil {
-			gs.logError("failed updating session: %s", err.Error())
+			gs.logError("replace session", err)
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
-		http.SetCookie(w, &sessionCookie)
+		http.SetCookie(w, sessionCookie)
 
-		ctx = context.WithValue(ctx, SessionContextKey, session)
-		r = r.WithContext(ctx)
+		r = gs.newRequestWithSession(r, session)
 		next.ServeHTTP(w, r)
 	}))
+}
+
+func (gs *Gosesh) replaceSession(ctx context.Context, old_session Session, now time.Time) (Session, error) {
+	new_session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
+		UserID:   old_session.UserID(),
+		IdleAt:   now.Add(gs.sessionActiveDuration),
+		ExpireAt: now.Add(gs.sessionIdleDuration),
+	})
+	if err != nil {
+		return old_session, fmt.Errorf("create session: %w", err)
+	}
+
+	if err := gs.store.DeleteSession(ctx, old_session.ID()); err != nil {
+		return new_session, fmt.Errorf("delete session: %w", err)
+	}
+	return new_session, nil
 }
 
 func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
@@ -94,6 +107,11 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 		return r
 	}
 
+	return gs.newRequestWithSession(r, session)
+}
+
+func (gs *Gosesh) newRequestWithSession(r *http.Request, session Session) *http.Request {
+	ctx := r.Context()
 	ctx = context.WithValue(ctx, SessionContextKey, session)
 	return r.WithContext(ctx)
 }

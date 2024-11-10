@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -95,26 +94,16 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 	}
 }
 
-type slogWriter struct {
-	text string
-}
-
-func (w *slogWriter) Write(p []byte) (n int, err error) {
-	w.text = string(p)
-	return len(p), nil
-}
-
 func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginFailure() {
 	rand.Reader = strings.NewReader("")
-	w := &slogWriter{}
-	slogger := slog.New(slog.NewTextHandler(w, nil))
-	sesh := gosesh.New(nil, nil, gosesh.WithLogger(slogger))
+	withLogger, slogger := prepareSlogger()
+	sesh := gosesh.New(nil, nil, withLogger)
 	rr := httptest.NewRecorder()
 	sesh.OAuth2Begin(&oauth2.Config{})(rr, &http.Request{})
 	response := rr.Result()
 	s.Equal(http.StatusInternalServerError, response.StatusCode)
 	s.Equal("failed to create OAuth2 state\n", rr.Body.String())
-	s.Contains(w.text, "level=ERROR msg=\"failed to create OAuth2 state\" err=EOF\n")
+	s.Contains(slogger.logs[0], "\"failed to create OAuth2 state\" error=EOF\n")
 }
 
 func TestHandlersSuite(t *testing.T) {

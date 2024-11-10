@@ -19,7 +19,8 @@ type TestAuthenticateAndRefreshCase int
 const (
 	CaseNoSession TestAuthenticateAndRefreshCase = iota
 	CaseSessionActive
-	CaseSessionIdleFailedUpdate
+	CaseSessionIdleFaileCreateReplacement
+	CaseSessionIdleFailedDeleteOld
 	CaseSessionIdleSuccess
 )
 
@@ -29,10 +30,11 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	for name, test := range map[string]TestAuthenticateAndRefreshCase{
-		"no current session":         CaseNoSession,
-		"session active":             CaseSessionActive,
-		"session idle failed update": CaseSessionIdleFailedUpdate,
-		"session idle success":       CaseSessionIdleSuccess,
+		"no current session":                     CaseNoSession,
+		"session active":                         CaseSessionActive,
+		"session idle failed create replacement": CaseSessionIdleFaileCreateReplacement,
+		"session idle failed delete old":         CaseSessionIdleFailedDeleteOld,
+		"session idle success":                   CaseSessionIdleSuccess,
 	} {
 		t.Run(name, func(t *testing.T) {
 			store := mock_gosesh.NewStorer(t)
@@ -40,13 +42,16 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			identifier := mock_gosesh.NewIdentifier(t)
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)
+
+			var expectedLogs []string
+			withLogger, slogger := prepareSlogger()
 			sesh := gosesh.New(parser.Execute, store,
 				gosesh.WithNow(func() time.Time { return now }),
 				gosesh.WithSessionCookieName("customName"),
 				gosesh.WithSessionActiveDuration(17*time.Minute),
 				gosesh.WithSessionIdleDuration(85*time.Minute),
+				withLogger,
 			)
-			rr := httptest.NewRecorder()
 
 			func() {
 				if test == CaseNoSession {
@@ -60,27 +65,37 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 					return
 				}
 				session := mock_gosesh.NewSession(t)
-				session.EXPECT().ID().Return(identifier)
 				session.EXPECT().IdleAt().Return(now.Add(-5 * time.Minute))
+				session.EXPECT().UserID().Return(identifier)
 				identifier.EXPECT().String().Return("identifier")
 				r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
 
-				if test == CaseSessionIdleFailedUpdate {
-					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
-						IdleAt:   now.Add(17 * time.Minute),
-						ExpireAt: now.Add(85 * time.Minute),
-					}).Return(nil, errors.New("failed update"))
+				createSessionFn := store.EXPECT().CreateSession(r.Context(), gosesh.CreateSessionRequest{
+					UserID:   identifier,
+					IdleAt:   now.Add(17 * time.Minute),
+					ExpireAt: now.Add(85 * time.Minute),
+				})
+				if test == CaseSessionIdleFaileCreateReplacement {
+					createSessionFn.Return(nil, errors.New("mock failure"))
+					expectedLogs = append(expectedLogs, "msg=\"replace session\" error=\"create session: mock failure\"")
 					return
 				}
+				new_session := mock_gosesh.NewSession(t)
+				createSessionFn.Return(new_session, nil)
+
+				session.EXPECT().ID().Return(identifier)
+				deleteSessionFn := store.EXPECT().DeleteSession(r.Context(), identifier)
+				if test == CaseSessionIdleFailedDeleteOld {
+					deleteSessionFn.Return(errors.New("mock failure"))
+					expectedLogs = append(expectedLogs, "msg=\"replace session\" error=\"delete session: mock failure\"")
+					return
+				}
+				deleteSessionFn.Return(nil)
 
 				if test == CaseSessionIdleSuccess {
-					session := mock_gosesh.NewSession(t)
-					session.EXPECT().ID().Return(identifier)
-					session.EXPECT().ExpireAt().Return(now.Add(85 * time.Minute))
-					store.EXPECT().UpdateSession(r.Context(), identifier, gosesh.UpdateSessionValues{
-						IdleAt:   now.Add(17 * time.Minute),
-						ExpireAt: now.Add(85 * time.Minute),
-					}).Return(session, nil)
+					new_session.EXPECT().ID().Return(identifier)
+					new_session.EXPECT().ExpireAt().Return(now.Add(85 * time.Minute))
+					return
 				}
 			}()
 
@@ -88,8 +103,14 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				handlerCalled = true
 			})
+			rr := httptest.NewRecorder()
+
 			sesh.AuthenticateAndRefresh(handler).ServeHTTP(rr, r)
+
 			assert.True(handlerCalled)
+			for i, expectedLog := range expectedLogs {
+				assert.Contains(slogger.logs[i], expectedLog)
+			}
 			if test < CaseSessionIdleSuccess {
 				return
 			}

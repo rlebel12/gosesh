@@ -17,8 +17,8 @@ type (
 		origin                *url.URL
 		sessionCookieName     string
 		oAuth2StateCookieName string
-		sessionIdleDuration   time.Duration
 		sessionActiveDuration time.Duration
+		sessionIdleDuration   time.Duration
 		now                   func() time.Time
 		cookieDomain          func() string
 	}
@@ -49,8 +49,8 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 		identifierFromBytes:   parser,
 		sessionCookieName:     "session",
 		oAuth2StateCookieName: "oauthstate",
-		sessionIdleDuration:   24 * time.Hour,
 		sessionActiveDuration: 1 * time.Hour,
+		sessionIdleDuration:   24 * time.Hour,
 		origin:                url,
 		now:                   time.Now,
 	}
@@ -148,10 +148,11 @@ type (
 	}
 )
 
-func (gs *Gosesh) logError(msg string, args ...any) {
+func (gs *Gosesh) logError(msg string, err error, args ...any) {
 	if gs.logger == nil {
 		return
 	}
+	args = append([]any{"error", err.Error()}, args...)
 	gs.logger.Error(msg, args...)
 }
 

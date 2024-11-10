@@ -17,7 +17,7 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
-			gs.logError("failed to create OAuth2 state", "err", err)
+			gs.logError("failed to create OAuth2 state", err)
 			http.Error(w, "failed to create OAuth2 state", http.StatusInternalServerError)
 			return
 		}
@@ -25,7 +25,7 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 
 		expiration := gs.now().UTC().Add(5 * time.Minute)
 		cookie := gs.oauthStateCookie(state, expiration)
-		http.SetCookie(w, &cookie)
+		http.SetCookie(w, cookie)
 
 		url := oauthCfg.AuthCodeURL(state)
 		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
@@ -61,7 +61,7 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, done Ha
 
 		now := gs.now().UTC()
 		stateCookie := gs.oauthStateCookie("", now)
-		http.SetCookie(w, &stateCookie)
+		http.SetCookie(w, stateCookie)
 
 		if r.FormValue("state") != oauthState.Value {
 			done(w, r, ErrInvalidStateCookie)
@@ -97,7 +97,7 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, done Ha
 		}
 
 		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
-		http.SetCookie(w, &sessionCookie)
+		http.SetCookie(w, sessionCookie)
 		done(w, r, nil)
 	}
 }
@@ -142,7 +142,7 @@ func (gs *Gosesh) Logout(done HandlerDone) http.HandlerFunc {
 			err = gs.store.DeleteSession(r.Context(), session.ID())
 		}
 		if err != nil {
-			gs.logError("failed to delete session(s)", "err", err, "all", r.URL.Query().Get("all") != "")
+			gs.logError("failed to delete session(s)", err, "all", r.URL.Query().Get("all") != "")
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedDeletingSession, err))
 			return
 		}
@@ -157,7 +157,7 @@ func (gs *Gosesh) Logout(done HandlerDone) http.HandlerFunc {
 func defaultDoneHandler(sesh *Gosesh, handlerName string) HandlerDone {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		if err != nil {
-			sesh.logError("failed in handler", "name", handlerName, "err", err.Error())
+			sesh.logError("failed in handler", err, "name", handlerName)
 		}
 	}
 }
