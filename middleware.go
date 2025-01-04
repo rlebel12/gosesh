@@ -66,7 +66,7 @@ func (gs *Gosesh) replaceSession(ctx context.Context, old_session Session, now t
 }
 
 func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := CurrentSession(r)
 		if !ok {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -74,7 +74,7 @@ func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
-	})
+	}))
 }
 
 func CurrentSession(r *http.Request) (Session, bool) {
