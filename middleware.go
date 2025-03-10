@@ -88,6 +88,8 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 		return r
 	}
 
+	setSecureCookieHeaders(w)
+
 	ctx := r.Context()
 
 	id, err := gs.parseIdentifierFromCookie(r)

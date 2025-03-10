@@ -90,6 +90,8 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 				"http://localhost/auth?client_id=client_id&redirect_uri=http%3A%2F%2Flocalhost%2Fauth%2Fcallback&response_type=code&scope=email&state=ZGV0ZXJtaW5pc3RpYyByYQ%3D%3D",
 				response.Header.Get("Location"),
 			)
+			s.Equal(`private, no-cache="Set-Cookie"`, response.Header.Get("Cache-Control"))
+			s.Equal("Cookie", response.Header.Get("Vary"))
 		})
 	}
 }
@@ -104,6 +106,8 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginFailure() {
 	s.Equal(http.StatusInternalServerError, response.StatusCode)
 	s.Equal("failed to create OAuth2 state\n", rr.Body.String())
 	s.Contains(slogger.logs[0], "\"failed to create OAuth2 state\" error=EOF\n")
+	s.Equal(`private, no-cache="Set-Cookie"`, response.Header.Get("Cache-Control"))
+	s.Equal("Cookie", response.Header.Get("Vary"))
 }
 
 func TestHandlersSuite(t *testing.T) {
@@ -268,6 +272,9 @@ func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 		config,
 		s.errCallback("failed getting state cookie: http: named cookie not present"),
 	).ServeHTTP(rr, request)
+	response := rr.Result()
+	s.Equal(`private, no-cache="Set-Cookie"`, response.Header.Get("Cache-Control"))
+	s.Equal("Cookie", response.Header.Get("Vary"))
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
@@ -279,7 +286,7 @@ func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 		config,
 		s.errCallback("invalid state cookie"),
 	).ServeHTTP(rr, request)
-	s.assertStateCookieReset(rr.Result())
+	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
@@ -291,7 +298,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
 		config,
 		s.errCallback("failed exchanging token: oauth2: cannot fetch token: 404 Not Found\nResponse: not found\n"),
 	).ServeHTTP(rr, request)
-	s.assertStateCookieReset(rr.Result())
+	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataRequest() {
@@ -303,7 +310,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataRequest() {
 		config,
 		s.errCallback("failed unmarshalling data: failed getting user info: failed request"),
 	).ServeHTTP(rr, request)
-	s.assertStateCookieReset(rr.Result())
+	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataReadBody() {
@@ -315,7 +322,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataReadBody() {
 		config,
 		s.errCallback("failed unmarshalling data: failed read response: failed read"),
 	).ServeHTTP(rr, request)
-	s.assertStateCookieReset(rr.Result())
+	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalDataFinal() {
@@ -327,7 +334,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalDataFinal() {
 		config,
 		s.errCallback("failed unmarshalling data: failed unmarshal"),
 	).ServeHTTP(rr, request)
-	s.assertStateCookieReset(rr.Result())
+	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
@@ -339,7 +346,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
 		config,
 		s.errCallback("failed upserting user: failed upsert"),
 	).ServeHTTP(rr, request)
-	s.assertStateCookieReset(rr.Result())
+	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
@@ -351,7 +358,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
 		config,
 		s.errCallback("failed creating session: failed create session"),
 	).ServeHTTP(rr, request)
-	s.assertStateCookieReset(rr.Result())
+	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
@@ -377,10 +384,10 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
 	s.Equal("/", sessionCookie.Path)
 	s.Equal(http.SameSiteLaxMode, sessionCookie.SameSite)
 	s.False(sessionCookie.Secure)
-	s.assertStateCookieReset(response)
+	s.assertCommonResponse(response)
 }
 
-func (s *Oauth2CallbackHandlerSuite) assertStateCookieReset(response *http.Response) {
+func (s *Oauth2CallbackHandlerSuite) assertCommonResponse(response *http.Response) {
 	cookie := response.Cookies()[0]
 	s.Equal("oauthstate", cookie.Name)
 	s.Equal("", cookie.Value)
@@ -389,6 +396,8 @@ func (s *Oauth2CallbackHandlerSuite) assertStateCookieReset(response *http.Respo
 	s.Equal("/", cookie.Path)
 	s.Equal(http.SameSiteLaxMode, cookie.SameSite)
 	s.False(cookie.Secure)
+	s.Equal(`private, no-cache="Set-Cookie"`, response.Header.Get("Cache-Control"))
+	s.Equal("Cookie", response.Header.Get("Vary"))
 }
 
 func TestOauth2CallbackHandlerSuite(t *testing.T) {
