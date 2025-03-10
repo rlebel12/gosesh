@@ -44,6 +44,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			require.NoError(err)
 
 			var expectedLogs []string
+			var wantSecureCookieHeaders bool
 			withLogger, slogger := prepareSlogger()
 			sesh := gosesh.New(parser.Execute, store,
 				gosesh.WithNow(func() time.Time { return now }),
@@ -55,6 +56,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 
 			func() {
 				if test == CaseNoSession {
+					wantSecureCookieHeaders = true
 					return
 				}
 
@@ -107,6 +109,16 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 
 			sesh.AuthenticateAndRefresh(handler).ServeHTTP(rr, r)
 
+			result := rr.Result()
+
+			if wantSecureCookieHeaders {
+				assert.Equal(`private, no-cache="Set-Cookie"`, result.Header.Get("Cache-Control"))
+				assert.Equal("Cookie", result.Header.Get("Vary"))
+			} else {
+				assert.Empty(result.Header.Get("Cache-Control"))
+				assert.Empty(result.Header.Get("Vary"))
+			}
+
 			assert.True(handlerCalled)
 			for i, expectedLog := range expectedLogs {
 				assert.Contains(slogger.logs[i], expectedLog)
@@ -114,7 +126,6 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			if test < CaseSessionIdleSuccess {
 				return
 			}
-			result := rr.Result()
 			cookie := result.Cookies()[0]
 			assert.Equal("customName", cookie.Name)
 			assert.Equal("aWRlbnRpZmllcg==", cookie.Value)

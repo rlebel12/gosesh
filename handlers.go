@@ -15,6 +15,8 @@ import (
 
 func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		setSecureCookieHeaders(w)
+
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
 			gs.logError("failed to create OAuth2 state", err)
@@ -52,6 +54,8 @@ func (gs *Gosesh) OAuth2Callback(user OAuth2User, config *oauth2.Config, done Ha
 		done = defaultDoneHandler(gs, "OAuth2Callback")
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		setSecureCookieHeaders(w)
+
 		ctx := r.Context()
 		oauthState, err := r.Cookie(gs.oAuth2StateCookieName)
 		if err != nil {

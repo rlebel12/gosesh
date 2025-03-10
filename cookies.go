@@ -57,3 +57,8 @@ func (gs *Gosesh) parseIdentifierFromCookie(r *http.Request) (Identifier, error)
 
 	return gs.identifierFromBytes(sessionIDRaw)
 }
+
+func setSecureCookieHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", `private, no-cache="Set-Cookie"`)
+	w.Header().Set("Vary", "Cookie")
+}
