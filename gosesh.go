@@ -17,6 +17,8 @@ type (
 		origin                *url.URL
 		sessionCookieName     string
 		oAuth2StateCookieName string
+		redirectCookieName    string
+		redirectParamName     string
 		sessionActiveDuration time.Duration
 		sessionIdleDuration   time.Duration
 		now                   func() time.Time
@@ -49,6 +51,8 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 		identifierFromBytes:   parser,
 		sessionCookieName:     "session",
 		oAuth2StateCookieName: "oauthstate",
+		redirectCookieName:    "redirect",
+		redirectParamName:     "next",
 		sessionActiveDuration: 1 * time.Hour,
 		sessionIdleDuration:   24 * time.Hour,
 		origin:                url,
@@ -77,6 +81,18 @@ func WithSessionCookieName(name string) func(*Gosesh) {
 func WithOAuth2StateCookieName(name string) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.oAuth2StateCookieName = name
+	}
+}
+
+func WithRedirectCookieName(name string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.redirectCookieName = name
+	}
+}
+
+func WithRedirectParamName(name string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.redirectParamName = name
 	}
 }
 

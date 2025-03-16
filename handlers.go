@@ -29,6 +29,11 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 		cookie := gs.oauthStateCookie(state, expiration)
 		http.SetCookie(w, cookie)
 
+		next := r.URL.Query().Get(gs.redirectParamName)
+		if next != "" {
+			gs.setRedirectCookie(next, w)
+		}
+
 		url := oauthCfg.AuthCodeURL(state)
 		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	}
@@ -158,10 +163,37 @@ func (gs *Gosesh) Logout(done HandlerDone) http.HandlerFunc {
 	}
 }
 
-func defaultDoneHandler(sesh *Gosesh, handlerName string) HandlerDone {
+func (gs *Gosesh) CallbackRedirect(defaultTarget string) http.HandlerFunc {
+	if defaultTarget == "" {
+		defaultTarget = "/"
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		redirectCookie, err := r.Cookie(gs.redirectCookieName)
+		if err != nil {
+			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
+			return
+		}
+
+		path, err := base64.URLEncoding.DecodeString(redirectCookie.Value)
+		redirectCookie = gs.redirectCookie("", time.Now())
+		http.SetCookie(w, redirectCookie)
+		if err != nil {
+			gs.logError("failed to decode redirect path", err)
+			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
+			return
+		}
+
+		http.Redirect(w, r, string(path), http.StatusTemporaryRedirect)
+	}
+}
+
+func defaultDoneHandler(gs *Gosesh, handlerName string) HandlerDone {
+	redirect := gs.CallbackRedirect("/")
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		if err != nil {
-			sesh.logError("failed in handler", err, "name", handlerName)
+			gs.logError("failed in handler", err, "name", handlerName)
+			return
 		}
+		redirect(w, r)
 	}
 }

@@ -2,8 +2,11 @@ package gosesh
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -77,6 +80,31 @@ func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
 	}))
 }
 
+func (gs *Gosesh) RedirectUnauthenticated(loginURL url.URL, isRedirectableOpt ...func(r *http.Request) bool) func(next http.Handler) http.Handler {
+	isRedirectable := func(r *http.Request) bool {
+		return strings.Contains(r.Header.Get("Accept"), "text/html")
+	}
+	if len(isRedirectableOpt) > 0 {
+		isRedirectable = isRedirectableOpt[0]
+	}
+
+	return func(next http.Handler) http.Handler {
+		return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, ok := CurrentSession(r)
+			if ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if !isRedirectable(r) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			gs.setRedirectCookie(r.URL.Path, w)
+			http.Redirect(w, r, loginURL.String(), http.StatusTemporaryRedirect)
+		}))
+	}
+}
+
 func CurrentSession(r *http.Request) (Session, bool) {
 	session, ok := r.Context().Value(SessionContextKey).(Session)
 	return session, ok
@@ -89,11 +117,23 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 	}
 
 	setSecureCookieHeaders(w)
-
 	ctx := r.Context()
 
-	id, err := gs.parseIdentifierFromCookie(r)
+	sessionCookie, err := r.Cookie(gs.sessionCookieName)
 	if err != nil {
+		return r
+	}
+
+	sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
+	if err != nil {
+		gs.logError("failed to decode session cookie", err)
+		http.SetCookie(w, gs.expireSessionCookie())
+		return r
+	}
+
+	id, err := gs.identifierFromBytes(sessionIDRaw)
+	if err != nil {
+		gs.logError("failed to parse session ID", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}

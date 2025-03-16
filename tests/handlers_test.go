@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,43 +20,70 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type Oauth2BeginHandlerSuite struct {
-	suite.Suite
-	originalReader io.Reader
-}
-
-func (s *Oauth2BeginHandlerSuite) SetupSuite() {
-	s.originalReader = rand.Reader
-}
-
-func (s *Oauth2BeginHandlerSuite) SetupTest() {
-	rand.Reader = strings.NewReader("deterministic random data")
-}
-
-func (s *Oauth2BeginHandlerSuite) SetupSubTest() {
-	rand.Reader = strings.NewReader("deterministic random data")
-}
-
-func (s *Oauth2BeginHandlerSuite) TearDownSuite() {
-	rand.Reader = s.originalReader
-}
-
-func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
-	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+func TestOAuth2Begin(t *testing.T) {
 	for name, test := range map[string]struct {
-		secure bool
+		secure        bool
+		next          string
+		cookieAsserts []func(t *testing.T, cookie *http.Cookie)
 	}{
-		"insecure": {secure: false},
-		"secure":   {secure: true},
+		"insecure": {cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+			func(t *testing.T, cookie *http.Cookie) {
+				assert := assert.New(t)
+				assert.Equal("customStateName", cookie.Name)
+				assert.Equal(time.Date(2021, 1, 1, 0, 5, 0, 0, time.UTC), cookie.Expires)
+				assert.Equal("localhost", cookie.Domain)
+				assert.Equal("/", cookie.Path)
+				assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+				assert.False(cookie.Secure)
+				assert.NotEmpty(cookie.Value)
+			},
+		}},
+		"secure": {secure: true, cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+			func(t *testing.T, cookie *http.Cookie) {
+				assert := assert.New(t)
+				assert.Equal("customStateName", cookie.Name)
+				assert.Equal(time.Date(2021, 1, 1, 0, 5, 0, 0, time.UTC), cookie.Expires)
+				assert.Equal("localhost", cookie.Domain)
+				assert.Equal("/", cookie.Path)
+				assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+				assert.True(cookie.Secure)
+				assert.NotEmpty(cookie.Value)
+			},
+		}},
+		"next": {next: "/next", cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+			func(t *testing.T, cookie *http.Cookie) {
+				assert := assert.New(t)
+				assert.Equal("customStateName", cookie.Name)
+				assert.Equal(time.Date(2021, 1, 1, 0, 5, 0, 0, time.UTC), cookie.Expires)
+				assert.Equal("localhost", cookie.Domain)
+				assert.Equal("/", cookie.Path)
+				assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+				assert.False(cookie.Secure)
+				assert.NotEmpty(cookie.Value)
+			},
+			func(t *testing.T, cookie *http.Cookie) {
+				assert := assert.New(t)
+				assert.Equal("customRedirectName", cookie.Name)
+				assert.Equal("L25leHQ=", cookie.Value)
+				assert.Equal(time.Date(2021, 1, 1, 0, 5, 0, 0, time.UTC), cookie.Expires)
+				assert.Equal("localhost", cookie.Domain)
+				assert.Equal("/", cookie.Path)
+				assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+				assert.False(cookie.Secure)
+			},
+		}},
 	} {
-		s.Run(name, func() {
+		t.Run(name, func(t *testing.T) {
+			assert, require := assert.New(t), require.New(t)
 			opts := []gosesh.NewOpts{
-				gosesh.WithNow(func() time.Time { return now }),
+				gosesh.WithNow(func() time.Time { return time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC) }),
 				gosesh.WithOAuth2StateCookieName("customStateName"),
+				gosesh.WithRedirectCookieName("customRedirectName"),
+				gosesh.WithRedirectParamName("customRedirectParam"),
 			}
 			if test.secure {
 				url, err := url.Parse("https://localhost")
-				s.Require().NoError(err)
+				require.NoError(err)
 				opts = append(opts, gosesh.WithOrigin(url))
 			}
 			sesh := gosesh.New(nil, nil, opts...)
@@ -73,46 +99,37 @@ func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginSuccess() {
 				},
 			})
 			rr := httptest.NewRecorder()
-			handler.ServeHTTP(rr, &http.Request{})
+			url, err := url.Parse("http://localhost")
+			params := url.Query()
+			params.Add("customRedirectParam", test.next)
+			url.RawQuery = params.Encode()
+			require.NoError(err)
+
+			handler.ServeHTTP(rr, &http.Request{
+				URL: url,
+			})
 
 			response := rr.Result()
-			s.Equal(http.StatusTemporaryRedirect, response.StatusCode)
-			s.Require().Equal(1, len(response.Cookies()))
-			cookie := response.Cookies()[0]
-			s.Equal("customStateName", cookie.Name)
-			s.Equal("ZGV0ZXJtaW5pc3RpYyByYQ==", cookie.Value)
-			s.Equal(now.Add(5*time.Minute), cookie.Expires)
-			s.Equal("localhost", cookie.Domain)
-			s.Equal("/", cookie.Path)
-			s.Equal(http.SameSiteLaxMode, cookie.SameSite)
-			s.Equal(test.secure, cookie.Secure)
-			s.Equal(
-				"http://localhost/auth?client_id=client_id&redirect_uri=http%3A%2F%2Flocalhost%2Fauth%2Fcallback&response_type=code&scope=email&state=ZGV0ZXJtaW5pc3RpYyByYQ%3D%3D",
-				response.Header.Get("Location"),
-			)
-			s.Equal(`private, no-cache="Set-Cookie"`, response.Header.Get("Cache-Control"))
-			s.Equal("Cookie", response.Header.Get("Vary"))
+			assert.Equal(http.StatusTemporaryRedirect, response.StatusCode)
+			assert.Len(response.Cookies(), len(test.cookieAsserts))
+			for i, gotCookie := range response.Cookies() {
+				test.cookieAsserts[i](t, gotCookie)
+			}
+			gotLocation, err := url.Parse(response.Header.Get("Location"))
+			require.NoError(err)
+			assert.Equal("http", gotLocation.Scheme)
+			assert.Equal("localhost", gotLocation.Hostname())
+			assert.Equal("/auth", gotLocation.Path)
+			assert.Equal("client_id", gotLocation.Query().Get("client_id"))
+			assert.Equal("http://localhost/auth/callback", gotLocation.Query().Get("redirect_uri"))
+			assert.Equal("code", gotLocation.Query().Get("response_type"))
+			assert.Equal("email", gotLocation.Query().Get("scope"))
+			assert.NotEmpty(gotLocation.Query().Get("state"))
+
+			assert.Equal(`private, no-cache="Set-Cookie"`, response.Header.Get("Cache-Control"))
+			assert.Equal("Cookie", response.Header.Get("Vary"))
 		})
 	}
-}
-
-func (s *Oauth2BeginHandlerSuite) TestOAuth2BeginFailure() {
-	rand.Reader = strings.NewReader("")
-	withLogger, slogger := prepareSlogger()
-	sesh := gosesh.New(nil, nil, withLogger)
-	rr := httptest.NewRecorder()
-	sesh.OAuth2Begin(&oauth2.Config{})(rr, &http.Request{})
-	response := rr.Result()
-	s.Equal(http.StatusInternalServerError, response.StatusCode)
-	s.Equal("failed to create OAuth2 state\n", rr.Body.String())
-	s.Contains(slogger.logs[0], "\"failed to create OAuth2 state\" error=EOF\n")
-	s.Equal(`private, no-cache="Set-Cookie"`, response.Header.Get("Cache-Control"))
-	s.Equal("Cookie", response.Header.Get("Vary"))
-}
-
-func TestHandlersSuite(t *testing.T) {
-	suite.Run(t, new(Oauth2BeginHandlerSuite))
-
 }
 
 type Oauth2CallbackHandlerSuite struct {

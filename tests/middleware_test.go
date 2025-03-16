@@ -178,3 +178,99 @@ func TestRequireAuthentication(t *testing.T) {
 		assert.False(handlerCalled)
 	})
 }
+
+func TestRedirectUnauthenticated(t *testing.T) {
+	for name, test := range map[string]struct {
+		giveHeader          http.Header
+		giveSession         func(t *testing.T, r *http.Request) *http.Request
+		giveRedirectableOpt []func(r *http.Request) bool
+		wantLocation        string
+		wantStatus          int
+		cookieAsserts       []func(t *testing.T, cookie *http.Cookie)
+	}{
+		"authenticated": {
+			giveSession: func(t *testing.T, r *http.Request) *http.Request {
+				return r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, mock_gosesh.NewSession(t)))
+			},
+			wantStatus: http.StatusOK,
+		},
+		"redirect default": {
+			giveHeader: http.Header{"Accept": []string{"text/html"}},
+			cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+				func(t *testing.T, cookie *http.Cookie) {
+					assert := assert.New(t)
+					assert.Equal("redirect", cookie.Name)
+					assert.Equal("Lw==", cookie.Value)
+					assert.Equal("/", cookie.Path)
+					assert.Equal("localhost", cookie.Domain)
+					assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+					assert.False(cookie.Secure)
+				},
+			},
+			wantLocation: "/login",
+			wantStatus:   http.StatusTemporaryRedirect,
+		},
+		"no redirect default": {
+			wantStatus: http.StatusUnauthorized,
+		},
+		"redirect custom redirectable": {
+			giveHeader: http.Header{"Accept": []string{"text/plain"}},
+			giveRedirectableOpt: []func(r *http.Request) bool{
+				func(r *http.Request) bool {
+					return r.Header.Get("Accept") == "text/plain"
+				},
+				func(r *http.Request) bool {
+					return false
+				},
+			},
+			cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+				func(t *testing.T, cookie *http.Cookie) {
+					assert := assert.New(t)
+					assert.Equal("redirect", cookie.Name)
+					assert.Equal("Lw==", cookie.Value)
+					assert.Equal("/", cookie.Path)
+					assert.Equal("localhost", cookie.Domain)
+					assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+					assert.False(cookie.Secure)
+				},
+			},
+			wantLocation: "/login",
+			wantStatus:   http.StatusTemporaryRedirect,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert, require := assert.New(t), require.New(t)
+			store := mock_gosesh.NewStorer(t)
+			parser := mock_gosesh.NewIDParser(t)
+
+			r, err := http.NewRequest(http.MethodGet, "/", nil)
+			if test.giveSession != nil {
+				r = test.giveSession(t, r)
+			}
+			if test.giveHeader != nil {
+				r.Header = test.giveHeader
+			}
+			require.NoError(err)
+
+			sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }))
+			rr := httptest.NewRecorder()
+
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			})
+
+			loginURL, err := r.URL.Parse("/login")
+			require.NoError(err)
+
+			sesh.RedirectUnauthenticated(*loginURL, test.giveRedirectableOpt...)(handler).ServeHTTP(rr, r)
+
+			assert.Equal(test.wantStatus, rr.Result().StatusCode)
+			assert.Equal(test.wantLocation, rr.Result().Header.Get("Location"))
+			gotCookies := rr.Result().Cookies()
+			assert.Len(gotCookies, len(test.cookieAsserts))
+			for i, gotCookie := range gotCookies {
+				test.cookieAsserts[i](t, gotCookie)
+			}
+		})
+	}
+}
