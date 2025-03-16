@@ -629,3 +629,86 @@ func TestLogoutHandler(t *testing.T) {
 		assert.Equal(http.StatusNoContent, test.w.Code)
 	})
 }
+
+func TestCallbackRedirect(t *testing.T) {
+	for name, test := range map[string]struct {
+		giveDefaultTarget string
+		giveCookies       []*http.Cookie
+		wantLocation      string
+		cookieAsserts     []func(t *testing.T, cookie *http.Cookie)
+	}{
+		"no redirect cookie": {
+			wantLocation: "/",
+		},
+		"no redirect cookie custom target": {
+			giveDefaultTarget: "/custom",
+			wantLocation:      "/custom",
+		},
+		"valid redirect cookie": {
+			giveCookies: []*http.Cookie{
+				{
+					Name:  "redirect",
+					Value: "L25leHQ=",
+				},
+			},
+			wantLocation: "/next",
+			cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+				func(t *testing.T, cookie *http.Cookie) {
+					assert := assert.New(t)
+					assert.Equal("redirect", cookie.Name)
+					assert.Equal("", cookie.Value)
+					assert.Equal(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), cookie.Expires)
+					assert.Equal("localhost", cookie.Domain)
+					assert.Equal("/", cookie.Path)
+					assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+					assert.False(cookie.Secure)
+				},
+			},
+		},
+		"invalid redirect cookie": {
+			giveCookies: []*http.Cookie{
+				{
+					Name:  "redirect",
+					Value: "invalid",
+				},
+			},
+			wantLocation: "/",
+			cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+				func(t *testing.T, cookie *http.Cookie) {
+					assert := assert.New(t)
+					assert.Equal("redirect", cookie.Name)
+					assert.Equal("", cookie.Value)
+					assert.Equal(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), cookie.Expires)
+					assert.Equal("localhost", cookie.Domain)
+					assert.Equal("/", cookie.Path)
+					assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+					assert.False(cookie.Secure)
+				},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert, require := assert.New(t), require.New(t)
+			store := mock_gosesh.NewStorer(t)
+			parser := mock_gosesh.NewIDParser(t)
+			sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }))
+
+			r, err := http.NewRequest(http.MethodGet, "/", nil)
+			require.NoError(err)
+			for _, cookie := range test.giveCookies {
+				r.AddCookie(cookie)
+			}
+			rr := httptest.NewRecorder()
+
+			sesh.CallbackRedirect(test.giveDefaultTarget).ServeHTTP(rr, r)
+
+			assert.Equal(http.StatusTemporaryRedirect, rr.Result().StatusCode)
+			assert.Equal(test.wantLocation, rr.Result().Header.Get("Location"))
+			gotCookies := rr.Result().Cookies()
+			assert.Len(gotCookies, len(test.cookieAsserts))
+			for i, gotCookie := range gotCookies {
+				test.cookieAsserts[i](t, gotCookie)
+			}
+		})
+	}
+}
