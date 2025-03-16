@@ -15,6 +15,7 @@ type (
 		identifierFromBytes   IDParser
 		logger                *slog.Logger
 		origin                *url.URL
+		allowedHosts          []string
 		sessionCookieName     string
 		oAuth2StateCookieName string
 		redirectCookieName    string
@@ -56,6 +57,7 @@ func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
 		sessionActiveDuration: 1 * time.Hour,
 		sessionIdleDuration:   24 * time.Hour,
 		origin:                url,
+		allowedHosts:          []string{url.Hostname()},
 		now:                   time.Now,
 	}
 	gs.cookieDomain = func() string { return gs.origin.Hostname() }
@@ -111,6 +113,12 @@ func WithSessionActiveDuration(d time.Duration) func(*Gosesh) {
 func WithOrigin(origin *url.URL) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.origin = origin
+	}
+}
+
+func WithAllowedHosts(hosts ...string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.allowedHosts = append(c.allowedHosts, hosts...)
 	}
 }
 

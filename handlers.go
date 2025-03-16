@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"slices"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -163,14 +165,14 @@ func (gs *Gosesh) Logout(done HandlerDone) http.HandlerFunc {
 	}
 }
 
-func (gs *Gosesh) CallbackRedirect(target string) http.HandlerFunc {
-	if target == "" {
-		target = "/"
+func (gs *Gosesh) CallbackRedirect(defaultTarget string) http.HandlerFunc {
+	if defaultTarget == "" {
+		defaultTarget = "/"
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		redirectCookie, err := r.Cookie(gs.redirectCookieName)
 		if err != nil {
-			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -179,11 +181,22 @@ func (gs *Gosesh) CallbackRedirect(target string) http.HandlerFunc {
 		http.SetCookie(w, redirectCookie)
 		if err != nil {
 			gs.logError("failed to decode redirect path", err)
-			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
 			return
 		}
 
-		http.Redirect(w, r, string(path), http.StatusTemporaryRedirect)
+		url, err := url.Parse(string(path))
+		if err != nil {
+			gs.logError("failed to parse redirect path", err)
+			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
+			return
+		} else if url.Hostname() != "" && !slices.Contains(gs.allowedHosts, url.Hostname()) {
+			gs.logWarn("disallowed host in redirect path", "host", url.Host)
+			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
+			return
+		}
+
+		http.Redirect(w, r, url.String(), http.StatusTemporaryRedirect)
 	}
 }
 

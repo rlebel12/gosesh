@@ -634,6 +634,7 @@ func TestCallbackRedirect(t *testing.T) {
 	for name, test := range map[string]struct {
 		giveDefaultTarget string
 		giveCookies       []*http.Cookie
+		giveAllowedHosts  []string
 		wantLocation      string
 		cookieAsserts     []func(t *testing.T, cookie *http.Cookie)
 	}{
@@ -686,12 +687,58 @@ func TestCallbackRedirect(t *testing.T) {
 				},
 			},
 		},
+		"disallowed host": {
+			giveCookies: []*http.Cookie{
+				{
+					Name:  "redirect",
+					Value: "aHR0cDovL2V4YW1wbGUuY29t",
+				},
+			},
+			wantLocation: "/",
+			cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+				func(t *testing.T, cookie *http.Cookie) {
+					assert := assert.New(t)
+					assert.Equal("redirect", cookie.Name)
+					assert.Equal("", cookie.Value)
+					assert.Equal(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), cookie.Expires)
+					assert.Equal("localhost", cookie.Domain)
+					assert.Equal("/", cookie.Path)
+					assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+					assert.False(cookie.Secure)
+				},
+			},
+		},
+		"allowed host": {
+			giveCookies: []*http.Cookie{
+				{
+					Name:  "redirect",
+					Value: "aHR0cHM6Ly9leGFtcGxlLmNvbS9mb28=",
+				},
+			},
+			giveAllowedHosts: []string{"example.com"},
+			wantLocation:     "https://example.com/foo",
+			cookieAsserts: []func(t *testing.T, cookie *http.Cookie){
+				func(t *testing.T, cookie *http.Cookie) {
+					assert := assert.New(t)
+					assert.Equal("redirect", cookie.Name)
+					assert.Equal("", cookie.Value)
+					assert.Equal(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC), cookie.Expires)
+					assert.Equal("localhost", cookie.Domain)
+					assert.Equal("/", cookie.Path)
+					assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+					assert.False(cookie.Secure)
+				},
+			},
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
 			store := mock_gosesh.NewStorer(t)
 			parser := mock_gosesh.NewIDParser(t)
-			sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }))
+			sesh := gosesh.New(parser.Execute, store,
+				gosesh.WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }),
+				gosesh.WithAllowedHosts(test.giveAllowedHosts...),
+			)
 
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)
