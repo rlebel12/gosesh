@@ -1,4 +1,4 @@
-package tests
+package gosesh
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rlebel12/gosesh"
-	mock_gosesh "github.com/rlebel12/gosesh/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,11 +44,11 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			var expectedLogs []string
 			var wantSecureCookieHeaders bool
 			withLogger, slogger := prepareSlogger()
-			sesh := gosesh.New(parser.Execute, store,
-				gosesh.WithNow(func() time.Time { return now }),
-				gosesh.WithSessionCookieName("customName"),
-				gosesh.WithSessionActiveDuration(17*time.Minute),
-				gosesh.WithSessionIdleDuration(85*time.Minute),
+			sesh := New(parser.Execute, store,
+				WithNow(func() time.Time { return now }),
+				WithSessionCookieName("customName"),
+				WithSessionActiveDuration(17*time.Minute),
+				WithSessionIdleDuration(85*time.Minute),
 				withLogger,
 			)
 
@@ -63,16 +61,16 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				if test == CaseSessionActive {
 					session := mock_gosesh.NewSession(t)
 					session.EXPECT().IdleAt().Return(now.Add(5 * time.Minute))
-					r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
+					r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
 					return
 				}
 				session := mock_gosesh.NewSession(t)
 				session.EXPECT().IdleAt().Return(now.Add(-5 * time.Minute))
 				session.EXPECT().UserID().Return(identifier)
 				identifier.EXPECT().String().Return("identifier")
-				r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
+				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
 
-				createSessionFn := store.EXPECT().CreateSession(r.Context(), gosesh.CreateSessionRequest{
+				createSessionFn := store.EXPECT().CreateSession(r.Context(), CreateSessionRequest{
 					UserID:   identifier,
 					IdleAt:   now.Add(17 * time.Minute),
 					ExpireAt: now.Add(85 * time.Minute),
@@ -148,11 +146,11 @@ func TestRequireAuthentication(t *testing.T) {
 		parser := mock_gosesh.NewIDParser(t)
 		r, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(err)
-		sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return now }))
+		sesh := New(parser.Execute, store, WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
 		session := mock_gosesh.NewSession(t)
-		r = r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, session))
+		r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
 
 		handlerCalled := false
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -167,7 +165,7 @@ func TestRequireAuthentication(t *testing.T) {
 		require.NoError(err)
 		store := mock_gosesh.NewStorer(t)
 		parser := mock_gosesh.NewIDParser(t)
-		sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return now }))
+		sesh := New(parser.Execute, store, WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
 		handlerCalled := false
@@ -190,7 +188,7 @@ func TestRedirectUnauthenticated(t *testing.T) {
 	}{
 		"authenticated": {
 			giveSession: func(t *testing.T, r *http.Request) *http.Request {
-				return r.WithContext(context.WithValue(r.Context(), gosesh.SessionContextKey, mock_gosesh.NewSession(t)))
+				return r.WithContext(context.WithValue(r.Context(), SessionContextKey, mock_gosesh.NewSession(t)))
 			},
 			wantStatus: http.StatusOK,
 		},
@@ -252,7 +250,7 @@ func TestRedirectUnauthenticated(t *testing.T) {
 			}
 			require.NoError(err)
 
-			sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }))
+			sesh := New(parser.Execute, store, WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }))
 			rr := httptest.NewRecorder()
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

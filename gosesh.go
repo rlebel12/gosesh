@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+//go:generate moq -with-resets -rm -out gosesh_mock.go . OAuth2Credentials
+
 type (
 	Gosesh struct {
 		store                 Storer

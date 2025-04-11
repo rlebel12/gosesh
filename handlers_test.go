@@ -1,4 +1,4 @@
-package tests
+package gosesh
 
 import (
 	"context"
@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rlebel12/gosesh"
-	mock_gosesh "github.com/rlebel12/gosesh/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -75,18 +73,18 @@ func TestOAuth2Begin(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
-			opts := []gosesh.NewOpts{
-				gosesh.WithNow(func() time.Time { return time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC) }),
-				gosesh.WithOAuth2StateCookieName("customStateName"),
-				gosesh.WithRedirectCookieName("customRedirectName"),
-				gosesh.WithRedirectParamName("customRedirectParam"),
+			opts := []NewOpts{
+				WithNow(func() time.Time { return time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC) }),
+				WithOAuth2StateCookieName("customStateName"),
+				WithRedirectCookieName("customRedirectName"),
+				WithRedirectParamName("customRedirectParam"),
 			}
 			if test.secure {
 				url, err := url.Parse("https://localhost")
 				require.NoError(err)
-				opts = append(opts, gosesh.WithOrigin(url))
+				opts = append(opts, WithOrigin(url))
 			}
-			sesh := gosesh.New(nil, nil, opts...)
+			sesh := New(nil, nil, opts...)
 			handler := sesh.OAuth2Begin(&oauth2.Config{
 				ClientID:     "client_id",
 				ClientSecret: "client_secret",
@@ -254,7 +252,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(mode testCallbackRequestMode) (
 	identifier := mock_gosesh.NewIdentifier(s.T())
 	identifier.EXPECT().String().Return("identifier")
 	store.EXPECT().UpsertUser(r.Context(), user).Return(identifier, nil)
-	createSessionRequest := gosesh.CreateSessionRequest{
+	createSessionRequest := CreateSessionRequest{
 		UserID:   identifier,
 		IdleAt:   s.now.Add(1 * time.Hour),
 		ExpireAt: s.now.Add(24 * time.Hour),
@@ -282,7 +280,7 @@ func (s *Oauth2CallbackHandlerSuite) errCallback(errString string) func(w http.R
 
 func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
+	sesh := New(nil, nil, WithNow(s.withNow))
 	request, config, _, _ := s.prepareTest(testCallbackErrNoStateCookie)
 	sesh.OAuth2Callback(
 		nil,
@@ -296,7 +294,7 @@ func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 
 func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
+	sesh := New(nil, nil, WithNow(s.withNow))
 	request, config, _, _ := s.prepareTest(testCallbackInvalidStateCookie)
 	sesh.OAuth2Callback(
 		nil,
@@ -308,7 +306,7 @@ func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 
 func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
+	sesh := New(nil, nil, WithNow(s.withNow))
 	request, config, _, _ := s.prepareTest(testFailedExchange)
 	sesh.OAuth2Callback(
 		nil,
@@ -320,7 +318,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataRequest() {
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
+	sesh := New(nil, nil, WithNow(s.withNow))
 	request, config, user, _ := s.prepareTest(testFailedUnmarshalRequest)
 	sesh.OAuth2Callback(
 		user,
@@ -332,7 +330,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataRequest() {
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataReadBody() {
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
+	sesh := New(nil, nil, WithNow(s.withNow))
 	request, config, user, _ := s.prepareTest(testFailedUnmarshalReadBody)
 	sesh.OAuth2Callback(
 		user,
@@ -344,7 +342,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataReadBody() {
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalDataFinal() {
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, nil, gosesh.WithNow(s.withNow))
+	sesh := New(nil, nil, WithNow(s.withNow))
 	request, config, user, _ := s.prepareTest(testFailedUnmarshalDataFinal)
 	sesh.OAuth2Callback(
 		user,
@@ -357,7 +355,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalDataFinal() {
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
 	request, config, user, store := s.prepareTest(testCallbackErrUpsertUser)
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, store, gosesh.WithNow(s.withNow))
+	sesh := New(nil, store, WithNow(s.withNow))
 	sesh.OAuth2Callback(
 		user,
 		config,
@@ -369,7 +367,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
 	request, config, user, store := s.prepareTest(testCallbackErrCreateSession)
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, store, gosesh.WithNow(s.withNow))
+	sesh := New(nil, store, WithNow(s.withNow))
 	sesh.OAuth2Callback(
 		user,
 		config,
@@ -381,7 +379,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
 func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
 	request, config, user, store := s.prepareTest(testCallbackSuccess)
 	rr := httptest.NewRecorder()
-	sesh := gosesh.New(nil, store, gosesh.WithNow(s.withNow))
+	sesh := New(nil, store, WithNow(s.withNow))
 
 	var success bool
 	sesh.OAuth2Callback(user, config, func(w http.ResponseWriter, r *http.Request, err error) {
@@ -438,7 +436,7 @@ type logoutTest struct {
 	store      *mock_gosesh.Storer
 	parser     *mock_gosesh.IDParser
 	r          *http.Request
-	sesh       *gosesh.Gosesh
+	sesh       *Gosesh
 	w          *httptest.ResponseRecorder
 	handler    *mock_gosesh.HandlerDone
 	identifier *mock_gosesh.Identifier
@@ -451,7 +449,7 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	parser := mock_gosesh.NewIDParser(t)
 	r, err := http.NewRequest(http.MethodGet, "/", nil)
 	require.NoError(t, err)
-	sesh := gosesh.New(parser.Execute, store, gosesh.WithNow(now))
+	sesh := New(parser.Execute, store, WithNow(now))
 	rr := httptest.NewRecorder()
 	handler := mock_gosesh.NewHandlerDone(t)
 	identifier := mock_gosesh.NewIdentifier(t)
@@ -492,7 +490,7 @@ func (t *logoutTest) authenticated(test *testing.T) *http.Request {
 	t.session = session
 
 	t.identifier.EXPECT().String().Return("identifier")
-	ctx := context.WithValue(t.r.Context(), gosesh.SessionContextKey, t.session)
+	ctx := context.WithValue(t.r.Context(), SessionContextKey, t.session)
 	t.r = t.r.WithContext(ctx)
 	return original
 }
@@ -503,7 +501,7 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("no session cookie", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
@@ -517,7 +515,7 @@ func TestLogoutHandler(t *testing.T) {
 			Name:  "session",
 			Value: "bad",
 		})
-		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
@@ -529,7 +527,7 @@ func TestLogoutHandler(t *testing.T) {
 
 		test.setValidCOokie()
 		test.parser.EXPECT().Execute([]byte("identifier")).Return(nil, fmt.Errorf("failed parse"))
-		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
@@ -540,7 +538,7 @@ func TestLogoutHandler(t *testing.T) {
 		test := prepareLogoutTest(t)
 		test.succeedParsingID()
 		test.store.EXPECT().GetSession(test.r.Context(), test.identifier).Return(nil, fmt.Errorf("failed get session"))
-		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
@@ -553,7 +551,7 @@ func TestLogoutHandler(t *testing.T) {
 		session := mock_gosesh.NewSession(t)
 		session.EXPECT().ExpireAt().Return(test.now().UTC().Add(-1 * time.Hour))
 		test.store.EXPECT().GetSession(test.r.Context(), test.identifier).Return(session, nil)
-		test.handler.EXPECT().Execute(test.w, test.r, gosesh.ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, ErrUnauthorized).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 		test.execute()
@@ -567,7 +565,7 @@ func TestLogoutHandler(t *testing.T) {
 		test.session.EXPECT().ID().Return(test.identifier)
 		err := fmt.Errorf("failed delete session")
 		test.store.EXPECT().DeleteSession(test.r.Context(), test.identifier).Return(err)
-		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
@@ -583,7 +581,7 @@ func TestLogoutHandler(t *testing.T) {
 
 		err := fmt.Errorf("failed delete session")
 		test.store.EXPECT().DeleteUserSessions(test.r.Context(), test.identifier).Return(0, err)
-		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", gosesh.ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
+		test.handler.EXPECT().Execute(test.w, test.r, fmt.Errorf("%w: %w", ErrFailedDeletingSession, err)).Run(func(w http.ResponseWriter, r *http.Request, err error) {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
 
@@ -598,7 +596,7 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("success deleting one session", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		doneR := test.authenticated(t).WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
+		doneR := test.authenticated(t).WithContext(context.WithValue(test.r.Context(), SessionContextKey, nil))
 		test.session.EXPECT().ID().Return(test.identifier)
 		test.store.EXPECT().DeleteSession(test.r.Context(), test.identifier).Return(nil)
 		test.handler.On("Execute", test.w, doneR, nil).Run(func(args mock.Arguments) {
@@ -613,7 +611,7 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("success deleting all sessions", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		doneR := test.authenticated(t).WithContext(context.WithValue(test.r.Context(), gosesh.SessionContextKey, nil))
+		doneR := test.authenticated(t).WithContext(context.WithValue(test.r.Context(), SessionContextKey, nil))
 		test.session.EXPECT().UserID().Return(test.identifier)
 		test.store.EXPECT().DeleteUserSessions(test.r.Context(), test.identifier).Return(0, nil)
 		test.handler.On("Execute", test.w, doneR, nil).Run(func(args mock.Arguments) {
@@ -735,9 +733,9 @@ func TestCallbackRedirect(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
 			store := mock_gosesh.NewStorer(t)
 			parser := mock_gosesh.NewIDParser(t)
-			sesh := gosesh.New(parser.Execute, store,
-				gosesh.WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }),
-				gosesh.WithAllowedHosts(test.giveAllowedHosts...),
+			sesh := New(parser.Execute, store,
+				WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }),
+				WithAllowedHosts(test.giveAllowedHosts...),
 			)
 
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
