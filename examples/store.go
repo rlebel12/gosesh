@@ -28,8 +28,8 @@ type (
 	}
 
 	CustomIdentifier struct {
-		id    int
-		email string
+		Id    int
+		Email string
 	}
 
 	Session struct {
@@ -40,8 +40,8 @@ type (
 	}
 )
 
-func (ci CustomIdentifier) String() string {
-	return fmt.Sprintf("%d (%s)", ci.id, ci.email)
+func (ci *CustomIdentifier) String() string {
+	return fmt.Sprintf("%d (%s)", ci.Id, ci.Email)
 }
 
 func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (gosesh.Identifier, error) {
@@ -54,12 +54,12 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (
 		slog.Info("Unknown user", "id", user.String())
 	}
 	for _, user := range ms.Users {
-		if user.email == user.String() {
+		if user.Email == user.String() {
 			return user, nil
 		}
 	}
 	u := &CustomIdentifier{
-		id: sequenceID,
+		Id: sequenceID,
 	}
 	sequenceID++
 	ms.Users[u] = u
@@ -67,13 +67,13 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, user gosesh.OAuth2User) (
 }
 
 func (ms *MemoryStore) CreateSession(ctx context.Context, req gosesh.CreateSessionRequest) (gosesh.Session, error) {
-	userID, ok := req.UserID.(CustomIdentifier)
+	userID, ok := req.UserID.(*CustomIdentifier)
 	if !ok {
 		return nil, errors.New("invalid user id")
 	}
 	s := &Session{
 		id:       uuid.New(),
-		userID:   userID,
+		userID:   *userID,
 		idleAt:   req.IdleAt,
 		expireAt: req.ExpireAt,
 	}
@@ -110,7 +110,7 @@ func (s Session) ID() gosesh.Identifier {
 }
 
 func (s Session) UserID() gosesh.Identifier {
-	return s.userID
+	return &s.userID
 }
 
 func (s Session) IdleAt() time.Time {
@@ -120,3 +120,8 @@ func (s Session) IdleAt() time.Time {
 func (s Session) ExpireAt() time.Time {
 	return s.expireAt
 }
+
+// Ensure interfaces are implemented
+var _ gosesh.Storer = (*MemoryStore)(nil)
+var _ gosesh.Identifier = (*CustomIdentifier)(nil)
+var _ gosesh.Session = (*Session)(nil)
