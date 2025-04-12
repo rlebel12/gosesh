@@ -205,6 +205,11 @@ func defaultDoneHandler(gs *Gosesh, handlerName string) HandlerDone {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		if err != nil {
 			gs.logError("failed in handler", err, "name", handlerName)
+			code := http.StatusInternalServerError
+			if errors.Is(err, ErrUnauthorized) {
+				code = http.StatusUnauthorized
+			}
+			http.Error(w, http.StatusText(code), code)
 			return
 		}
 		redirect(w, r)
