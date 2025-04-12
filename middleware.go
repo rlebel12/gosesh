@@ -126,7 +126,7 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
 	if err != nil {
-		gs.logError("decode session cookie", err)
+		gs.logError("failed to decode session cookie", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
