@@ -62,7 +62,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				return r
 			},
 			giveParseError:          errors.New("parse error"),
-			wantLogs:                []string{"msg=\"parse session ID\" error=\"parse error\""},
+			wantLogs:                []string{"level=ERROR msg=\"failed to parse session ID from decoded session cookie\" error=\"parse error\"\n"},
 			wantSecureCookieHeaders: true,
 		},
 		"session active": {
