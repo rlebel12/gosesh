@@ -181,12 +181,14 @@ func (m *failReader) Read(p []byte) (n int, err error) {
 }
 
 func (s *Oauth2CallbackHandlerSuite) prepareTest(
-	mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *OAuth2UserMock, store *StorerMock,
+	mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *FakeOAuth2User, store *erroringStore,
 ) {
 	var err error
 	callbackURL := fmt.Sprintf("%s/auth/callback", s.oauth2Server.URL)
 	r, err = http.NewRequest(http.MethodGet, callbackURL, nil)
 	s.Require().NoError(err)
+
+	store = &erroringStore{MemoryStore: NewMemoryStore()}
 
 	if mode == testCallbackErrNoStateCookie {
 		return
@@ -220,7 +222,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
-	user = &OAuth2UserMock{}
+	user = NewFakeOAuth2User("user")
 
 	if mode == testFailedUnmarshalRequest {
 		user.RequestFunc = func(ctx context.Context, accessToken string) (*http.Response, error) {
@@ -252,48 +254,14 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 
-	user.UnmarshalFunc = func(b []byte) error {
-		return nil
-	}
-	user.StringFunc = func() string {
-		return "user"
-	}
-	store = &StorerMock{}
 	if mode == testCallbackErrUpsertUser {
-		store.UpsertUserFunc = func(ctx context.Context, user OAuth2User) (Identifier, error) {
-			return nil, fmt.Errorf("failed upsert")
-		}
+		store.upsertUserError = true
 		return
 	}
-	identifier := &IdentifierMock{}
-	identifier.StringFunc = func() string {
-		return "identifier"
-	}
-	store.UpsertUserFunc = func(ctx context.Context, user OAuth2User) (Identifier, error) {
-		return identifier, nil
-	}
-	// createSessionRequest := CreateSessionRequest{
-	// 	UserID:   identifier,
-	// 	IdleAt:   s.now.Add(1 * time.Hour),
-	// 	ExpireAt: s.now.Add(24 * time.Hour),
-	// }
 
 	if mode == testCallbackErrCreateSession {
-		store.CreateSessionFunc = func(ctx context.Context, req CreateSessionRequest) (Session, error) {
-			return nil, fmt.Errorf("failed create session")
-		}
+		store.createSessionError = true
 		return
-	}
-
-	session := &SessionMock{}
-	session.IDFunc = func() Identifier {
-		return identifier
-	}
-	session.ExpireAtFunc = func() time.Time {
-		return s.now.Add(24 * time.Hour)
-	}
-	store.CreateSessionFunc = func(ctx context.Context, req CreateSessionRequest) (Session, error) {
-		return session, nil
 	}
 
 	return
@@ -386,7 +354,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
 	sesh.OAuth2Callback(
 		user,
 		config,
-		s.errCallback("failed upserting user: failed upsert"),
+		s.errCallback("failed upserting user: mock failure"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
 }
@@ -398,7 +366,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
 	sesh.OAuth2Callback(
 		user,
 		config,
-		s.errCallback("failed creating session: failed create session"),
+		s.errCallback("failed creating session: mock failure"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
 }
@@ -420,7 +388,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
 	s.Equal(2, len(response.Cookies()))
 	sessionCookie := response.Cookies()[1]
 	s.Equal("session", sessionCookie.Name)
-	s.Equal("aWRlbnRpZmllcg==", sessionCookie.Value)
+	s.Equal("MQ==", sessionCookie.Value)
 	s.Equal(s.now.Add(24*time.Hour), sessionCookie.Expires)
 	s.Equal("localhost", sessionCookie.Domain)
 	s.Equal("/", sessionCookie.Path)
@@ -447,46 +415,57 @@ func TestOauth2CallbackHandlerSuite(t *testing.T) {
 }
 
 type logoutTest struct {
+	store      *erroringStore
+	identifier Identifier
 	now        func() time.Time
-	store      *StorerMock
+	req        *http.Request
+	resp       *httptest.ResponseRecorder
+	handler    http.Handler
+	session    Session
 	parser     IDParser
-	r          *http.Request
-	sesh       *Gosesh
-	w          *httptest.ResponseRecorder
-	identifier *IdentifierMock
-	session    *SessionMock
+	gosesh     *Gosesh
 }
 
-func prepareLogoutTest(t *testing.T) (test *logoutTest) {
-	now := func() time.Time { return time.Now() }
-	store := &StorerMock{}
-	r, err := http.NewRequest(http.MethodGet, "/", nil)
-	require.NoError(t, err)
-	sesh := New(
-		func(b []byte) (Identifier, error) { return test.parser(b) },
-		store,
-		WithNow(now),
-	)
-	rr := httptest.NewRecorder()
-	identifier := &IdentifierMock{}
+func prepareLogoutTest(t *testing.T) *logoutTest {
+	store := &erroringStore{MemoryStore: NewMemoryStore()}
+	now := func() time.Time {
+		return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil).WithContext(context.Background())
+	resp := httptest.NewRecorder()
+	parser := func(b []byte) (Identifier, error) {
+		return NewFakeIdentifier("identifier"), nil
+	}
+	gosesh := New(parser, store, WithNow(now))
+	handler := gosesh.Logout(nil)
 
-	test = new(logoutTest)
-	test.now = now
-	test.store = store
-	test.r = r
-	test.sesh = sesh
-	test.w = rr
-	test.identifier = identifier
-	test.session = &SessionMock{}
-	return
+	currentTime := now()
+	session, err := store.CreateSession(t.Context(), CreateSessionRequest{
+		UserID:   NewFakeIdentifier("identifier"),
+		IdleAt:   currentTime,
+		ExpireAt: currentTime.Add(time.Hour),
+	})
+	require.NoError(t, err)
+
+	return &logoutTest{
+		store:      store,
+		identifier: NewFakeIdentifier("identifier"),
+		now:        now,
+		req:        req,
+		resp:       resp,
+		handler:    handler,
+		session:    session,
+		parser:     parser,
+		gosesh:     gosesh,
+	}
 }
 
 func (t *logoutTest) execute() {
-	t.sesh.Logout(nil).ServeHTTP(t.w, t.r)
+	t.handler.ServeHTTP(t.resp, t.req)
 }
 
 func (t *logoutTest) setValidCOokie() {
-	t.r.AddCookie(&http.Cookie{
+	t.req.AddCookie(&http.Cookie{
 		Name:  "session",
 		Value: "aWRlbnRpZmllcg==",
 	})
@@ -494,21 +473,12 @@ func (t *logoutTest) setValidCOokie() {
 
 func (t *logoutTest) succeedParsingID() {
 	t.setValidCOokie()
-	t.identifier.StringFunc = func() string {
-		return "identifier"
-	}
-	t.parser = func(b []byte) (Identifier, error) {
-		return t.identifier, nil
-	}
 }
 
-func (t *logoutTest) authenticated(test *testing.T) *http.Request {
-	original := t.r
-	t.identifier.StringFunc = func() string {
-		return "identifier"
-	}
-	ctx := context.WithValue(t.r.Context(), SessionContextKey, t.session)
-	t.r = t.r.WithContext(ctx)
+func (t *logoutTest) authenticated() *http.Request {
+	original := t.req
+	ctx := context.WithValue(t.req.Context(), SessionContextKey, t.session)
+	t.req = t.req.WithContext(ctx)
 	return original
 }
 
@@ -518,18 +488,18 @@ func TestLogoutHandler(t *testing.T) {
 	t.Run("no session cookie", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.w.Code)
+		assert.Equal(http.StatusUnauthorized, test.resp.Code)
 	})
 
 	t.Run("bad session cookie", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		test.r.AddCookie(&http.Cookie{
+		test.req.AddCookie(&http.Cookie{
 			Name:  "session",
 			Value: "bad",
 		})
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.w.Code)
+		assert.Equal(http.StatusUnauthorized, test.resp.Code)
 	})
 
 	t.Run("failed parsing ID", func(t *testing.T) {
@@ -540,104 +510,64 @@ func TestLogoutHandler(t *testing.T) {
 			return nil, fmt.Errorf("failed parse")
 		}
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.w.Code)
+		assert.Equal(http.StatusUnauthorized, test.resp.Code)
 	})
 
 	t.Run("failed getting session", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 		test.succeedParsingID()
-		test.store.GetSessionFunc = func(ctx context.Context, id Identifier) (Session, error) {
-			return nil, fmt.Errorf("failed get session")
-		}
-
+		test.store.getSessionError = true
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.w.Code)
+		assert.Equal(http.StatusUnauthorized, test.resp.Code)
 	})
 
 	t.Run("session expired", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 		test.succeedParsingID()
-		session := &SessionMock{}
-		session.ExpireAtFunc = func() time.Time {
-			return test.now().UTC().Add(-1 * time.Hour)
-		}
-		test.store.GetSessionFunc = func(ctx context.Context, id Identifier) (Session, error) {
-			return session, nil
-		}
+
+		_, err := test.store.CreateSession(context.Background(), CreateSessionRequest{
+			UserID:   test.identifier,
+			IdleAt:   test.now().UTC().Add(-1 * time.Hour),
+			ExpireAt: test.now().UTC().Add(-1 * time.Hour),
+		})
+		require.NoError(t, err)
 
 		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.w.Code)
+		assert.Equal(http.StatusUnauthorized, test.resp.Code)
 	})
 
 	t.Run("failed deleting one session", func(t *testing.T) {
 		test := prepareLogoutTest(t)
 
-		test.authenticated(t)
-		test.session.IDFunc = func() Identifier {
-			return test.identifier
-		}
-		err := fmt.Errorf("failed delete session")
-		test.store.DeleteSessionFunc = func(ctx context.Context, id Identifier) error {
-			return err
-		}
+		test.authenticated()
+		test.store.deleteSessionError = true
 
 		test.execute()
-		assert.Equal(http.StatusInternalServerError, test.w.Code)
+		assert.Equal(http.StatusInternalServerError, test.resp.Code)
 	})
 
 	t.Run("failed deleting all sessions", func(t *testing.T) {
 		test := prepareLogoutTest(t)
-
-		test.authenticated(t)
-		test.session.UserIDFunc = func() Identifier {
-			return test.identifier
-		}
-
-		err := fmt.Errorf("failed delete session")
-		test.store.DeleteUserSessionsFunc = func(ctx context.Context, id Identifier) (int, error) {
-			return 0, err
-		}
-
-		urlValues := url.Values{}
-		urlValues.Add("all", "true")
-		test.r.URL.RawQuery = urlValues.Encode()
-
+		test.authenticated()
+		test.store.deleteUserSessionsError = true
+		test.req.URL.RawQuery = url.Values{"all": {"true"}}.Encode()
 		test.execute()
-		assert.Equal(http.StatusInternalServerError, test.w.Code)
+		assert.Equal(http.StatusInternalServerError, test.resp.Code)
 	})
 
 	t.Run("success deleting one session", func(t *testing.T) {
 		test := prepareLogoutTest(t)
-
-		test.authenticated(t)
-		test.session.IDFunc = func() Identifier {
-			return test.identifier
-		}
-		test.store.DeleteSessionFunc = func(ctx context.Context, id Identifier) error {
-			return nil
-		}
-
+		test.authenticated()
 		test.execute()
-		assert.Equal(http.StatusTemporaryRedirect, test.w.Code)
+		assert.Equal(http.StatusTemporaryRedirect, test.resp.Code)
 	})
 
 	t.Run("success deleting all sessions", func(t *testing.T) {
 		test := prepareLogoutTest(t)
-
-		test.authenticated(t)
-		test.session.UserIDFunc = func() Identifier {
-			return test.identifier
-		}
-		test.store.DeleteUserSessionsFunc = func(ctx context.Context, id Identifier) (int, error) {
-			return 0, nil
-		}
-
-		urlValues := url.Values{}
-		urlValues.Add("all", "true")
-		test.r.URL.RawQuery = urlValues.Encode()
-
+		test.authenticated()
+		test.req.URL.RawQuery = url.Values{"all": {"true"}}.Encode()
 		test.execute()
-		assert.Equal(http.StatusTemporaryRedirect, test.w.Code)
+		assert.Equal(http.StatusTemporaryRedirect, test.resp.Code)
 	})
 }
 
@@ -744,9 +674,9 @@ func TestCallbackRedirect(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
-			store := &StorerMock{}
+			store := NewMemoryStore()
 			sesh := New(func(b []byte) (Identifier, error) {
-				return &IdentifierMock{StringFunc: func() string { return "identifier" }}, nil
+				return NewFakeIdentifier("identifier"), nil
 			}, store,
 				WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }),
 				WithAllowedHosts(test.giveAllowedHosts...),

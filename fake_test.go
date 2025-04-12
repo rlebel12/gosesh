@@ -2,6 +2,7 @@ package gosesh
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -127,4 +128,48 @@ func TestFakeSessionContract(t *testing.T) {
 			return NewFakeSession(id, userID, idleAt, expireAt)
 		},
 	}.Test(t)
+}
+
+type erroringStore struct {
+	*MemoryStore
+	createSessionError      bool
+	deleteSessionError      bool
+	deleteUserSessionsError bool
+	upsertUserError         bool
+	getSessionError         bool
+}
+
+func (s *erroringStore) CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error) {
+	if s.createSessionError {
+		return nil, errors.New("mock failure")
+	}
+	return s.MemoryStore.CreateSession(ctx, req)
+}
+
+func (s *erroringStore) DeleteSession(ctx context.Context, sessionID Identifier) error {
+	if s.deleteSessionError {
+		return errors.New("mock failure")
+	}
+	return s.MemoryStore.DeleteSession(ctx, sessionID)
+}
+
+func (s *erroringStore) DeleteUserSessions(ctx context.Context, userID Identifier) (int, error) {
+	if s.deleteUserSessionsError {
+		return 0, errors.New("mock failure")
+	}
+	return s.MemoryStore.DeleteUserSessions(ctx, userID)
+}
+
+func (s *erroringStore) UpsertUser(ctx context.Context, user OAuth2User) (Identifier, error) {
+	if s.upsertUserError {
+		return nil, errors.New("mock failure")
+	}
+	return s.MemoryStore.UpsertUser(ctx, user)
+}
+
+func (s *erroringStore) GetSession(ctx context.Context, sessionID Identifier) (Session, error) {
+	if s.getSessionError {
+		return nil, errors.New("mock failure")
+	}
+	return s.MemoryStore.GetSession(ctx, sessionID)
 }

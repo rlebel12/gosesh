@@ -2,7 +2,6 @@ package gosesh
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -38,26 +37,6 @@ func prepareTestLogger() (func(*Gosesh), *testLogger) {
 	return func(g *Gosesh) {
 		g.logger = slog.New(handler)
 	}, logger
-}
-
-type erroringStore struct {
-	*MemoryStore
-	createSessionError bool
-	deleteSessionError bool
-}
-
-func (s *erroringStore) CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error) {
-	if s.createSessionError {
-		return nil, errors.New("mock failure")
-	}
-	return s.MemoryStore.CreateSession(ctx, req)
-}
-
-func (s *erroringStore) DeleteSession(ctx context.Context, sessionID Identifier) error {
-	if s.deleteSessionError {
-		return errors.New("mock failure")
-	}
-	return s.MemoryStore.DeleteSession(ctx, sessionID)
 }
 
 func TestAuthenticateAndRefresh(t *testing.T) {
