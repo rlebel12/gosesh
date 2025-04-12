@@ -133,7 +133,7 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	id, err := gs.identifierFromBytes(sessionIDRaw)
 	if err != nil {
-		gs.logError("parse session ID", err)
+		gs.logError("failed to parse session ID from decoded session cookie", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
