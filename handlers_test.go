@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rlebel12/gosesh/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -181,7 +182,7 @@ func (m *failReader) Read(p []byte) (n int, err error) {
 }
 
 func (s *Oauth2CallbackHandlerSuite) prepareTest(
-	mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *FakeOAuth2User, store *erroringStore,
+	mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *internal.FakeOAuth2User, store *erroringStore,
 ) {
 	var err error
 	callbackURL := fmt.Sprintf("%s/auth/callback", s.oauth2Server.URL)
@@ -222,7 +223,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
-	user = NewFakeOAuth2User("user")
+	user = internal.NewFakeOAuth2User("user")
 
 	if mode == testFailedUnmarshalRequest {
 		user.RequestFunc = func(ctx context.Context, accessToken string) (*http.Response, error) {
@@ -434,14 +435,14 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	req := httptest.NewRequest(http.MethodGet, "/logout", nil).WithContext(context.Background())
 	resp := httptest.NewRecorder()
 	parser := func(b []byte) (Identifier, error) {
-		return NewFakeIdentifier("identifier"), nil
+		return internal.NewFakeIdentifier("identifier"), nil
 	}
 	gosesh := New(parser, store, WithNow(now))
 	handler := gosesh.Logout(nil)
 
 	currentTime := now()
 	session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-		UserID:   NewFakeIdentifier("identifier"),
+		UserID:   internal.NewFakeIdentifier("identifier"),
 		IdleAt:   currentTime,
 		ExpireAt: currentTime.Add(time.Hour),
 	})
@@ -449,7 +450,7 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 
 	return &logoutTest{
 		store:      store,
-		identifier: NewFakeIdentifier("identifier"),
+		identifier: internal.NewFakeIdentifier("identifier"),
 		now:        now,
 		req:        req,
 		resp:       resp,
@@ -676,7 +677,7 @@ func TestCallbackRedirect(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
 			store := NewMemoryStore()
 			sesh := New(func(b []byte) (Identifier, error) {
-				return NewFakeIdentifier("identifier"), nil
+				return internal.NewFakeIdentifier("identifier"), nil
 			}, store,
 				WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }),
 				WithAllowedHosts(test.giveAllowedHosts...),

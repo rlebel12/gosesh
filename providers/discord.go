@@ -22,10 +22,10 @@ type (
 )
 
 // Creates a new Discord OAuth2 provider. redirectPath should have a leading slash.
-func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...DiscordOpt) *Discord {
+func NewDiscord(sesh Gosesher, scopes DiscordScopes, clientID, clientSecret, redirectPath string, opts ...DiscordOpt) *Discord {
 	oauth2Config := &oauth2.Config{
-		ClientID:     credentials.ClientID(),
-		ClientSecret: credentials.ClientSecret(),
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
 		Scopes: scopes.strings(),
@@ -102,10 +102,10 @@ type DiscordUser struct {
 
 func (user *DiscordUser) String() string {
 	switch user.discord.keyMode {
-	case DiscordKeyModeID:
-		return user.ID
 	case DiscordKeyModeEmail:
 		return user.Email
+	case DiscordKeyModeID:
+		fallthrough
 	default:
 		return user.ID
 	}

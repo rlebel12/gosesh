@@ -21,10 +21,10 @@ type (
 	GoogleOpt func(*Google)
 )
 
-func NewGoogle(sesh Gosesher, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...GoogleOpt) *Google {
+func NewGoogle(sesh Gosesher, clientID, clientSecret, redirectPath string, opts ...GoogleOpt) *Google {
 	oauth2Config := &oauth2.Config{
-		ClientID:     credentials.ClientID(),
-		ClientSecret: credentials.ClientSecret(),
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
 		Scopes: []string{

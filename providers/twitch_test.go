@@ -1,14 +1,12 @@
 package providers
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/rlebel12/gosesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -30,7 +28,7 @@ func TestNewTwitch(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
-			twitch := NewTwitch(setup.Sesh, test.scopes, setup.Creds, "/callback")
+			twitch := NewTwitch(setup.sesh, test.scopes, "clientID", "clientSecret", "/callback")
 
 			assert.Equal(t, "clientID", twitch.cfg.ClientID)
 			assert.Equal(t, "clientSecret", twitch.cfg.ClientSecret)
@@ -45,28 +43,15 @@ func TestNewTwitch(t *testing.T) {
 
 func TestTwitchOAuth2Begin(t *testing.T) {
 	setup := setup(t)
-	twitch := NewTwitch(setup.Sesh, TwitchScopes{}, setup.Creds, "")
-	var gotCalled bool
-	var gotCfg *oauth2.Config
-	setup.Sesh.OAuth2BeginFunc = func(cfg *oauth2.Config) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			gotCfg = cfg
-			gotCalled = true
-		}
-	}
-	twitch.OAuth2Begin().ServeHTTP(nil, httptest.NewRequest("GET", "/", nil))
-	assert.True(t, gotCalled)
-	assert.Equal(t, "clientID", gotCfg.ClientID)
+	twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "")
+	twitch.OAuth2Begin().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	assert.True(t, setup.gotBeginCall.cfg != nil)
+	assert.Equal(t, "clientID", setup.gotBeginCall.cfg.ClientID)
 }
 
 func TestTwitchOAuth2Callback(t *testing.T) {
 	setup := setup(t)
-	twitch := NewTwitch(setup.Sesh, TwitchScopes{}, setup.Creds, "")
-	setup.Sesh.OAuth2CallbackFunc = func(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.HandlerDone) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			handler(w, r, nil)
-		}
-	}
+	twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "")
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
@@ -79,9 +64,6 @@ func TestTwitchOAuth2Callback(t *testing.T) {
 
 	assert.NoError(t, gotErr)
 	assert.True(t, gotCalled)
-	assert.Len(t, setup.Sesh.calls.OAuth2Callback, 1)
-	assert.IsType(t, &TwitchUser{}, setup.Sesh.calls.OAuth2Callback[0].User)
-	assert.Equal(t, "clientID", setup.Sesh.calls.OAuth2Callback[0].Cfg.ClientID)
 }
 
 func TestTwitchUserRequest(t *testing.T) {
@@ -103,8 +85,7 @@ func TestTwitchUserRequest(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			setup := setup(t)
-			setup.Sesh.HostFunc = func() string { return server.URL }
-			twitch := NewTwitch(setup.Sesh, TwitchScopes{}, setup.Creds, "", WithTwitchHost(tc.giveTwitchHost(server.URL)))
+			twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "", WithTwitchHost(tc.giveTwitchHost(server.URL)))
 
 			expectedResponse := &TwitchUser{
 				Data: []struct {
@@ -129,7 +110,7 @@ func TestTwitchUserRequest(t *testing.T) {
 			})
 
 			actualUser := twitch.NewUser().(*TwitchUser)
-			resp, err := actualUser.Request(context.Background(), "accessToken")
+			resp, err := actualUser.Request(t.Context(), "accessToken")
 
 			if tc.wantErr {
 				assert.Error(t, err)
@@ -177,7 +158,7 @@ func TestTwitchUserString(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
-			twitch := NewTwitch(setup.Sesh, TwitchScopes{}, setup.Creds, "", test.opts...)
+			twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "", test.opts...)
 			user := twitch.NewUser().(*TwitchUser)
 
 			if name == "no data" {

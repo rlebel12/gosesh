@@ -1,26 +1,31 @@
 package providers
 
 import (
+	"net/http"
 	"testing"
 
-	"github.com/rlebel12/gosesh"
+	"golang.org/x/oauth2"
 )
 
 type testSetup struct {
-	Sesh  *GosesherMock
-	Creds *gosesh.OAuth2CredentialsMock
+	sesh         Gosesher
+	gotBeginCall struct {
+		cfg *oauth2.Config
+	}
 }
 
-func setup(t *testing.T) testSetup {
+func setup(t *testing.T) *testSetup {
 	t.Helper()
-	return testSetup{
-		Sesh: &GosesherMock{
-			SchemeFunc: func() string { return "http" },
-			HostFunc:   func() string { return "localhost" },
+	ts := &testSetup{}
+	ts.sesh = NewFakeGosesher(
+		"http",
+		"localhost",
+		func(cfg *oauth2.Config) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				ts.gotBeginCall.cfg = cfg
+				w.WriteHeader(http.StatusOK)
+			}
 		},
-		Creds: &gosesh.OAuth2CredentialsMock{
-			ClientIDFunc:     func() string { return "clientID" },
-			ClientSecretFunc: func() string { return "clientSecret" },
-		},
-	}
+	)
+	return ts
 }

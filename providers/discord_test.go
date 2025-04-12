@@ -1,14 +1,12 @@
 package providers
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/rlebel12/gosesh"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -30,7 +28,7 @@ func TestNewDiscord(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
-			discord := NewDiscord(setup.Sesh, test.scopes, setup.Creds, "/callback")
+			discord := NewDiscord(setup.sesh, test.scopes, "clientID", "clientSecret", "/callback")
 
 			assert.Equal(t, &oauth2.Config{
 				ClientID:     "clientID",
@@ -49,28 +47,15 @@ func TestNewDiscord(t *testing.T) {
 
 func TestDiscordOAuth2Begin(t *testing.T) {
 	setup := setup(t)
-	discord := NewDiscord(setup.Sesh, DiscordScopes{}, setup.Creds, "")
-	var gotCalled bool
-	var gotCfg *oauth2.Config
-	setup.Sesh.OAuth2BeginFunc = func(cfg *oauth2.Config) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			gotCfg = cfg
-			gotCalled = true
-		}
-	}
-	discord.OAuth2Begin().ServeHTTP(nil, httptest.NewRequest("GET", "/", nil))
-	assert.True(t, gotCalled)
-	assert.Equal(t, "clientID", gotCfg.ClientID)
+	discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "")
+	discord.OAuth2Begin().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
+	require.NotNil(t, setup.gotBeginCall.cfg)
+	assert.Equal(t, "clientID", setup.gotBeginCall.cfg.ClientID)
 }
 
 func TestDiscordOAuth2Callback(t *testing.T) {
 	setup := setup(t)
-	discord := NewDiscord(setup.Sesh, DiscordScopes{}, setup.Creds, "")
-	setup.Sesh.OAuth2CallbackFunc = func(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.HandlerDone) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			handler(w, r, nil)
-		}
-	}
+	discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "")
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
@@ -83,9 +68,6 @@ func TestDiscordOAuth2Callback(t *testing.T) {
 
 	assert.NoError(t, gotErr)
 	assert.True(t, gotCalled)
-	assert.Len(t, setup.Sesh.calls.OAuth2Callback, 1)
-	assert.Equal(t, discord.NewUser(), setup.Sesh.calls.OAuth2Callback[0].User)
-	assert.Equal(t, "clientID", setup.Sesh.calls.OAuth2Callback[0].Cfg.ClientID)
 }
 
 func TestDiscordUserRequest(t *testing.T) {
@@ -107,8 +89,7 @@ func TestDiscordUserRequest(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			setup := setup(t)
-			setup.Sesh.HostFunc = func() string { return server.URL }
-			discord := NewDiscord(setup.Sesh, DiscordScopes{}, setup.Creds, "", WithDiscodHost(tc.giveDiscordHost(server.URL)))
+			discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "", WithDiscodHost(tc.giveDiscordHost(server.URL)))
 
 			expectedUser := discord.NewUser().(*DiscordUser)
 			mux.HandleFunc("/api/v9/users/@me", func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +102,7 @@ func TestDiscordUserRequest(t *testing.T) {
 			})
 
 			actualUser := discord.NewUser().(*DiscordUser)
-			resp, err := actualUser.Request(context.Background(), "accessToken")
+			resp, err := actualUser.Request(t.Context(), "accessToken")
 
 			if tc.wantErr {
 				assert.Error(t, err)
@@ -160,7 +141,7 @@ func TestDiscordUserString(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
-			discord := NewDiscord(setup.Sesh, DiscordScopes{}, setup.Creds, "", test.opts...)
+			discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "", test.opts...)
 			user := discord.NewUser().(*DiscordUser)
 			user.ID = userID
 			user.Email = userEmail

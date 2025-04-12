@@ -4,18 +4,10 @@ up:
 down:
 	@docker compose down
 
-cover:
-	@go test -cover -coverpkg "." "./tests" -coverprofile=gosesh_coverage.out .
-	@go tool cover -html=gosesh_coverage.out -o gosesh_coverage.html
-	@rm gosesh_coverage.out
-
-	@go test -cover "./providers" -coverprofile=providers_coverage.out ./providers
-	@go tool cover -html=providers_coverage.out -o providers_coverage.html
-	@rm providers_coverage.out
-
-	@go test -cover "./stores/postgres" -coverprofile=postgres_coverage.out ./stores/postgres
-	@go tool cover -html=postgres_coverage.out -o postgres_coverage.html
-	@rm postgres_coverage.out
+coverage:
+	@go test ./... -coverpkg=./... -coverprofile=./tmp/coverage.out
+	@go tool cover -html=./tmp/coverage.out -o ./tmp/coverage.html
+	@rm ./tmp/coverage.out
 
 migrate:
 	atlas migrate apply --dir "file://stores/postgres/migrations" --url "postgresql://postgres:root@localhost:16001/gosesh?sslmode=disable"

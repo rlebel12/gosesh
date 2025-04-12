@@ -22,10 +22,10 @@ type (
 )
 
 // Creates a new Twitch OAuth2 provider. redirectPath should have a leading slash.
-func NewTwitch(sesh Gosesher, scopes TwitchScopes, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...TwitchOpt) *Twitch {
+func NewTwitch(sesh Gosesher, scopes TwitchScopes, clientID, clientSecret, redirectPath string, opts ...TwitchOpt) *Twitch {
 	oauth2Config := &oauth2.Config{
-		ClientID:     credentials.ClientID(),
-		ClientSecret: credentials.ClientSecret(),
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 		RedirectURL: fmt.Sprintf(
 			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
 		Scopes: scopes.strings(),
@@ -107,10 +107,10 @@ func (user *TwitchUser) String() string {
 	}
 
 	switch user.twitch.keyMode {
-	case TwitchKeyModeID:
-		return user.Data[0].ID
 	case TwitchKeyModeEmail:
 		return user.Data[0].Email
+	case TwitchKeyModeID:
+		fallthrough
 	default:
 		return user.Data[0].ID
 	}

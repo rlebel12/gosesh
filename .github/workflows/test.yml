@@ -10,12 +10,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.22.x'
+          go-version: "1.22.x"
       - name: Install dependencies
         run: go get .
-      - name: Test Gosesh
-        run: go test -coverpkg=. ./tests
-      - name: Test Providers
-        run: go test -coverpkg=./providers ./providers
-      - name: Test Stores (Postgres)
-        run: go test -coverpkg=./stores/postgres ./stores/postgres
+      - name: Test
+        run: go test ./... -coverpkg=./...

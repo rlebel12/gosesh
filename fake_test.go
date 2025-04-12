@@ -3,48 +3,11 @@ package gosesh
 import (
 	"context"
 	"errors"
-	"net/http"
 	"testing"
 	"time"
+
+	"github.com/rlebel12/gosesh/internal"
 )
-
-type FakeIdentifier struct {
-	ID string
-}
-
-func (f *FakeIdentifier) String() string {
-	return f.ID
-}
-
-func NewFakeIdentifier(id string) *FakeIdentifier {
-	return &FakeIdentifier{ID: id}
-}
-
-type FakeOAuth2User struct {
-	*FakeIdentifier
-	RequestFunc   func(ctx context.Context, accessToken string) (*http.Response, error)
-	UnmarshalFunc func(b []byte) error
-}
-
-func (f *FakeOAuth2User) Request(ctx context.Context, accessToken string) (*http.Response, error) {
-	if f.RequestFunc != nil {
-		return f.RequestFunc(ctx, accessToken)
-	}
-	return &http.Response{}, nil
-}
-
-func (f *FakeOAuth2User) Unmarshal(b []byte) error {
-	if f.UnmarshalFunc != nil {
-		return f.UnmarshalFunc(b)
-	}
-	return nil
-}
-
-func NewFakeOAuth2User(id string) *FakeOAuth2User {
-	return &FakeOAuth2User{
-		FakeIdentifier: NewFakeIdentifier(id),
-	}
-}
 
 type FakeOAuth2Credentials struct {
 	ClientIDValue     string
@@ -101,7 +64,7 @@ func NewFakeSession(id, userID Identifier, idleAt, expireAt time.Time) *FakeSess
 func TestFakeIdentifierContract(t *testing.T) {
 	IdentifierContract{
 		NewIdentifier: func(id string) Identifier {
-			return NewFakeIdentifier(id)
+			return internal.NewFakeIdentifier(id)
 		},
 	}.Test(t)
 }
@@ -109,7 +72,7 @@ func TestFakeIdentifierContract(t *testing.T) {
 func TestFakeOAuth2UserContract(t *testing.T) {
 	OAuth2UserContract{
 		NewOAuth2User: func(id string) OAuth2User {
-			return NewFakeOAuth2User(id)
+			return internal.NewFakeOAuth2User(id)
 		},
 	}.Test(t)
 }
@@ -126,6 +89,9 @@ func TestFakeSessionContract(t *testing.T) {
 	SessionContract{
 		NewSession: func(id, userID Identifier, idleAt, expireAt time.Time) Session {
 			return NewFakeSession(id, userID, idleAt, expireAt)
+		},
+		NewIdentifier: func(id string) Identifier {
+			return internal.NewFakeIdentifier(id)
 		},
 	}.Test(t)
 }
