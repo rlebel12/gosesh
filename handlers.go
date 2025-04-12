@@ -41,15 +41,6 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	}
 }
 
-var (
-	ErrFailedGettingStateCookie = errors.New("failed getting state cookie")
-	ErrInvalidStateCookie       = errors.New("invalid state cookie")
-	ErrFailedExchangingToken    = errors.New("failed exchanging token")
-	ErrFailedUnmarshallingData  = errors.New("failed unmarshalling data")
-	ErrFailedUpsertingUser      = errors.New("failed upserting user")
-	ErrFailedCreatingSession    = errors.New("failed creating session")
-)
-
 type HandlerDone func(http.ResponseWriter, *http.Request, error)
 
 // Create a handler for the OAuth2 callback. This handler performs the token exchange and retrieves
@@ -153,13 +144,11 @@ func (gs *Gosesh) Logout(done HandlerDone) http.HandlerFunc {
 			err = gs.store.DeleteSession(r.Context(), session.ID())
 		}
 		if err != nil {
-			gs.logError("failed to delete session(s)", err, "all", r.URL.Query().Get("all") != "")
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedDeletingSession, err))
 			return
 		}
 
 		http.SetCookie(w, gs.expireSessionCookie())
-
 		ctx := context.WithValue(r.Context(), SessionContextKey, nil)
 		done(w, r.WithContext(ctx), nil)
 	}
@@ -204,10 +193,14 @@ func defaultDoneHandler(gs *Gosesh, handlerName string) HandlerDone {
 	redirect := gs.CallbackRedirect("/")
 	return func(w http.ResponseWriter, r *http.Request, err error) {
 		if err != nil {
-			gs.logError("failed in handler", err, "name", handlerName)
 			code := http.StatusInternalServerError
-			if errors.Is(err, ErrUnauthorized) {
+			switch {
+			case errors.Is(err, ErrUnauthorized):
 				code = http.StatusUnauthorized
+			case errors.Is(err, ErrSessionExpired):
+				code = http.StatusUnauthorized
+			default:
+				gs.logError("callback", err, "name", handlerName)
 			}
 			http.Error(w, http.StatusText(code), code)
 			return

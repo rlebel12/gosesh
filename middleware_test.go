@@ -2,7 +2,8 @@ package gosesh
 
 import (
 	"context"
-	"log/slog"
+	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -25,54 +26,157 @@ const (
 	CaseSessionIdleSuccess
 )
 
-type testLogger struct {
-	logs []string
-}
-
-func (l *testLogger) Write(p []byte) (n int, err error) {
-	l.logs = append(l.logs, string(p))
-	return len(p), nil
-}
-
-func prepareTestLogger() (func(*Gosesh), *testLogger) {
-	logger := &testLogger{}
-	handler := slog.NewTextHandler(logger, nil)
-	return func(g *Gosesh) {
-		g.logger = slog.New(handler)
-	}, logger
-}
-
 func TestAuthenticateAndRefresh(t *testing.T) {
-	require := require.New(t)
-	assert := assert.New(t)
-	now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+	testCases := map[string]struct {
+		setup                   func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request
+		giveErrorStore          *erroringStore
+		giveParseError          error
+		wantLogs                []string
+		wantSecureCookieHeaders bool
+		wantCookie              bool
+	}{
+		"no current session": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				return r
+			},
+			wantSecureCookieHeaders: true,
+			wantCookie:              false,
+		},
+		"parse error": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := internal.NewFakeIdentifier("identifier")
+				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
+					UserID:   userID,
+					IdleAt:   now.Add(5 * time.Minute),
+					ExpireAt: now.Add(85 * time.Minute),
+				})
+				require.NoError(t, err)
+				r.AddCookie(&http.Cookie{
+					Name:     "customName",
+					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Expires:  now.Add(85 * time.Minute),
+					Path:     "/",
+					Domain:   "localhost",
+					SameSite: http.SameSiteLaxMode,
+				})
+				return r
+			},
+			giveParseError:          errors.New("parse error"),
+			wantLogs:                []string{"msg=\"parse session ID\" error=\"parse error\""},
+			wantSecureCookieHeaders: true,
+		},
+		"session active": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := internal.NewFakeIdentifier("identifier")
+				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
+					UserID:   userID,
+					IdleAt:   now.Add(5 * time.Minute),
+					ExpireAt: now.Add(85 * time.Minute),
+				})
+				require.NoError(t, err)
+				r.AddCookie(&http.Cookie{
+					Name:     "customName",
+					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Expires:  now.Add(85 * time.Minute),
+					Path:     "/",
+					Domain:   "localhost",
+					SameSite: http.SameSiteLaxMode,
+				})
+				return r
+			},
+			wantSecureCookieHeaders: true,
+		},
+		"session expired": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := internal.NewFakeIdentifier("identifier")
+				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
+					UserID:   userID,
+					IdleAt:   now.Add(-5 * time.Minute),
+					ExpireAt: now.Add(-1 * time.Minute),
+				})
+				require.NoError(t, err)
+				r.AddCookie(&http.Cookie{
+					Name:     "customName",
+					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Expires:  now.Add(10 * time.Minute),
+					Path:     "/",
+					Domain:   "localhost",
+					SameSite: http.SameSiteLaxMode,
+				})
+				return r
+			},
+			wantLogs:                []string{"msg=\"session expired\""},
+			wantSecureCookieHeaders: true,
+		},
+		"session idle failed create replacement": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := internal.NewFakeIdentifier("identifier")
+				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
+					UserID:   userID,
+					IdleAt:   now.Add(-5 * time.Minute),
+					ExpireAt: now.Add(85 * time.Minute),
+				})
+				require.NoError(t, err)
+				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+				return r
+			},
+			wantLogs:       []string{"msg=\"replace session\" error=\"create session: mock failure\""},
+			giveErrorStore: &erroringStore{createSessionError: true},
+		},
+		"session idle failed delete old": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := internal.NewFakeIdentifier("identifier")
+				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
+					UserID:   userID,
+					IdleAt:   now.Add(-5 * time.Minute),
+					ExpireAt: now.Add(85 * time.Minute),
+				})
+				require.NoError(t, err)
+				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+				return r
+			},
+			wantLogs:       []string{"msg=\"replace session\" error=\"delete session: mock failure\""},
+			giveErrorStore: &erroringStore{deleteSessionError: true},
+		},
+		"session idle success": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := internal.NewFakeIdentifier("identifier")
+				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
+					UserID:   userID,
+					IdleAt:   now.Add(-5 * time.Minute),
+					ExpireAt: now.Add(85 * time.Minute),
+				})
+				require.NoError(t, err)
+				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+				return r
+			},
+			wantCookie: true,
+		},
+	}
 
-	for name, test := range map[string]TestAuthenticateAndRefreshCase{
-		"no current session":                     CaseNoSession,
-		"session active":                         CaseSessionActive,
-		"session expired":                        CaseSessionExpired,
-		"session idle failed create replacement": CaseSessionIdleFaileCreateReplacement,
-		"session idle failed delete old":         CaseSessionIdleFailedDeleteOld,
-		"session idle success":                   CaseSessionIdleSuccess,
-	} {
+	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
+			require := require.New(t)
+			assert := assert.New(t)
+			now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+
 			store := NewMemoryStore()
-			errorStore := &erroringStore{MemoryStore: store}
+			var testStore Storer = store
+			if tc.giveErrorStore != nil {
+				tc.giveErrorStore.Storer = store
+				testStore = tc.giveErrorStore
+			}
+
 			parser := func(b []byte) (Identifier, error) {
 				id, err := strconv.Atoi(string(b))
 				if err != nil {
 					return nil, err
 				}
-				return MemoryStoreIdentifier(id), nil
+				return MemoryStoreIdentifier(id), tc.giveParseError
 			}
-			userID := internal.NewFakeIdentifier("identifier")
-			r, err := http.NewRequest(http.MethodGet, "/", nil)
-			require.NoError(err)
 
-			var expectedLogs []string
-			var wantSecureCookieHeaders bool
-			withLogger, logger := prepareTestLogger()
-			sesh := New(parser, errorStore,
+			withLogger, logger := withTestLogger()
+			sesh := New(parser, testStore,
 				WithNow(func() time.Time { return now }),
 				WithSessionCookieName("customName"),
 				WithSessionActiveDuration(17*time.Minute),
@@ -80,68 +184,21 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				withLogger,
 			)
 
-			func() {
-				if test == CaseNoSession {
-					wantSecureCookieHeaders = true
-					return
-				}
-
-				if test == CaseSessionActive {
-					wantSecureCookieHeaders = true
-					session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-						UserID:   userID,
-						IdleAt:   now.Add(5 * time.Minute),
-						ExpireAt: now.Add(85 * time.Minute),
-					})
-					require.NoError(err)
-					r.AddCookie(sesh.sessionCookie(session.ID(), session.ExpireAt().Add(time.Minute)))
-					return
-				}
-
-				if test == CaseSessionExpired {
-					wantSecureCookieHeaders = true
-					session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-						UserID:   userID,
-						IdleAt:   now.Add(-5 * time.Minute),
-						ExpireAt: now.Add(-1 * time.Minute),
-					})
-					require.NoError(err)
-					r.AddCookie(sesh.sessionCookie(session.ID(), session.ExpireAt().Add(10*time.Minute)))
-					return
-				}
-
-				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-					UserID:   userID,
-					IdleAt:   now.Add(-5 * time.Minute),
-					ExpireAt: now.Add(85 * time.Minute),
-				})
-				require.NoError(err)
-				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
-
-				if test == CaseSessionIdleFaileCreateReplacement {
-					errorStore.createSessionError = true
-					expectedLogs = append(expectedLogs, "msg=\"replace session\" error=\"create session: mock failure\"")
-					return
-				}
-
-				if test == CaseSessionIdleFailedDeleteOld {
-					errorStore.deleteSessionError = true
-					expectedLogs = append(expectedLogs, "msg=\"replace session\" error=\"delete session: mock failure\"")
-					return
-				}
-			}()
+			r, err := http.NewRequest(http.MethodGet, "/", nil)
+			require.NoError(err)
+			r = tc.setup(t, store, r, now)
 
 			handlerCalled := false
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				handlerCalled = true
 			})
+
 			rr := httptest.NewRecorder()
-
 			sesh.AuthenticateAndRefresh(handler).ServeHTTP(rr, r)
-
 			result := rr.Result()
 
-			if wantSecureCookieHeaders {
+			assert.True(handlerCalled)
+			if tc.wantSecureCookieHeaders {
 				assert.Equal(`private, no-cache="Set-Cookie"`, result.Header.Get("Cache-Control"))
 				assert.Equal("Cookie", result.Header.Get("Vary"))
 			} else {
@@ -149,24 +206,20 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				assert.Empty(result.Header.Get("Vary"))
 			}
 
-			assert.True(handlerCalled)
-			for i, expectedLog := range expectedLogs {
-				assert.Contains(logger.logs[i], expectedLog)
-			}
-			if test < CaseSessionIdleSuccess {
-				return
+			if tc.wantCookie {
+				cookies := result.Cookies()
+				require.NotEmpty(cookies)
+				cookie := cookies[0]
+				assert.Equal("customName", cookie.Name)
+				assert.Equal("Mg==", cookie.Value)
+				assert.Equal(now.Add(85*time.Minute), cookie.Expires)
+				assert.Equal("localhost", cookie.Domain)
+				assert.Equal("/", cookie.Path)
+				assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
+				assert.False(cookie.Secure)
 			}
 
-			cookies := result.Cookies()
-			require.NotEmpty(cookies)
-			cookie := cookies[0]
-			assert.Equal("customName", cookie.Name)
-			assert.Equal("Mg==", cookie.Value)
-			assert.Equal(now.Add(85*time.Minute), cookie.Expires)
-			assert.Equal("localhost", cookie.Domain)
-			assert.Equal("/", cookie.Path)
-			assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
-			assert.False(cookie.Secure)
+			logger.assertExpectedLogs(t, tc.wantLogs)
 		})
 	}
 }

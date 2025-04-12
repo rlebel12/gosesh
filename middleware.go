@@ -126,25 +126,27 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
 	if err != nil {
-		gs.logError("failed to decode session cookie", err)
+		gs.logError("decode session cookie", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
 	id, err := gs.identifierFromBytes(sessionIDRaw)
 	if err != nil {
-		gs.logError("failed to parse session ID", err)
+		gs.logError("parse session ID", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
 	session, err := gs.store.GetSession(ctx, id)
 	if err != nil {
+		gs.logError("get session", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
 	if session.ExpireAt().Before(gs.now().UTC()) {
+		gs.logError("session expired", ErrSessionExpired)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}

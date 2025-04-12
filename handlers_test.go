@@ -189,7 +189,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 	r, err = http.NewRequest(http.MethodGet, callbackURL, nil)
 	s.Require().NoError(err)
 
-	store = &erroringStore{MemoryStore: NewMemoryStore()}
+	store = &erroringStore{Storer: NewMemoryStore()}
 
 	if mode == testCallbackErrNoStateCookie {
 		return
@@ -425,10 +425,11 @@ type logoutTest struct {
 	session    Session
 	parser     IDParser
 	gosesh     *Gosesh
+	logger     *testLogger
 }
 
 func prepareLogoutTest(t *testing.T) *logoutTest {
-	store := &erroringStore{MemoryStore: NewMemoryStore()}
+	store := &erroringStore{Storer: NewMemoryStore()}
 	now := func() time.Time {
 		return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
@@ -437,7 +438,8 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	parser := func(b []byte) (Identifier, error) {
 		return internal.NewFakeIdentifier("identifier"), nil
 	}
-	gosesh := New(parser, store, WithNow(now))
+	withTestLogger, logger := withTestLogger()
+	gosesh := New(parser, store, WithNow(now), withTestLogger)
 	handler := gosesh.Logout(nil)
 
 	currentTime := now()
@@ -458,6 +460,7 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 		session:    session,
 		parser:     parser,
 		gosesh:     gosesh,
+		logger:     logger,
 	}
 }
 
@@ -484,92 +487,125 @@ func (t *logoutTest) authenticated() *http.Request {
 }
 
 func TestLogoutHandler(t *testing.T) {
-	assert := assert.New(t)
+	testCases := map[string]struct {
+		setup          func(t *testing.T, test *logoutTest)
+		wantStatusCode int
+		wantLogs       []string
+	}{
+		"no session cookie": {
+			setup:          func(t *testing.T, test *logoutTest) {},
+			wantStatusCode: http.StatusUnauthorized,
+			wantLogs:       []string{"level=WARN msg=\"no done handler provided for Logout, using default\""},
+		},
+		"bad session cookie": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.req.AddCookie(&http.Cookie{
+					Name:  "session",
+					Value: "bad",
+				})
+			},
+			wantStatusCode: http.StatusUnauthorized,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"level=ERROR msg=\"decode session cookie\" error=\"illegal base64 data at input byte 0\"",
+			},
+		},
+		"failed parsing ID": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.setValidCOokie()
+				test.parser = func(b []byte) (Identifier, error) {
+					return nil, fmt.Errorf("failed parse")
+				}
+			},
+			wantStatusCode: http.StatusUnauthorized,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"level=ERROR msg=\"get session\" error=\"session not found\"",
+			},
+		},
+		"failed getting session": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.succeedParsingID()
+				test.store.getSessionError = true
+			},
+			wantStatusCode: http.StatusUnauthorized,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"level=ERROR msg=\"get session\" error=\"mock failure\"",
+			},
+		},
+		"session expired": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.succeedParsingID()
 
-	t.Run("no session cookie", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.resp.Code)
-	})
+				_, err := test.store.CreateSession(context.Background(), CreateSessionRequest{
+					UserID:   test.identifier,
+					IdleAt:   test.now().UTC().Add(-1 * time.Hour),
+					ExpireAt: test.now().UTC().Add(-1 * time.Hour),
+				})
+				require.NoError(t, err)
+			},
+			wantStatusCode: http.StatusUnauthorized,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"level=ERROR msg=\"get session\" error=\"session not found\"",
+			},
+		},
+		"failed deleting one session": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.authenticated()
+				test.store.deleteSessionError = true
+			},
+			wantStatusCode: http.StatusInternalServerError,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"level=ERROR msg=callback error=\"failed deleting session(s): mock failure\" name=Logout",
+			},
+		},
+		"failed deleting all sessions": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.authenticated()
+				test.store.deleteUserSessionsError = true
+				test.req.URL.RawQuery = url.Values{"all": {"true"}}.Encode()
+			},
+			wantStatusCode: http.StatusInternalServerError,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"level=ERROR msg=callback error=\"failed deleting session(s): mock failure\" name=Logout",
+			},
+		},
+		"success deleting one session": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.authenticated()
+			},
+			wantStatusCode: http.StatusTemporaryRedirect,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+			},
+		},
+		"success deleting all sessions": {
+			setup: func(t *testing.T, test *logoutTest) {
+				test.authenticated()
+				test.req.URL.RawQuery = url.Values{"all": {"true"}}.Encode()
+			},
+			wantStatusCode: http.StatusTemporaryRedirect,
+			wantLogs: []string{
+				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+			},
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			assert := assert.New(t)
+			test := prepareLogoutTest(t)
 
-	t.Run("bad session cookie", func(t *testing.T) {
-		test := prepareLogoutTest(t)
+			tc.setup(t, test)
+			test.execute()
 
-		test.req.AddCookie(&http.Cookie{
-			Name:  "session",
-			Value: "bad",
+			assert.Equal(tc.wantStatusCode, test.resp.Code)
+			test.logger.assertExpectedLogs(t, tc.wantLogs)
 		})
-		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.resp.Code)
-	})
-
-	t.Run("failed parsing ID", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-
-		test.setValidCOokie()
-		test.parser = func(b []byte) (Identifier, error) {
-			return nil, fmt.Errorf("failed parse")
-		}
-		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.resp.Code)
-	})
-
-	t.Run("failed getting session", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-		test.succeedParsingID()
-		test.store.getSessionError = true
-		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.resp.Code)
-	})
-
-	t.Run("session expired", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-		test.succeedParsingID()
-
-		_, err := test.store.CreateSession(context.Background(), CreateSessionRequest{
-			UserID:   test.identifier,
-			IdleAt:   test.now().UTC().Add(-1 * time.Hour),
-			ExpireAt: test.now().UTC().Add(-1 * time.Hour),
-		})
-		require.NoError(t, err)
-
-		test.execute()
-		assert.Equal(http.StatusUnauthorized, test.resp.Code)
-	})
-
-	t.Run("failed deleting one session", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-
-		test.authenticated()
-		test.store.deleteSessionError = true
-
-		test.execute()
-		assert.Equal(http.StatusInternalServerError, test.resp.Code)
-	})
-
-	t.Run("failed deleting all sessions", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-		test.authenticated()
-		test.store.deleteUserSessionsError = true
-		test.req.URL.RawQuery = url.Values{"all": {"true"}}.Encode()
-		test.execute()
-		assert.Equal(http.StatusInternalServerError, test.resp.Code)
-	})
-
-	t.Run("success deleting one session", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-		test.authenticated()
-		test.execute()
-		assert.Equal(http.StatusTemporaryRedirect, test.resp.Code)
-	})
-
-	t.Run("success deleting all sessions", func(t *testing.T) {
-		test := prepareLogoutTest(t)
-		test.authenticated()
-		test.req.URL.RawQuery = url.Values{"all": {"true"}}.Encode()
-		test.execute()
-		assert.Equal(http.StatusTemporaryRedirect, test.resp.Code)
-	})
+	}
 }
 
 func TestCallbackRedirect(t *testing.T) {
