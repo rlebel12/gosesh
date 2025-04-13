@@ -37,7 +37,7 @@ func (f *FakeGosesher) OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc {
 	}
 }
 
-func (f *FakeGosesher) OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.HandlerDone) http.HandlerFunc {
+func (f *FakeGosesher) OAuth2Callback(authProviderID gosesh.Identifier, cfg *oauth2.Config, handler gosesh.HandlerDoneFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		handler(w, r, nil)
 	}
@@ -74,13 +74,13 @@ func (e *ErroringGosesher) OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc {
 	return e.FakeGosesher.OAuth2Begin(cfg)
 }
 
-func (e *ErroringGosesher) OAuth2Callback(user gosesh.OAuth2User, cfg *oauth2.Config, handler gosesh.HandlerDone) http.HandlerFunc {
+func (e *ErroringGosesher) OAuth2Callback(authProviderID gosesh.Identifier, cfg *oauth2.Config, handler gosesh.HandlerDoneFunc) http.HandlerFunc {
 	if e.oauth2CallbackError {
 		return func(w http.ResponseWriter, r *http.Request) {
 			handler(w, r, errors.New("mock failure"))
 		}
 	}
-	return e.FakeGosesher.OAuth2Callback(user, cfg, handler)
+	return e.FakeGosesher.OAuth2Callback(authProviderID, cfg, handler)
 }
 
 func TestGosesherContract(t *testing.T) {
@@ -92,8 +92,8 @@ func TestGosesherContract(t *testing.T) {
 		) Gosesher {
 			return NewFakeGosesher(giveScheme, giveHost, giveOAuth2BeginFunc)
 		},
-		NewOAuth2User: func(giveID string) gosesh.OAuth2User {
-			return internal.NewFakeOAuth2User(giveID)
+		NewOAuth2User: func(giveID string) gosesh.Identifier {
+			return internal.NewFakeIdentifier(giveID)
 		},
 	}.Test(t)
 }

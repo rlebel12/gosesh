@@ -85,7 +85,7 @@ func TestOAuth2Begin(t *testing.T) {
 				require.NoError(err)
 				opts = append(opts, WithOrigin(url))
 			}
-			sesh := New(nil, nil, opts...)
+			sesh := New(nil, opts...)
 			handler := sesh.OAuth2Begin(&oauth2.Config{
 				ClientID:     "client_id",
 				ClientSecret: "client_secret",
@@ -182,8 +182,8 @@ func (m *failReader) Read(p []byte) (n int, err error) {
 }
 
 func (s *Oauth2CallbackHandlerSuite) prepareTest(
-	mode testCallbackRequestMode) (r *http.Request, config *oauth2.Config, user *internal.FakeOAuth2User, store *erroringStore,
-) {
+	mode testCallbackRequestMode,
+) (r *http.Request, config *oauth2.Config, user Identifier, store *erroringStore, requestFunc RequestFunc, unmarshalFunc UnmarshalFunc) {
 	var err error
 	callbackURL := fmt.Sprintf("%s/auth/callback", s.oauth2Server.URL)
 	r, err = http.NewRequest(http.MethodGet, callbackURL, nil)
@@ -223,36 +223,33 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
-	user = internal.NewFakeOAuth2User("user")
+	user = NewFakeIdentifier("user")
 
 	if mode == testFailedUnmarshalRequest {
-		user.RequestFunc = func(ctx context.Context, accessToken string) (*http.Response, error) {
+		requestFunc = func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
 			return nil, errors.New("test error")
 		}
 		return
 	}
 
 	if mode == testFailedUnmarshalReadBody {
-		response := &http.Response{
-			Body: io.NopCloser(&failReader{}),
-		}
-		user.RequestFunc = func(ctx context.Context, accessToken string) (*http.Response, error) {
-			return response, nil
+		requestFunc = func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+			return io.NopCloser(&failReader{}), nil
 		}
 		return
 	}
-	response := &http.Response{
-		Body: io.NopCloser(strings.NewReader("")),
-	}
-	user.RequestFunc = func(ctx context.Context, accessToken string) (*http.Response, error) {
-		return response, nil
+	requestFunc = func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader("")), nil
 	}
 
 	if mode == testFailedUnmarshalDataFinal {
-		user.UnmarshalFunc = func(b []byte) error {
-			return fmt.Errorf("failed unmarshal")
+		unmarshalFunc = func(b []byte) (Identifier, error) {
+			return nil, fmt.Errorf("failed unmarshal")
 		}
 		return
+	}
+	unmarshalFunc = func(b []byte) (Identifier, error) {
+		return NewFakeIdentifier("user"), nil
 	}
 
 	if mode == testCallbackErrUpsertUser {
@@ -276,11 +273,12 @@ func (s *Oauth2CallbackHandlerSuite) errCallback(errString string) func(w http.R
 
 func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil, WithNow(s.withNow))
-	request, config, _, _ := s.prepareTest(testCallbackErrNoStateCookie)
+	sesh := New(nil, WithNow(s.withNow))
+	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testCallbackErrNoStateCookie)
 	sesh.OAuth2Callback(
-		nil,
 		config,
+		requestFunc,
+		unmarshalFunc,
 		s.errCallback("failed getting state cookie: http: named cookie not present"),
 	).ServeHTTP(rr, request)
 	response := rr.Result()
@@ -290,11 +288,12 @@ func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 
 func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil, WithNow(s.withNow))
-	request, config, _, _ := s.prepareTest(testCallbackInvalidStateCookie)
+	sesh := New(nil, WithNow(s.withNow))
+	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testCallbackInvalidStateCookie)
 	sesh.OAuth2Callback(
-		nil,
 		config,
+		requestFunc,
+		unmarshalFunc,
 		s.errCallback("invalid state cookie"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -302,11 +301,12 @@ func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 
 func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil, WithNow(s.withNow))
-	request, config, _, _ := s.prepareTest(testFailedExchange)
+	sesh := New(nil, WithNow(s.withNow))
+	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedExchange)
 	sesh.OAuth2Callback(
-		nil,
 		config,
+		requestFunc,
+		unmarshalFunc,
 		s.errCallback("failed exchanging token: oauth2: cannot fetch token: 404 Not Found\nResponse: not found\n"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -314,75 +314,85 @@ func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataRequest() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil, WithNow(s.withNow))
-	request, config, user, _ := s.prepareTest(testFailedUnmarshalRequest)
+	sesh := New(nil, WithNow(s.withNow))
+	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedUnmarshalRequest)
 	sesh.OAuth2Callback(
-		user,
 		config,
-		s.errCallback("failed unmarshalling data: failed getting user info: test error"),
+		requestFunc,
+		unmarshalFunc,
+		s.errCallback("failed unmarshalling data: get user info: test error"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataReadBody() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil, WithNow(s.withNow))
-	request, config, user, _ := s.prepareTest(testFailedUnmarshalReadBody)
+	sesh := New(nil, WithNow(s.withNow))
+	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedUnmarshalReadBody)
 	sesh.OAuth2Callback(
-		user,
 		config,
-		s.errCallback("failed unmarshalling data: failed read response: failed read"),
+		requestFunc,
+		unmarshalFunc,
+		s.errCallback("failed unmarshalling data: read response: failed read"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalDataFinal() {
 	rr := httptest.NewRecorder()
-	sesh := New(nil, nil, WithNow(s.withNow))
-	request, config, user, _ := s.prepareTest(testFailedUnmarshalDataFinal)
+	sesh := New(nil, WithNow(s.withNow))
+	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedUnmarshalDataFinal)
 	sesh.OAuth2Callback(
-		user,
 		config,
-		s.errCallback("failed unmarshalling data: failed unmarshal"),
+		requestFunc,
+		unmarshalFunc,
+		s.errCallback("failed unmarshalling data: unmarshal user data: failed unmarshal"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
-	request, config, user, store := s.prepareTest(testCallbackErrUpsertUser)
+	request, config, _, store, requestFunc, unmarshalFunc := s.prepareTest(testCallbackErrUpsertUser)
 	rr := httptest.NewRecorder()
-	sesh := New(nil, store, WithNow(s.withNow))
+	sesh := New(store, WithNow(s.withNow))
 	sesh.OAuth2Callback(
-		user,
 		config,
+		requestFunc,
+		unmarshalFunc,
 		s.errCallback("failed upserting user: mock failure"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
-	request, config, user, store := s.prepareTest(testCallbackErrCreateSession)
+	request, config, _, store, requestFunc, unmarshalFunc := s.prepareTest(testCallbackErrCreateSession)
 	rr := httptest.NewRecorder()
-	sesh := New(nil, store, WithNow(s.withNow))
+	sesh := New(store, WithNow(s.withNow))
 	sesh.OAuth2Callback(
-		user,
 		config,
+		requestFunc,
+		unmarshalFunc,
 		s.errCallback("failed creating session: mock failure"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
 }
 
 func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
-	request, config, user, store := s.prepareTest(testCallbackSuccess)
+	request, config, _, store, requestFunc, unmarshalFunc := s.prepareTest(testCallbackSuccess)
 	rr := httptest.NewRecorder()
-	sesh := New(nil, store, WithNow(s.withNow))
+	sesh := New(store, WithNow(s.withNow))
 
 	var success bool
-	sesh.OAuth2Callback(user, config, func(w http.ResponseWriter, r *http.Request, err error) {
-		s.NoError(err)
-		success = true
-		w.WriteHeader(http.StatusOK)
-	})(rr, request)
+	sesh.OAuth2Callback(
+		config,
+		requestFunc,
+		unmarshalFunc,
+		func(w http.ResponseWriter, r *http.Request, err error) {
+			s.NoError(err)
+			success = true
+			w.WriteHeader(http.StatusOK)
+		},
+	)(rr, request)
 
 	s.True(success)
 	response := rr.Result()
@@ -423,7 +433,6 @@ type logoutTest struct {
 	resp       *httptest.ResponseRecorder
 	handler    http.Handler
 	session    Session
-	parser     IDParser
 	gosesh     *Gosesh
 	logger     *testLogger
 }
@@ -435,19 +444,17 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	}
 	req := httptest.NewRequest(http.MethodGet, "/logout", nil).WithContext(context.Background())
 	resp := httptest.NewRecorder()
-	parser := func(b []byte) (Identifier, error) {
-		return internal.NewFakeIdentifier("identifier"), nil
-	}
 	withTestLogger, logger := withTestLogger()
-	gosesh := New(parser, store, WithNow(now), withTestLogger)
+	gosesh := New(store, WithNow(now), withTestLogger)
 	handler := gosesh.Logout(nil)
 
 	currentTime := now()
-	session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-		UserID:   internal.NewFakeIdentifier("identifier"),
-		IdleAt:   currentTime,
-		ExpireAt: currentTime.Add(time.Hour),
-	})
+	session, err := store.CreateSession(
+		context.Background(),
+		internal.NewFakeIdentifier("identifier"),
+		currentTime,
+		currentTime.Add(time.Hour),
+	)
 	require.NoError(t, err)
 
 	return &logoutTest{
@@ -458,7 +465,6 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 		resp:       resp,
 		handler:    handler,
 		session:    session,
-		parser:     parser,
 		gosesh:     gosesh,
 		logger:     logger,
 	}
@@ -513,9 +519,6 @@ func TestLogoutHandler(t *testing.T) {
 		"failed parsing ID": {
 			setup: func(t *testing.T, test *logoutTest) {
 				test.setValidCOokie()
-				test.parser = func(b []byte) (Identifier, error) {
-					return nil, fmt.Errorf("failed parse")
-				}
 			},
 			wantStatusCode: http.StatusUnauthorized,
 			wantLogs: []string{
@@ -538,11 +541,12 @@ func TestLogoutHandler(t *testing.T) {
 			setup: func(t *testing.T, test *logoutTest) {
 				test.succeedParsingID()
 
-				_, err := test.store.CreateSession(context.Background(), CreateSessionRequest{
-					UserID:   test.identifier,
-					IdleAt:   test.now().UTC().Add(-1 * time.Hour),
-					ExpireAt: test.now().UTC().Add(-1 * time.Hour),
-				})
+				_, err := test.store.CreateSession(
+					t.Context(),
+					test.identifier,
+					test.now().UTC().Add(-1*time.Hour),
+					test.now().UTC().Add(-1*time.Hour),
+				)
 				require.NoError(t, err)
 			},
 			wantStatusCode: http.StatusUnauthorized,
@@ -712,9 +716,8 @@ func TestCallbackRedirect(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
 			store := NewMemoryStore()
-			sesh := New(func(b []byte) (Identifier, error) {
-				return internal.NewFakeIdentifier("identifier"), nil
-			}, store,
+			sesh := New(
+				store,
 				WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }),
 				WithAllowedHosts(test.giveAllowedHosts...),
 			)

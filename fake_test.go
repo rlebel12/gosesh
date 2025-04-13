@@ -67,15 +67,15 @@ func NewFakeSession(id, userID Identifier, idleAt, expireAt time.Time) *FakeSess
 func TestFakeIdentifierContract(t *testing.T) {
 	IdentifierContract{
 		NewIdentifier: func(id string) Identifier {
-			return internal.NewFakeIdentifier(id)
+			return NewFakeIdentifier(id)
 		},
 	}.Test(t)
 }
 
-func TestFakeOAuth2UserContract(t *testing.T) {
-	OAuth2UserContract{
-		NewOAuth2User: func(id string) OAuth2User {
-			return internal.NewFakeOAuth2User(id)
+func TestOtherFakeIdentifierContract(t *testing.T) {
+	IdentifierContract{
+		NewIdentifier: func(id string) Identifier {
+			return internal.NewFakeIdentifier(id)
 		},
 	}.Test(t)
 }
@@ -99,6 +99,18 @@ func TestFakeSessionContract(t *testing.T) {
 	}.Test(t)
 }
 
+type FakeIdentifier struct {
+	ID string
+}
+
+func (f *FakeIdentifier) String() string {
+	return f.ID
+}
+
+func NewFakeIdentifier(id string) *FakeIdentifier {
+	return &FakeIdentifier{ID: id}
+}
+
 type erroringStore struct {
 	Storer
 	createSessionError      bool
@@ -108,14 +120,14 @@ type erroringStore struct {
 	getSessionError         bool
 }
 
-func (s *erroringStore) CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error) {
+func (s *erroringStore) CreateSession(ctx context.Context, userID Identifier, idleAt, expireAt time.Time) (Session, error) {
 	if s.createSessionError {
 		return nil, errors.New("mock failure")
 	}
-	return s.Storer.CreateSession(ctx, req)
+	return s.Storer.CreateSession(ctx, userID, idleAt, expireAt)
 }
 
-func (s *erroringStore) DeleteSession(ctx context.Context, sessionID Identifier) error {
+func (s *erroringStore) DeleteSession(ctx context.Context, sessionID string) error {
 	if s.deleteSessionError {
 		return errors.New("mock failure")
 	}
@@ -129,14 +141,14 @@ func (s *erroringStore) DeleteUserSessions(ctx context.Context, userID Identifie
 	return s.Storer.DeleteUserSessions(ctx, userID)
 }
 
-func (s *erroringStore) UpsertUser(ctx context.Context, user OAuth2User) (Identifier, error) {
+func (s *erroringStore) UpsertUser(ctx context.Context, authProviderID Identifier) (Identifier, error) {
 	if s.upsertUserError {
 		return nil, errors.New("mock failure")
 	}
-	return s.Storer.UpsertUser(ctx, user)
+	return s.Storer.UpsertUser(ctx, authProviderID)
 }
 
-func (s *erroringStore) GetSession(ctx context.Context, sessionID Identifier) (Session, error) {
+func (s *erroringStore) GetSession(ctx context.Context, sessionID string) (Session, error) {
 	if s.getSessionError {
 		return nil, errors.New("mock failure")
 	}

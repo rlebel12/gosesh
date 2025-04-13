@@ -69,7 +69,7 @@ func TestGoogleUserRequest(t *testing.T) {
 			setup := setup(t)
 			google := NewGoogle(setup.sesh, "clientID", "clientSecret", "", WithGoogleHost(tc.giveGoogleHost(server.URL)))
 
-			expectedUser := google.NewUser().(*GoogleUser)
+			expectedUser := google.NewUser()
 			mux.HandleFunc("/oauth2/v2/userinfo", func(w http.ResponseWriter, r *http.Request) {
 				expectedUser.ID = "123"
 				expectedUser.Email = "google@example.com"
@@ -79,7 +79,7 @@ func TestGoogleUserRequest(t *testing.T) {
 				assert.NoError(t, err)
 			})
 
-			actualUser := google.NewUser().(*GoogleUser)
+			actualUser := google.NewUser()
 			resp, err := actualUser.Request(t.Context(), "accessToken")
 
 			if tc.wantErr {
@@ -88,7 +88,8 @@ func TestGoogleUserRequest(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			content, err := io.ReadAll(resp.Body)
+			defer resp.Close()
+			content, err := io.ReadAll(resp)
 			require.NoError(t, err)
 			err = actualUser.Unmarshal(content)
 			require.NoError(t, err)

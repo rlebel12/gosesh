@@ -109,7 +109,7 @@ func TestTwitchUserRequest(t *testing.T) {
 				assert.NoError(t, err)
 			})
 
-			actualUser := twitch.NewUser().(*TwitchUser)
+			actualUser := twitch.NewUser()
 			resp, err := actualUser.Request(t.Context(), "accessToken")
 
 			if tc.wantErr {
@@ -118,7 +118,8 @@ func TestTwitchUserRequest(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			content, err := io.ReadAll(resp.Body)
+			defer resp.Close()
+			content, err := io.ReadAll(resp)
 			require.NoError(t, err)
 			err = actualUser.Unmarshal(content)
 			require.NoError(t, err)
@@ -159,7 +160,7 @@ func TestTwitchUserString(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
 			twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "", test.opts...)
-			user := twitch.NewUser().(*TwitchUser)
+			user := twitch.NewUser()
 
 			if name == "no data" {
 				assert.Equal(t, test.expected, user.String())

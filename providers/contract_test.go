@@ -15,7 +15,7 @@ type GosesherContract struct {
 		giveScheme, giveHost string,
 		giveOAuth2BeginFunc func(cfg *oauth2.Config) http.HandlerFunc,
 	) Gosesher
-	NewOAuth2User func(giveID string) gosesh.OAuth2User
+	NewOAuth2User func(giveID string) gosesh.Identifier
 }
 
 func (c GosesherContract) Test(t *testing.T) {

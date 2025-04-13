@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"time"
 )
@@ -12,7 +11,6 @@ import (
 type (
 	Gosesh struct {
 		store                 Storer
-		identifierFromBytes   IDParser
 		logger                *slog.Logger
 		origin                *url.URL
 		allowedHosts          []string
@@ -25,8 +23,6 @@ type (
 		now                   func() time.Time
 		cookieDomain          func() string
 	}
-
-	IDParser func([]byte) (Identifier, error)
 
 	Identifier interface {
 		fmt.Stringer
@@ -45,11 +41,10 @@ func (gs *Gosesh) CookieDomain() string {
 	return gs.cookieDomain()
 }
 
-func New(parser IDParser, store Storer, opts ...NewOpts) *Gosesh {
+func New(store Storer, opts ...NewOpts) *Gosesh {
 	url, _ := url.Parse("http://localhost")
 	gs := &Gosesh{
 		store:                 store,
-		identifierFromBytes:   parser,
 		sessionCookieName:     "session",
 		oAuth2StateCookieName: "oauthstate",
 		redirectCookieName:    "redirect",
@@ -130,10 +125,10 @@ func WithCookieDomain(fn func(*Gosesh) func() string) func(*Gosesh) {
 
 type (
 	Storer interface {
-		UpsertUser(ctx context.Context, user OAuth2User) (Identifier, error)
-		CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error)
-		GetSession(ctx context.Context, sessionID Identifier) (Session, error)
-		DeleteSession(ctx context.Context, sessionID Identifier) error
+		UpsertUser(ctx context.Context, authProviderID Identifier) (userID Identifier, err error)
+		CreateSession(ctx context.Context, userID Identifier, idleAt, expireAt time.Time) (Session, error)
+		GetSession(ctx context.Context, sessionID string) (Session, error)
+		DeleteSession(ctx context.Context, sessionID string) error
 		DeleteUserSessions(ctx context.Context, userID Identifier) (int, error)
 	}
 
@@ -142,20 +137,6 @@ type (
 		UserID() Identifier
 		IdleAt() time.Time
 		ExpireAt() time.Time
-	}
-
-	CreateSessionRequest struct {
-		UserID   Identifier
-		IdleAt   time.Time
-		ExpireAt time.Time
-	}
-
-	// Represents a user presented by an OAuth2 provider.
-	// Note that this is separate from a user as persisted in your system.
-	OAuth2User interface {
-		Identifier // Uniquely identifies the user within the OAuth2 provider's system.
-		Request(ctx context.Context, accessToken string) (*http.Response, error)
-		Unmarshal(b []byte) error
 	}
 
 	NewOpts func(*Gosesh)

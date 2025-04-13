@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/rlebel12/gosesh"
@@ -71,11 +72,11 @@ func (d *Discord) OAuth2Begin() http.HandlerFunc {
 	return d.Gosesh.OAuth2Begin(d.Config)
 }
 
-func (d *Discord) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
+func (d *Discord) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
 	return d.Gosesh.OAuth2Callback(d.NewUser(), d.Config, handler)
 }
 
-func (d *Discord) NewUser() gosesh.OAuth2User {
+func (d *Discord) NewUser() *DiscordUser {
 	return &DiscordUser{discord: d}
 }
 
@@ -111,15 +112,14 @@ func (user *DiscordUser) String() string {
 	}
 }
 
-func (user *DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+func (user *DiscordUser) Request(ctx context.Context, accessToken string) (io.ReadCloser, error) {
 	url := fmt.Sprintf("%s/api/v9/users/@me", user.discord.discordHost)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed creating request: %s", err.Error())
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	client := &http.Client{}
-	return client.Do(req)
+	return doRequest(req)
 }
 
 func (user *DiscordUser) Unmarshal(b []byte) error {

@@ -1,7 +1,6 @@
 package gosesh
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -23,30 +22,6 @@ func (c IdentifierContract) Test(t *testing.T) {
 		id1 := c.NewIdentifier("id1")
 		id2 := c.NewIdentifier("id2")
 		assert.NotEqual(t, id1.String(), id2.String())
-	})
-}
-
-type OAuth2UserContract struct {
-	NewOAuth2User func(giveID string) OAuth2User
-}
-
-func (c OAuth2UserContract) Test(t *testing.T) {
-	t.Run("returns correct ID", func(t *testing.T) {
-		user := c.NewOAuth2User("test-id")
-		assert.Equal(t, "test-id", user.String())
-	})
-
-	t.Run("can make requests", func(t *testing.T) {
-		user := c.NewOAuth2User("test-id")
-		resp, err := user.Request(context.Background(), "test-token")
-		require.NoError(t, err)
-		assert.NotNil(t, resp)
-	})
-
-	t.Run("can unmarshal data", func(t *testing.T) {
-		user := c.NewOAuth2User("test-id")
-		err := user.Unmarshal([]byte("test-data"))
-		require.NoError(t, err)
 	})
 }
 
@@ -84,27 +59,25 @@ func (c SessionContract) Test(t *testing.T) {
 }
 
 type StorerContract struct {
-	NewStorer     func() Storer
-	NewOAuth2User func(giveID string) OAuth2User
-	NewIdentifier func(giveID string) Identifier
+	NewStorer func() Storer
 }
 
 func (c StorerContract) Test(t *testing.T) {
 	t.Run("can upsert the same user in idempotent way", func(t *testing.T) {
-		oauth2User := c.NewOAuth2User("user-id")
+		authProviderID := NewFakeIdentifier("user-id")
 		store := c.NewStorer()
-		gotUser1, err := store.UpsertUser(t.Context(), oauth2User)
+		gotUser1, err := store.UpsertUser(t.Context(), authProviderID)
 		require.NoError(t, err)
 		assert.Equal(t, "user-id", gotUser1.String())
 
-		gotUser2, err := store.UpsertUser(t.Context(), oauth2User)
+		gotUser2, err := store.UpsertUser(t.Context(), authProviderID)
 		require.NoError(t, err)
 		assert.Equal(t, "user-id", gotUser2.String())
 
 		assert.Equal(t, gotUser1.String(), gotUser2.String())
 
-		anotherUser := c.NewOAuth2User("another-user-id")
-		gotUser3, err := store.UpsertUser(t.Context(), anotherUser)
+		anotherAuthProviderID := NewFakeIdentifier("another-user-id")
+		gotUser3, err := store.UpsertUser(t.Context(), anotherAuthProviderID)
 		require.NoError(t, err)
 		assert.Equal(t, "another-user-id", gotUser3.String())
 
@@ -112,84 +85,79 @@ func (c StorerContract) Test(t *testing.T) {
 	})
 
 	t.Run("can create and get a session", func(t *testing.T) {
-		req := CreateSessionRequest{
-			UserID:   c.NewIdentifier("user-id"),
-			IdleAt:   time.Now(),
-			ExpireAt: time.Now().Add(time.Hour),
-		}
+		userID := NewFakeIdentifier("user-id")
+		idleAt := time.Now()
+		expireAt := time.Now().Add(time.Hour)
 		store := c.NewStorer()
 
-		gotSession, err := store.CreateSession(t.Context(), req)
+		gotSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
 		require.NoError(t, err)
 		assert.Equal(t, "user-id", gotSession.UserID().String())
-		assert.Equal(t, req.IdleAt, gotSession.IdleAt())
-		assert.Equal(t, req.ExpireAt, gotSession.ExpireAt())
+		assert.Equal(t, idleAt, gotSession.IdleAt())
+		assert.Equal(t, expireAt, gotSession.ExpireAt())
 
-		gotSession2, err := store.GetSession(t.Context(), gotSession.ID())
+		gotSession2, err := store.GetSession(t.Context(), gotSession.ID().String())
 		require.NoError(t, err)
 		assert.Equal(t, "user-id", gotSession2.UserID().String())
-		assert.Equal(t, req.IdleAt, gotSession2.IdleAt())
-		assert.Equal(t, req.ExpireAt, gotSession2.ExpireAt())
+		assert.Equal(t, idleAt, gotSession2.IdleAt())
+		assert.Equal(t, expireAt, gotSession2.ExpireAt())
 
 		assert.Equal(t, gotSession.ID(), gotSession2.ID())
 	})
 
 	t.Run("can delete one session", func(t *testing.T) {
-		req := CreateSessionRequest{
-			UserID: c.NewIdentifier("user-id"),
-		}
+		userID := NewFakeIdentifier("user-id")
+		idleAt := time.Now()
+		expireAt := time.Now().Add(time.Hour)
 		store := c.NewStorer()
 
-		gotSession, err := store.CreateSession(t.Context(), req)
+		gotSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
 		require.NoError(t, err)
-		otherSession, err := store.CreateSession(t.Context(), req)
-		require.NoError(t, err)
-
-		err = store.DeleteSession(t.Context(), gotSession.ID())
+		otherSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
 		require.NoError(t, err)
 
-		_, err = store.GetSession(t.Context(), gotSession.ID())
+		err = store.DeleteSession(t.Context(), gotSession.ID().String())
+		require.NoError(t, err)
+
+		_, err = store.GetSession(t.Context(), gotSession.ID().String())
 		assert.Error(t, err)
 
-		_, err = store.GetSession(t.Context(), otherSession.ID())
+		_, err = store.GetSession(t.Context(), otherSession.ID().String())
 		assert.NoError(t, err)
 	})
 
 	t.Run("returns error when deleting non-existent session", func(t *testing.T) {
 		store := c.NewStorer()
-		err := store.DeleteSession(t.Context(), c.NewIdentifier("non-existent-session-id"))
+		err := store.DeleteSession(t.Context(), "non-existent-session-id")
 		assert.Error(t, err)
 	})
 
 	t.Run("can delete all sessions for a user", func(t *testing.T) {
-		userID := c.NewIdentifier("user-id")
-		otherUserID := c.NewIdentifier("other-user-id")
-		req := CreateSessionRequest{
-			UserID: userID,
-		}
+		userID := NewFakeIdentifier("user-id")
+		otherUserID := NewFakeIdentifier("other-user-id")
+		idleAt := time.Now()
+		expireAt := time.Now().Add(time.Hour)
 		store := c.NewStorer()
 
-		gotSession, err := store.CreateSession(t.Context(), req)
+		gotSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
 		require.NoError(t, err)
-		anotherSession, err := store.CreateSession(t.Context(), req)
+		anotherSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
 		require.NoError(t, err)
 
-		otherUserSession, err := store.CreateSession(t.Context(), CreateSessionRequest{
-			UserID: otherUserID,
-		})
+		otherUserSession, err := store.CreateSession(t.Context(), otherUserID, idleAt, expireAt)
 		require.NoError(t, err)
 
 		deleted, err := store.DeleteUserSessions(t.Context(), userID)
 		require.NoError(t, err)
 		assert.Equal(t, 2, deleted)
 
-		_, err = store.GetSession(t.Context(), gotSession.ID())
+		_, err = store.GetSession(t.Context(), gotSession.ID().String())
 		assert.Error(t, err)
 
-		_, err = store.GetSession(t.Context(), anotherSession.ID())
+		_, err = store.GetSession(t.Context(), anotherSession.ID().String())
 		assert.Error(t, err)
 
-		_, err = store.GetSession(t.Context(), otherUserSession.ID())
+		_, err = store.GetSession(t.Context(), otherUserSession.ID().String())
 		assert.NoError(t, err)
 	})
 }

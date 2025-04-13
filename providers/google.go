@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/rlebel12/gosesh"
@@ -54,11 +55,11 @@ func (p *Google) OAuth2Begin() http.HandlerFunc {
 	return p.sesh.OAuth2Begin(p.cfg)
 }
 
-func (p *Google) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
+func (p *Google) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
 	return p.sesh.OAuth2Callback(p.NewUser(), p.cfg, handler)
 }
 
-func (p *Google) NewUser() gosesh.OAuth2User {
+func (p *Google) NewUser() *GoogleUser {
 	return &GoogleUser{
 		googleHost: p.googleHost,
 	}
@@ -73,9 +74,13 @@ type GoogleUser struct {
 	googleHost string `json:"-"`
 }
 
-func (user *GoogleUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+func (user *GoogleUser) Request(ctx context.Context, accessToken string) (io.ReadCloser, error) {
 	url := fmt.Sprintf("%s/oauth2/v2/userinfo?access_token=%s", user.googleHost, accessToken)
-	return http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating request: %s", err.Error())
+	}
+	return doRequest(req)
 }
 
 func (user *GoogleUser) Unmarshal(b []byte) error {

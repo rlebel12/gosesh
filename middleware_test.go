@@ -3,10 +3,8 @@ package gosesh
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 	"time"
 
@@ -42,37 +40,10 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			wantSecureCookieHeaders: true,
 			wantCookie:              false,
 		},
-		"parse error": {
-			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := internal.NewFakeIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-					UserID:   userID,
-					IdleAt:   now.Add(5 * time.Minute),
-					ExpireAt: now.Add(85 * time.Minute),
-				})
-				require.NoError(t, err)
-				r.AddCookie(&http.Cookie{
-					Name:     "customName",
-					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
-					Expires:  now.Add(85 * time.Minute),
-					Path:     "/",
-					Domain:   "localhost",
-					SameSite: http.SameSiteLaxMode,
-				})
-				return r
-			},
-			giveParseError:          errors.New("parse error"),
-			wantLogs:                []string{"level=ERROR msg=\"failed to parse session ID from decoded session cookie\" error=\"parse error\"\n"},
-			wantSecureCookieHeaders: true,
-		},
 		"session active": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := internal.NewFakeIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-					UserID:   userID,
-					IdleAt:   now.Add(5 * time.Minute),
-					ExpireAt: now.Add(85 * time.Minute),
-				})
+				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
@@ -89,11 +60,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		"session expired": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := internal.NewFakeIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-					UserID:   userID,
-					IdleAt:   now.Add(-5 * time.Minute),
-					ExpireAt: now.Add(-1 * time.Minute),
-				})
+				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(-1*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
@@ -111,11 +78,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		"session idle failed create replacement": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := internal.NewFakeIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-					UserID:   userID,
-					IdleAt:   now.Add(-5 * time.Minute),
-					ExpireAt: now.Add(85 * time.Minute),
-				})
+				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
 				return r
@@ -126,11 +89,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		"session idle failed delete old": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := internal.NewFakeIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-					UserID:   userID,
-					IdleAt:   now.Add(-5 * time.Minute),
-					ExpireAt: now.Add(85 * time.Minute),
-				})
+				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
 				return r
@@ -141,11 +100,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		"session idle success": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := internal.NewFakeIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), CreateSessionRequest{
-					UserID:   userID,
-					IdleAt:   now.Add(-5 * time.Minute),
-					ExpireAt: now.Add(85 * time.Minute),
-				})
+				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
 				return r
@@ -167,16 +122,9 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				testStore = tc.giveErrorStore
 			}
 
-			parser := func(b []byte) (Identifier, error) {
-				id, err := strconv.Atoi(string(b))
-				if err != nil {
-					return nil, err
-				}
-				return MemoryStoreIdentifier(id), tc.giveParseError
-			}
-
 			withLogger, logger := withTestLogger()
-			sesh := New(parser, testStore,
+			sesh := New(
+				testStore,
 				WithNow(func() time.Time { return now }),
 				WithSessionCookieName("customName"),
 				WithSessionActiveDuration(17*time.Minute),
@@ -231,12 +179,9 @@ func TestRequireAuthentication(t *testing.T) {
 
 	t.Run("authenticated", func(t *testing.T) {
 		store := NewMemoryStore()
-		parser := func(b []byte) (Identifier, error) {
-			return internal.NewFakeIdentifier("identifier"), nil
-		}
 		r, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(err)
-		sesh := New(parser, store, WithNow(func() time.Time { return now }))
+		sesh := New(store, WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
 		session := NewFakeSession(
@@ -259,10 +204,7 @@ func TestRequireAuthentication(t *testing.T) {
 		r, err := http.NewRequest(http.MethodGet, "/", nil)
 		require.NoError(err)
 		store := NewMemoryStore()
-		parser := func(b []byte) (Identifier, error) {
-			return internal.NewFakeIdentifier("identifier"), nil
-		}
-		sesh := New(parser, store, WithNow(func() time.Time { return now }))
+		sesh := New(store, WithNow(func() time.Time { return now }))
 		rr := httptest.NewRecorder()
 
 		handlerCalled := false
@@ -342,9 +284,6 @@ func TestRedirectUnauthenticated(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
 			store := NewMemoryStore()
-			parser := func(b []byte) (Identifier, error) {
-				return internal.NewFakeIdentifier("identifier"), nil
-			}
 
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			if test.giveSession != nil {
@@ -355,7 +294,7 @@ func TestRedirectUnauthenticated(t *testing.T) {
 			}
 			require.NoError(err)
 
-			sesh := New(parser, store, WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }))
+			sesh := New(store, WithNow(func() time.Time { return time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC) }))
 			rr := httptest.NewRecorder()
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

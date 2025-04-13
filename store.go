@@ -11,13 +11,13 @@ import (
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		sessions: map[Identifier]*MemoryStoreSession{},
+		sessions: map[string]*MemoryStoreSession{},
 	}
 }
 
 type (
 	MemoryStore struct {
-		sessions   map[Identifier]*MemoryStoreSession
+		sessions   map[string]*MemoryStoreSession
 		sequenceID MemoryStoreIdentifier
 	}
 
@@ -35,23 +35,23 @@ func (id MemoryStoreIdentifier) String() string {
 	return strconv.Itoa(int(id))
 }
 
-func (ms *MemoryStore) UpsertUser(ctx context.Context, user OAuth2User) (Identifier, error) {
-	return user, nil
+func (ms *MemoryStore) UpsertUser(ctx context.Context, userID Identifier) (Identifier, error) {
+	return userID, nil
 }
 
-func (ms *MemoryStore) CreateSession(ctx context.Context, req CreateSessionRequest) (Session, error) {
+func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idleAt, expireAt time.Time) (Session, error) {
 	ms.sequenceID++
 	s := &MemoryStoreSession{
 		id:       ms.sequenceID,
-		userID:   req.UserID,
-		idleAt:   req.IdleAt,
-		expireAt: req.ExpireAt,
+		userID:   userID,
+		idleAt:   idleAt,
+		expireAt: expireAt,
 	}
-	ms.sessions[s.ID()] = s
+	ms.sessions[s.ID().String()] = s
 	return s, nil
 }
 
-func (ms *MemoryStore) GetSession(ctx context.Context, sessionID Identifier) (Session, error) {
+func (ms *MemoryStore) GetSession(ctx context.Context, sessionID string) (Session, error) {
 	s, ok := ms.sessions[sessionID]
 	if !ok {
 		return nil, errors.New("session not found")
@@ -59,7 +59,7 @@ func (ms *MemoryStore) GetSession(ctx context.Context, sessionID Identifier) (Se
 	return s, nil
 }
 
-func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID Identifier) error {
+func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID string) error {
 	_, ok := ms.sessions[sessionID]
 	if !ok {
 		return errors.New("session not found")
@@ -72,7 +72,7 @@ func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID Identifier
 	var count int
 	for _, s := range ms.sessions {
 		if s.UserID() == userID {
-			delete(ms.sessions, s.ID())
+			delete(ms.sessions, s.ID().String())
 			count++
 		}
 	}

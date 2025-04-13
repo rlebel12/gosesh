@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/rlebel12/gosesh"
@@ -71,11 +72,11 @@ func (t *Twitch) OAuth2Begin() http.HandlerFunc {
 	return t.sesh.OAuth2Begin(t.cfg)
 }
 
-func (t *Twitch) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
+func (t *Twitch) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
 	return t.sesh.OAuth2Callback(t.NewUser(), t.cfg, handler)
 }
 
-func (t *Twitch) NewUser() gosesh.OAuth2User {
+func (t *Twitch) NewUser() *TwitchUser {
 	return &TwitchUser{twitch: t}
 }
 
@@ -116,7 +117,7 @@ func (user *TwitchUser) String() string {
 	}
 }
 
-func (user *TwitchUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
+func (user *TwitchUser) Request(ctx context.Context, accessToken string) (io.ReadCloser, error) {
 	url := fmt.Sprintf("%s/helix/users", user.twitch.twitchHost)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -124,8 +125,7 @@ func (user *TwitchUser) Request(ctx context.Context, accessToken string) (*http.
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Client-Id", user.twitch.cfg.ClientID)
-	client := &http.Client{}
-	return client.Do(req)
+	return doRequest(req)
 }
 
 func (user *TwitchUser) Unmarshal(b []byte) error {

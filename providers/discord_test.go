@@ -91,7 +91,7 @@ func TestDiscordUserRequest(t *testing.T) {
 			setup := setup(t)
 			discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "", WithDiscodHost(tc.giveDiscordHost(server.URL)))
 
-			expectedUser := discord.NewUser().(*DiscordUser)
+			expectedUser := discord.NewUser()
 			mux.HandleFunc("/api/v9/users/@me", func(w http.ResponseWriter, r *http.Request) {
 				expectedUser.ID = "123"
 				expectedUser.Username = "username"
@@ -101,7 +101,7 @@ func TestDiscordUserRequest(t *testing.T) {
 				assert.NoError(t, err)
 			})
 
-			actualUser := discord.NewUser().(*DiscordUser)
+			actualUser := discord.NewUser()
 			resp, err := actualUser.Request(t.Context(), "accessToken")
 
 			if tc.wantErr {
@@ -110,7 +110,8 @@ func TestDiscordUserRequest(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			content, err := io.ReadAll(resp.Body)
+			defer resp.Close()
+			content, err := io.ReadAll(resp)
 			require.NoError(t, err)
 			err = actualUser.Unmarshal(content)
 			require.NoError(t, err)
@@ -142,7 +143,7 @@ func TestDiscordUserString(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
 			discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "", test.opts...)
-			user := discord.NewUser().(*DiscordUser)
+			user := discord.NewUser()
 			user.ID = userID
 			user.Email = userEmail
 			assert.Equal(t, test.expected, user.String())
