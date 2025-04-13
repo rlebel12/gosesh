@@ -47,14 +47,6 @@ func NewFakeSession(id, userID Identifier, idleAt, expireAt time.Time) *FakeSess
 func TestFakeIdentifierContract(t *testing.T) {
 	IdentifierContract{
 		NewIdentifier: func(id string) Identifier {
-			return NewFakeIdentifier(id)
-		},
-	}.Test(t)
-}
-
-func TestOtherFakeIdentifierContract(t *testing.T) {
-	IdentifierContract{
-		NewIdentifier: func(id string) Identifier {
 			return internal.NewFakeIdentifier(id)
 		},
 	}.Test(t)
@@ -69,18 +61,6 @@ func TestFakeSessionContract(t *testing.T) {
 			return internal.NewFakeIdentifier(id)
 		},
 	}.Test(t)
-}
-
-type FakeIdentifier struct {
-	ID string
-}
-
-func (f *FakeIdentifier) String() string {
-	return f.ID
-}
-
-func NewFakeIdentifier(id string) *FakeIdentifier {
-	return &FakeIdentifier{ID: id}
 }
 
 type erroringStore struct {

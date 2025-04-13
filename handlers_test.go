@@ -223,7 +223,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
-	user = NewFakeIdentifier("user")
+	user = internal.NewFakeIdentifier("user")
 
 	if mode == testFailedUnmarshalRequest {
 		requestFunc = func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
@@ -249,7 +249,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	unmarshalFunc = func(_ []byte) (Identifier, error) {
-		return NewFakeIdentifier("user"), nil
+		return internal.NewFakeIdentifier("user"), nil
 	}
 
 	if mode == testCallbackErrUpsertUser {
