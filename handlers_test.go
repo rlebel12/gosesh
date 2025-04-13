@@ -238,7 +238,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		}
 		return
 	}
-	requestFunc = func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+	requestFunc = func(_ context.Context, _ string) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("")), nil
 	}
 
@@ -248,7 +248,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		}
 		return
 	}
-	unmarshalFunc = func(b []byte) (Identifier, error) {
+	unmarshalFunc = func(_ []byte) (Identifier, error) {
 		return NewFakeIdentifier("user"), nil
 	}
 

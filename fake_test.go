@@ -12,26 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type FakeOAuth2Credentials struct {
-	ClientIDValue     string
-	ClientSecretValue string
-}
-
-func (f *FakeOAuth2Credentials) ClientID() string {
-	return f.ClientIDValue
-}
-
-func (f *FakeOAuth2Credentials) ClientSecret() string {
-	return f.ClientSecretValue
-}
-
-func NewFakeOAuth2Credentials(clientID, clientSecret string) *FakeOAuth2Credentials {
-	return &FakeOAuth2Credentials{
-		ClientIDValue:     clientID,
-		ClientSecretValue: clientSecret,
-	}
-}
-
 type FakeSession struct {
 	IDValue       Identifier
 	UserIDValue   Identifier
@@ -76,14 +56,6 @@ func TestOtherFakeIdentifierContract(t *testing.T) {
 	IdentifierContract{
 		NewIdentifier: func(id string) Identifier {
 			return internal.NewFakeIdentifier(id)
-		},
-	}.Test(t)
-}
-
-func TestFakeOAuth2CredentialsContract(t *testing.T) {
-	OAuth2CredentialsContract{
-		NewOAuth2Credentials: func(clientID, clientSecret string) OAuth2Credentials {
-			return NewFakeOAuth2Credentials(clientID, clientSecret)
 		},
 	}.Test(t)
 }

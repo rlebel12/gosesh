@@ -140,11 +140,6 @@ type (
 	}
 
 	NewOpts func(*Gosesh)
-
-	OAuth2Credentials interface {
-		ClientID() string
-		ClientSecret() string
-	}
 )
 
 func (gs *Gosesh) logError(msg string, err error, args ...any) {

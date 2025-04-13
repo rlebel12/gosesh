@@ -25,18 +25,6 @@ func (c IdentifierContract) Test(t *testing.T) {
 	})
 }
 
-type OAuth2CredentialsContract struct {
-	NewOAuth2Credentials func(giveClientID, giveClientSecret string) OAuth2Credentials
-}
-
-func (c OAuth2CredentialsContract) Test(t *testing.T) {
-	t.Run("returns correct client ID and secret", func(t *testing.T) {
-		creds := c.NewOAuth2Credentials("client-id", "client-secret")
-		assert.Equal(t, "client-id", creds.ClientID())
-		assert.Equal(t, "client-secret", creds.ClientSecret())
-	})
-}
-
 type SessionContract struct {
 	NewSession    func(id, userID Identifier, idleAt, expireAt time.Time) Session
 	NewIdentifier func(giveID string) Identifier
