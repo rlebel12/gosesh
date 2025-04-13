@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +47,7 @@ func TestNewDiscord(t *testing.T) {
 func TestDiscordOAuth2Begin(t *testing.T) {
 	setup := setup(t)
 	discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "")
+	prepareProvider(discord)
 	discord.OAuth2Begin().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
 	require.NotNil(t, setup.gotBeginCall.cfg)
 	assert.Equal(t, "clientID", setup.gotBeginCall.cfg.ClientID)
@@ -56,6 +56,7 @@ func TestDiscordOAuth2Begin(t *testing.T) {
 func TestDiscordOAuth2Callback(t *testing.T) {
 	setup := setup(t)
 	discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "")
+	prepareProvider(discord)
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
@@ -70,61 +71,27 @@ func TestDiscordOAuth2Callback(t *testing.T) {
 	assert.True(t, gotCalled)
 }
 
-func TestDiscordUserRequest(t *testing.T) {
-	for name, tc := range map[string]struct {
-		giveDiscordHost func(realURL string) string
-		wantErr         bool
-	}{
-		"success": {
-			giveDiscordHost: func(realURL string) string { return realURL },
+func TestDiscordRequestUser(t *testing.T) {
+	var gotReq *http.Request
+	discord := &Discord{
+		Provider: Provider{
+			doRequest: func(req *http.Request) (io.ReadCloser, error) {
+				gotReq = req
+				return nil, nil
+			},
 		},
-		"error": {
-			giveDiscordHost: func(realURL string) string { return "\n" },
-			wantErr:         true,
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			mux := http.NewServeMux()
-			server := httptest.NewServer(mux)
-			t.Cleanup(server.Close)
-
-			setup := setup(t)
-			discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "", WithDiscodHost(tc.giveDiscordHost(server.URL)))
-
-			expectedUser := discord.NewUser()
-			mux.HandleFunc("/api/v9/users/@me", func(w http.ResponseWriter, r *http.Request) {
-				expectedUser.ID = "123"
-				expectedUser.Username = "username"
-				expectedUser.Email = "gosesh@example.com"
-				expectedUser.Verified = true
-				err := json.NewEncoder(w).Encode(expectedUser)
-				assert.NoError(t, err)
-			})
-
-			actualUser := discord.NewUser()
-			resp, err := actualUser.Request(t.Context(), "accessToken")
-
-			if tc.wantErr {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			defer resp.Close()
-			content, err := io.ReadAll(resp)
-			require.NoError(t, err)
-			err = actualUser.Unmarshal(content)
-			require.NoError(t, err)
-			assert.Equal(t, expectedUser, actualUser)
-		})
 	}
+	_, err := discord.requestUser(t.Context(), "accessToken")
+	require.NoError(t, err)
+	assert.Equal(t, "https://discord.com/api/v9/users/@me", gotReq.URL.String())
+	assert.Equal(t, "Bearer accessToken", gotReq.Header.Get("Authorization"))
 }
 
 func TestDiscordUserString(t *testing.T) {
 	const userID = "123"
 	const userEmail = "123@example.com"
 	for name, test := range map[string]struct {
-		opts     []DiscordOpt
+		opts     []Opt[Discord]
 		expected string
 	}{
 		"default": {
@@ -132,11 +99,11 @@ func TestDiscordUserString(t *testing.T) {
 			expected: userID,
 		},
 		"discord ID": {
-			opts:     []DiscordOpt{WithDiscordKeyMode(DiscordKeyModeID)},
+			opts:     []Opt[Discord]{WithDiscordKeyMode(DiscordKeyModeID)},
 			expected: userID,
 		},
 		"email": {
-			opts:     []DiscordOpt{WithDiscordKeyMode(DiscordKeyModeEmail)},
+			opts:     []Opt[Discord]{WithDiscordKeyMode(DiscordKeyModeEmail)},
 			expected: userEmail,
 		},
 	} {

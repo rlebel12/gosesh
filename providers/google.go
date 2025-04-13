@@ -2,41 +2,25 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/rlebel12/gosesh"
-	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
 
 type (
 	Google struct {
-		sesh       Gosesher
-		cfg        *oauth2.Config
-		googleHost string
+		Provider
 	}
-
-	GoogleOpt func(*Google)
 )
 
-func NewGoogle(sesh Gosesher, clientID, clientSecret, redirectPath string, opts ...GoogleOpt) *Google {
-	oauth2Config := &oauth2.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		RedirectURL: fmt.Sprintf(
-			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
-		Scopes: []string{
-			"https://www.googleapis.com/auth/userinfo.email",
-		},
-		Endpoint: google.Endpoint,
-	}
+func NewGoogle(sesh Gosesher, clientID, clientSecret, redirectPath string, opts ...Opt[Google]) *Google {
 	google := &Google{
-		sesh:       sesh,
-		cfg:        oauth2Config,
-		googleHost: "https://www.googleapis.com",
+		Provider: newProvider(sesh, []string{
+			"https://www.googleapis.com/auth/userinfo.email",
+		}, google.Endpoint, clientID, clientSecret, redirectPath),
 	}
 	for _, opt := range opts {
 		opt(google)
@@ -44,25 +28,26 @@ func NewGoogle(sesh Gosesher, clientID, clientSecret, redirectPath string, opts 
 	return google
 }
 
-// To help with testing, this function allows you to set the Discord host to a different value (i.e. httptest.Server.URL).
-func WithGoogleHost(host string) GoogleOpt {
-	return func(d *Google) {
-		d.googleHost = host
-	}
-}
-
 func (p *Google) OAuth2Begin() http.HandlerFunc {
-	return p.sesh.OAuth2Begin(p.cfg)
+	return p.Gosesh.OAuth2Begin(p.Config)
 }
 
 func (p *Google) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
-	return p.sesh.OAuth2Callback(p.NewUser(), p.cfg, handler)
+	return p.Gosesh.OAuth2Callback(p.Config, p.requestUser, unmarshalUser(p.NewUser), handler)
+}
+
+func (p *Google) requestUser(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+	const baseURL = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
+	url := fmt.Sprintf("%s%s", baseURL, accessToken)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating request: %s", err.Error())
+	}
+	return p.doRequest(req)
 }
 
 func (p *Google) NewUser() *GoogleUser {
-	return &GoogleUser{
-		googleHost: p.googleHost,
-	}
+	return &GoogleUser{}
 }
 
 type GoogleUser struct {
@@ -70,21 +55,6 @@ type GoogleUser struct {
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
 	Picture       string `json:"picture"`
-
-	googleHost string `json:"-"`
-}
-
-func (user *GoogleUser) Request(ctx context.Context, accessToken string) (io.ReadCloser, error) {
-	url := fmt.Sprintf("%s/oauth2/v2/userinfo?access_token=%s", user.googleHost, accessToken)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-	}
-	return doRequest(req)
-}
-
-func (user *GoogleUser) Unmarshal(b []byte) error {
-	return json.Unmarshal(b, user)
 }
 
 func (user *GoogleUser) String() string {

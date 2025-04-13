@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,34 +12,20 @@ import (
 
 type (
 	Discord struct {
-		Gosesh      Gosesher
-		Config      *oauth2.Config
-		discordHost string
-		keyMode     discordKeyMode
+		Provider
+		keyMode discordKeyMode
 	}
-
-	DiscordOpt func(*Discord)
 )
 
 // Creates a new Discord OAuth2 provider. redirectPath should have a leading slash.
-func NewDiscord(sesh Gosesher, scopes DiscordScopes, clientID, clientSecret, redirectPath string, opts ...DiscordOpt) *Discord {
-	oauth2Config := &oauth2.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		RedirectURL: fmt.Sprintf(
-			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
-		Scopes: scopes.strings(),
-		Endpoint: oauth2.Endpoint{
+func NewDiscord(sesh Gosesher, scopes DiscordScopes, clientID, clientSecret, redirectPath string, opts ...Opt[Discord]) *Discord {
+	discord := &Discord{
+		Provider: newProvider(sesh, scopes.strings(), oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
 			TokenURL:  "https://discord.com/api/oauth2/token",
 			AuthStyle: oauth2.AuthStyleInParams,
-		},
-	}
-	discord := &Discord{
-		Gosesh:      sesh,
-		Config:      oauth2Config,
-		discordHost: "https://discord.com",
-		keyMode:     DiscordKeyModeID,
+		}, clientID, clientSecret, redirectPath),
+		keyMode: DiscordKeyModeID,
 	}
 	for _, opt := range opts {
 		opt(discord)
@@ -48,16 +33,9 @@ func NewDiscord(sesh Gosesher, scopes DiscordScopes, clientID, clientSecret, red
 	return discord
 }
 
-func WithDiscordKeyMode(mode discordKeyMode) DiscordOpt {
+func WithDiscordKeyMode(mode discordKeyMode) Opt[Discord] {
 	return func(d *Discord) {
 		d.keyMode = mode
-	}
-}
-
-// To help with testing, this function allows you to set the Discord host to a different value (i.e. httptest.Server.URL).
-func WithDiscodHost(host string) DiscordOpt {
-	return func(d *Discord) {
-		d.discordHost = host
 	}
 }
 
@@ -73,11 +51,21 @@ func (d *Discord) OAuth2Begin() http.HandlerFunc {
 }
 
 func (d *Discord) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
-	return d.Gosesh.OAuth2Callback(d.NewUser(), d.Config, handler)
+	return d.Gosesh.OAuth2Callback(d.Config, d.requestUser, unmarshalUser(d.NewUser), handler)
 }
 
-func (d *Discord) NewUser() *DiscordUser {
-	return &DiscordUser{discord: d}
+func (d *Discord) requestUser(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+	const url = "https://discord.com/api/v9/users/@me"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating request: %s", err.Error())
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return d.doRequest(req)
+}
+
+func (d *Discord) NewUser() DiscordUser {
+	return DiscordUser{keyMode: d.keyMode}
 }
 
 type DiscordScopes struct {
@@ -98,11 +86,11 @@ type DiscordUser struct {
 	Email    string `json:"email,omitempty"`
 	Verified bool   `json:"verified,omitempty"`
 
-	discord *Discord `json:"-"`
+	keyMode discordKeyMode `json:"-"`
 }
 
-func (user *DiscordUser) String() string {
-	switch user.discord.keyMode {
+func (user DiscordUser) String() string {
+	switch user.keyMode {
 	case DiscordKeyModeEmail:
 		return user.Email
 	case DiscordKeyModeID:
@@ -110,18 +98,4 @@ func (user *DiscordUser) String() string {
 	default:
 		return user.ID
 	}
-}
-
-func (user *DiscordUser) Request(ctx context.Context, accessToken string) (io.ReadCloser, error) {
-	url := fmt.Sprintf("%s/api/v9/users/@me", user.discord.discordHost)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	return doRequest(req)
-}
-
-func (user *DiscordUser) Unmarshal(b []byte) error {
-	return json.Unmarshal(b, user)
 }

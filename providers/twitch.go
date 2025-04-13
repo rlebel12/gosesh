@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,34 +12,20 @@ import (
 
 type (
 	Twitch struct {
-		sesh       Gosesher
-		cfg        *oauth2.Config
-		twitchHost string
-		keyMode    twitchKeyMode
+		Provider
+		keyMode twitchKeyMode
 	}
-
-	TwitchOpt func(*Twitch)
 )
 
 // Creates a new Twitch OAuth2 provider. redirectPath should have a leading slash.
-func NewTwitch(sesh Gosesher, scopes TwitchScopes, clientID, clientSecret, redirectPath string, opts ...TwitchOpt) *Twitch {
-	oauth2Config := &oauth2.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		RedirectURL: fmt.Sprintf(
-			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
-		Scopes: scopes.strings(),
-		Endpoint: oauth2.Endpoint{
+func NewTwitch(sesh Gosesher, scopes TwitchScopes, clientID, clientSecret, redirectPath string, opts ...Opt[Twitch]) *Twitch {
+	twitch := &Twitch{
+		Provider: newProvider(sesh, scopes.strings(), oauth2.Endpoint{
 			AuthURL:   "https://id.twitch.tv/oauth2/authorize",
 			TokenURL:  "https://id.twitch.tv/oauth2/token",
 			AuthStyle: oauth2.AuthStyleInParams,
-		},
-	}
-	twitch := &Twitch{
-		sesh:       sesh,
-		cfg:        oauth2Config,
-		twitchHost: "https://api.twitch.tv",
-		keyMode:    TwitchKeyModeID,
+		}, clientID, clientSecret, redirectPath),
+		keyMode: TwitchKeyModeID,
 	}
 	for _, opt := range opts {
 		opt(twitch)
@@ -48,16 +33,9 @@ func NewTwitch(sesh Gosesher, scopes TwitchScopes, clientID, clientSecret, redir
 	return twitch
 }
 
-func WithTwitchKeyMode(mode twitchKeyMode) TwitchOpt {
+func WithTwitchKeyMode(mode twitchKeyMode) Opt[Twitch] {
 	return func(t *Twitch) {
 		t.keyMode = mode
-	}
-}
-
-// To help with testing, this function allows you to set the Twitch host to a different value (i.e. httptest.Server.URL).
-func WithTwitchHost(host string) TwitchOpt {
-	return func(t *Twitch) {
-		t.twitchHost = host
 	}
 }
 
@@ -69,15 +47,26 @@ const (
 )
 
 func (t *Twitch) OAuth2Begin() http.HandlerFunc {
-	return t.sesh.OAuth2Begin(t.cfg)
+	return t.Gosesh.OAuth2Begin(t.Config)
 }
 
 func (t *Twitch) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
-	return t.sesh.OAuth2Callback(t.NewUser(), t.cfg, handler)
+	return t.Gosesh.OAuth2Callback(t.Config, t.requestUser, unmarshalUser(t.NewUser), handler)
+}
+
+func (t *Twitch) requestUser(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+	const url = "https://api.twitch.tv/helix/users"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating request: %s", err.Error())
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Client-Id", t.Config.ClientID)
+	return t.doRequest(req)
 }
 
 func (t *Twitch) NewUser() *TwitchUser {
-	return &TwitchUser{twitch: t}
+	return &TwitchUser{keyMode: t.keyMode}
 }
 
 type TwitchScopes struct {
@@ -99,7 +88,7 @@ type TwitchUser struct {
 		Email string `json:"email"`
 	} `json:"data"`
 
-	twitch *Twitch `json:"-"`
+	keyMode twitchKeyMode `json:"-"`
 }
 
 func (user *TwitchUser) String() string {
@@ -107,7 +96,7 @@ func (user *TwitchUser) String() string {
 		return ""
 	}
 
-	switch user.twitch.keyMode {
+	switch user.keyMode {
 	case TwitchKeyModeEmail:
 		return user.Data[0].Email
 	case TwitchKeyModeID:
@@ -115,19 +104,4 @@ func (user *TwitchUser) String() string {
 	default:
 		return user.Data[0].ID
 	}
-}
-
-func (user *TwitchUser) Request(ctx context.Context, accessToken string) (io.ReadCloser, error) {
-	url := fmt.Sprintf("%s/helix/users", user.twitch.twitchHost)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Client-Id", user.twitch.cfg.ClientID)
-	return doRequest(req)
-}
-
-func (user *TwitchUser) Unmarshal(b []byte) error {
-	return json.Unmarshal(b, user)
 }

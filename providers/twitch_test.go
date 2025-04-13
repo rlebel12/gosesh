@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -29,14 +28,14 @@ func TestNewTwitch(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
 			twitch := NewTwitch(setup.sesh, test.scopes, "clientID", "clientSecret", "/callback")
-
-			assert.Equal(t, "clientID", twitch.cfg.ClientID)
-			assert.Equal(t, "clientSecret", twitch.cfg.ClientSecret)
-			assert.Equal(t, "http://localhost/callback", twitch.cfg.RedirectURL)
-			assert.Equal(t, test.expectedScopes, twitch.cfg.Scopes)
-			assert.Equal(t, "https://id.twitch.tv/oauth2/authorize", twitch.cfg.Endpoint.AuthURL)
-			assert.Equal(t, "https://id.twitch.tv/oauth2/token", twitch.cfg.Endpoint.TokenURL)
-			assert.Equal(t, oauth2.AuthStyleInParams, twitch.cfg.Endpoint.AuthStyle)
+			prepareProvider(twitch)
+			assert.Equal(t, "clientID", twitch.Config.ClientID)
+			assert.Equal(t, "clientSecret", twitch.Config.ClientSecret)
+			assert.Equal(t, "http://localhost/callback", twitch.Config.RedirectURL)
+			assert.Equal(t, test.expectedScopes, twitch.Config.Scopes)
+			assert.Equal(t, "https://id.twitch.tv/oauth2/authorize", twitch.Config.Endpoint.AuthURL)
+			assert.Equal(t, "https://id.twitch.tv/oauth2/token", twitch.Config.Endpoint.TokenURL)
+			assert.Equal(t, oauth2.AuthStyleInParams, twitch.Config.Endpoint.AuthStyle)
 		})
 	}
 }
@@ -44,6 +43,7 @@ func TestNewTwitch(t *testing.T) {
 func TestTwitchOAuth2Begin(t *testing.T) {
 	setup := setup(t)
 	twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "")
+	prepareProvider(twitch)
 	twitch.OAuth2Begin().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
 	assert.True(t, setup.gotBeginCall.cfg != nil)
 	assert.Equal(t, "clientID", setup.gotBeginCall.cfg.ClientID)
@@ -52,6 +52,7 @@ func TestTwitchOAuth2Begin(t *testing.T) {
 func TestTwitchOAuth2Callback(t *testing.T) {
 	setup := setup(t)
 	twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "")
+	prepareProvider(twitch)
 	rr := httptest.NewRecorder()
 	r := httptest.NewRequest("GET", "/", nil)
 
@@ -67,69 +68,18 @@ func TestTwitchOAuth2Callback(t *testing.T) {
 }
 
 func TestTwitchUserRequest(t *testing.T) {
-	for name, tc := range map[string]struct {
-		giveTwitchHost func(realURL string) string
-		wantErr        bool
-	}{
-		"success": {
-			giveTwitchHost: func(realURL string) string { return realURL },
-		},
-		"error": {
-			giveTwitchHost: func(realURL string) string { return "\n" },
-			wantErr:        true,
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			mux := http.NewServeMux()
-			server := httptest.NewServer(mux)
-			t.Cleanup(server.Close)
-
-			setup := setup(t)
-			twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "", WithTwitchHost(tc.giveTwitchHost(server.URL)))
-
-			expectedResponse := &TwitchUser{
-				Data: []struct {
-					ID    string `json:"id"`
-					Login string `json:"login"`
-					Email string `json:"email"`
-				}{
-					{
-						ID:    "123456789",
-						Login: "twitchuser",
-						Email: "twitch@example.com",
-					},
-				},
-			}
-
-			mux.HandleFunc("/helix/users", func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, "Bearer accessToken", r.Header.Get("Authorization"))
-				assert.Equal(t, "clientID", r.Header.Get("Client-Id"))
-
-				err := json.NewEncoder(w).Encode(expectedResponse)
-				assert.NoError(t, err)
-			})
-
-			actualUser := twitch.NewUser()
-			resp, err := actualUser.Request(t.Context(), "accessToken")
-
-			if tc.wantErr {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			defer resp.Close()
-			content, err := io.ReadAll(resp)
-			require.NoError(t, err)
-			err = actualUser.Unmarshal(content)
-			require.NoError(t, err)
-
-			assert.Len(t, actualUser.Data, 1)
-			assert.Equal(t, "123456789", actualUser.Data[0].ID)
-			assert.Equal(t, "twitchuser", actualUser.Data[0].Login)
-			assert.Equal(t, "twitch@example.com", actualUser.Data[0].Email)
-		})
+	var gotReq *http.Request
+	setup := setup(t)
+	twitch := NewTwitch(setup.sesh, TwitchScopes{}, "clientID", "clientSecret", "")
+	prepareProvider(twitch)
+	twitch.doRequest = func(req *http.Request) (io.ReadCloser, error) {
+		gotReq = req
+		return nil, nil
 	}
+	_, err := twitch.requestUser(t.Context(), "accessToken")
+	require.NoError(t, err)
+	assert.Equal(t, "https://api.twitch.tv/helix/users", gotReq.URL.String())
+	assert.Equal(t, "Bearer accessToken", gotReq.Header.Get("Authorization"))
 }
 
 func TestTwitchUserString(t *testing.T) {
@@ -137,7 +87,7 @@ func TestTwitchUserString(t *testing.T) {
 	const userEmail = "twitch@example.com"
 
 	for name, test := range map[string]struct {
-		opts     []TwitchOpt
+		opts     []Opt[Twitch]
 		expected string
 	}{
 		"no data": {
@@ -149,11 +99,11 @@ func TestTwitchUserString(t *testing.T) {
 			expected: userID,
 		},
 		"twitch ID": {
-			opts:     []TwitchOpt{WithTwitchKeyMode(TwitchKeyModeID)},
+			opts:     []Opt[Twitch]{WithTwitchKeyMode(TwitchKeyModeID)},
 			expected: userID,
 		},
 		"email": {
-			opts:     []TwitchOpt{WithTwitchKeyMode(TwitchKeyModeEmail)},
+			opts:     []Opt[Twitch]{WithTwitchKeyMode(TwitchKeyModeEmail)},
 			expected: userEmail,
 		},
 	} {

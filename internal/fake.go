@@ -1,7 +1,7 @@
 package internal
 
 type FakeIdentifier struct {
-	ID string
+	ID string `json:"id"`
 }
 
 func (f *FakeIdentifier) String() string {

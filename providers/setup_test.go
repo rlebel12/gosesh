@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"io"
 	"net/http"
 	"testing"
 
@@ -28,4 +29,12 @@ func setup(t *testing.T) *testSetup {
 		},
 	)
 	return ts
+}
+
+func prepareProvider[T interface {
+	setDoRequest(func(req *http.Request) (io.ReadCloser, error))
+}](provider T) {
+	provider.setDoRequest(func(req *http.Request) (io.ReadCloser, error) {
+		return nil, nil
+	})
 }
