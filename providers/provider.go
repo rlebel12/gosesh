@@ -23,7 +23,7 @@ type (
 	Provider struct {
 		Gosesh    Gosesher
 		Config    *oauth2.Config
-		doRequest func(req *http.Request) (io.ReadCloser, error)
+		doRequest requestDoer
 	}
 
 	Opt[T any] func(*T)
@@ -44,11 +44,25 @@ func newProvider(sesh Gosesher, scopes []string, endpoint oauth2.Endpoint, clien
 	}
 }
 
-func (p *Provider) setDoRequest(doRequest func(req *http.Request) (io.ReadCloser, error)) {
+func (p *Provider) setDoRequest(doRequest requestDoer) {
 	p.doRequest = doRequest
 }
 
-func doRequest(req *http.Request) (io.ReadCloser, error) {
+func (p *Provider) getConfig() *oauth2.Config {
+	return p.Config
+}
+
+type requestDoer func(method, url string, header http.Header) (io.ReadCloser, error)
+
+func doRequest(method, url string, header http.Header) (io.ReadCloser, error) {
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %s", err.Error())
+	}
+	for k, v := range header {
+		req.Header[k] = v
+	}
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -65,7 +79,7 @@ func unmarshalUser[T gosesh.Identifier](newUser func() T) gosesh.UnmarshalFunc {
 		user := newUser()
 		err := json.Unmarshal(b, &user)
 		if err != nil {
-			return user, fmt.Errorf("failed to unmarshal user data: %s", err.Error())
+			return user, fmt.Errorf("unmarshal user data: %s", err.Error())
 		}
 		return user, nil
 	}

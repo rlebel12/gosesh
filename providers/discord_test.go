@@ -3,88 +3,51 @@ package providers
 import (
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/oauth2"
 )
 
-func TestNewDiscord(t *testing.T) {
+func TestDiscordScopes(t *testing.T) {
 	for name, test := range map[string]struct {
-		scopes         DiscordScopes
+		opts           []Opt[Discord]
 		expectedScopes []string
 	}{
 		"noScopes": {
-			scopes:         DiscordScopes{},
 			expectedScopes: []string{"identify"},
 		},
 		"emailScope": {
-			scopes:         DiscordScopes{Email: true},
+			opts:           []Opt[Discord]{WithDiscordEmailScope()},
 			expectedScopes: []string{"identify", "email"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
-			discord := NewDiscord(setup.sesh, test.scopes, "clientID", "clientSecret", "/callback")
-
-			assert.Equal(t, &oauth2.Config{
-				ClientID:     "clientID",
-				ClientSecret: "clientSecret",
-				RedirectURL:  "http://localhost/callback",
-				Scopes:       test.expectedScopes,
-				Endpoint: oauth2.Endpoint{
-					AuthURL:   "https://discord.com/oauth2/authorize",
-					TokenURL:  "https://discord.com/api/oauth2/token",
-					AuthStyle: oauth2.AuthStyleInParams,
-				},
-			}, discord.Config)
+			discord := NewDiscord(setup.sesh, "clientID", "clientSecret", "/callback", test.opts...)
+			assert.Equal(t, test.expectedScopes, discord.Config.Scopes)
 		})
 	}
 }
 
-func TestDiscordOAuth2Begin(t *testing.T) {
-	setup := setup(t)
-	discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "")
-	prepareProvider(discord)
-	discord.OAuth2Begin().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))
-	require.NotNil(t, setup.gotBeginCall.cfg)
-	assert.Equal(t, "clientID", setup.gotBeginCall.cfg.ClientID)
-}
-
-func TestDiscordOAuth2Callback(t *testing.T) {
-	setup := setup(t)
-	discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "")
-	prepareProvider(discord)
-	rr := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/", nil)
-
-	var gotCalled bool
-	var gotErr error
-	discord.OAuth2Callback(func(w http.ResponseWriter, r *http.Request, err error) {
-		gotErr = err
-		gotCalled = true
-	}).ServeHTTP(rr, r)
-
-	assert.NoError(t, gotErr)
-	assert.True(t, gotCalled)
-}
-
 func TestDiscordRequestUser(t *testing.T) {
-	var gotReq *http.Request
+	var gotMethod, gotURL string
+	var gotHeader http.Header
 	discord := &Discord{
 		Provider: Provider{
-			doRequest: func(req *http.Request) (io.ReadCloser, error) {
-				gotReq = req
+			doRequest: func(method, url string, header http.Header) (io.ReadCloser, error) {
+				gotMethod = method
+				gotURL = url
+				gotHeader = header
 				return nil, nil
 			},
 		},
 	}
 	_, err := discord.requestUser(t.Context(), "accessToken")
 	require.NoError(t, err)
-	assert.Equal(t, "https://discord.com/api/v9/users/@me", gotReq.URL.String())
-	assert.Equal(t, "Bearer accessToken", gotReq.Header.Get("Authorization"))
+	assert.Equal(t, "GET", gotMethod)
+	assert.Equal(t, "https://discord.com/api/v9/users/@me", gotURL)
+	assert.Equal(t, "Bearer accessToken", gotHeader.Get("Authorization"))
 }
 
 func TestDiscordUserString(t *testing.T) {
@@ -109,7 +72,7 @@ func TestDiscordUserString(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup := setup(t)
-			discord := NewDiscord(setup.sesh, DiscordScopes{}, "clientID", "clientSecret", "", test.opts...)
+			discord := NewDiscord(setup.sesh, "clientID", "clientSecret", "", test.opts...)
 			user := discord.NewUser()
 			user.ID = userID
 			user.Email = userEmail

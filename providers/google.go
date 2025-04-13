@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -16,14 +15,11 @@ type (
 	}
 )
 
-func NewGoogle(sesh Gosesher, clientID, clientSecret, redirectPath string, opts ...Opt[Google]) *Google {
+func NewGoogle(sesh Gosesher, clientID, clientSecret, redirectPath string) *Google {
 	google := &Google{
 		Provider: newProvider(sesh, []string{
 			"https://www.googleapis.com/auth/userinfo.email",
 		}, google.Endpoint, clientID, clientSecret, redirectPath),
-	}
-	for _, opt := range opts {
-		opt(google)
 	}
 	return google
 }
@@ -37,13 +33,8 @@ func (p *Google) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc
 }
 
 func (p *Google) requestUser(ctx context.Context, accessToken string) (io.ReadCloser, error) {
-	const baseURL = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
-	url := fmt.Sprintf("%s%s", baseURL, accessToken)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-	}
-	return p.doRequest(req)
+	const url = "https://www.googleapis.com/oauth2/v2/userinfo?access_token="
+	return p.doRequest("GET", url+accessToken, nil)
 }
 
 func (p *Google) NewUser() *GoogleUser {

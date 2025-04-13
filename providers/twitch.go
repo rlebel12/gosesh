@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -18,9 +17,9 @@ type (
 )
 
 // Creates a new Twitch OAuth2 provider. redirectPath should have a leading slash.
-func NewTwitch(sesh Gosesher, scopes TwitchScopes, clientID, clientSecret, redirectPath string, opts ...Opt[Twitch]) *Twitch {
+func NewTwitch(sesh Gosesher, clientID, clientSecret, redirectPath string, opts ...Opt[Twitch]) *Twitch {
 	twitch := &Twitch{
-		Provider: newProvider(sesh, scopes.strings(), oauth2.Endpoint{
+		Provider: newProvider(sesh, []string{}, oauth2.Endpoint{
 			AuthURL:   "https://id.twitch.tv/oauth2/authorize",
 			TokenURL:  "https://id.twitch.tv/oauth2/token",
 			AuthStyle: oauth2.AuthStyleInParams,
@@ -36,6 +35,12 @@ func NewTwitch(sesh Gosesher, scopes TwitchScopes, clientID, clientSecret, redir
 func WithTwitchKeyMode(mode twitchKeyMode) Opt[Twitch] {
 	return func(t *Twitch) {
 		t.keyMode = mode
+	}
+}
+
+func WithEmailScope() Opt[Twitch] {
+	return func(t *Twitch) {
+		t.Config.Scopes = append(t.Config.Scopes, "user:read:email")
 	}
 }
 
@@ -55,30 +60,14 @@ func (t *Twitch) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc
 }
 
 func (t *Twitch) requestUser(ctx context.Context, accessToken string) (io.ReadCloser, error) {
-	const url = "https://api.twitch.tv/helix/users"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Client-Id", t.Config.ClientID)
-	return t.doRequest(req)
+	return t.doRequest("GET", "https://api.twitch.tv/helix/users", http.Header{
+		"Authorization": {"Bearer " + accessToken},
+		"Client-Id":     {t.Config.ClientID},
+	})
 }
 
 func (t *Twitch) NewUser() *TwitchUser {
 	return &TwitchUser{keyMode: t.keyMode}
-}
-
-type TwitchScopes struct {
-	Email bool
-}
-
-func (s TwitchScopes) strings() []string {
-	scopes := []string{}
-	if s.Email {
-		scopes = append(scopes, "user:read:email")
-	}
-	return scopes
 }
 
 type TwitchUser struct {

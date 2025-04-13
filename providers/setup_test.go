@@ -32,9 +32,9 @@ func setup(t *testing.T) *testSetup {
 }
 
 func prepareProvider[T interface {
-	setDoRequest(func(req *http.Request) (io.ReadCloser, error))
+	setDoRequest(requestDoer)
 }](provider T) {
-	provider.setDoRequest(func(req *http.Request) (io.ReadCloser, error) {
+	provider.setDoRequest(func(method, url string, header http.Header) (io.ReadCloser, error) {
 		return nil, nil
 	})
 }
