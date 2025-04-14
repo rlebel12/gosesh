@@ -57,6 +57,7 @@ func (c GosesherContract) Test(t *testing.T) {
 	t.Run("OAuth2Callback handler can be called", func(t *testing.T) {
 		var (
 			gotIdentifier gosesh.Identifier
+			gotCalled     bool
 			gotErr        error
 		)
 		gosesher := c.NewGosesher("https", "example.com", nil)
@@ -72,6 +73,7 @@ func (c GosesherContract) Test(t *testing.T) {
 			},
 			func(w http.ResponseWriter, r *http.Request, err error) {
 				gotErr = err
+				gotCalled = true
 				w.WriteHeader(http.StatusOK)
 			},
 		)
@@ -81,6 +83,7 @@ func (c GosesherContract) Test(t *testing.T) {
 
 		assert.NoError(t, gotErr)
 		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.True(t, gotCalled)
 		assert.Equal(t, "content", gotIdentifier.String())
 	})
 }

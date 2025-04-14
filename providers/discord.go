@@ -62,8 +62,8 @@ func (d *Discord) requestUser(ctx context.Context, accessToken string) (io.ReadC
 	return d.doRequest("GET", "https://discord.com/api/v9/users/@me", http.Header{"Authorization": {"Bearer " + accessToken}})
 }
 
-func (d *Discord) NewUser() DiscordUser {
-	return DiscordUser{keyMode: d.keyMode}
+func (d *Discord) NewUser() *DiscordUser {
+	return &DiscordUser{keyMode: d.keyMode}
 }
 
 type DiscordUser struct {
