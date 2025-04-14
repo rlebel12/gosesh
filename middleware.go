@@ -53,16 +53,17 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 }
 
 func (gs *Gosesh) replaceSession(ctx context.Context, old_session Session, now time.Time) (Session, error) {
-	new_session, err := gs.store.CreateSession(ctx, CreateSessionRequest{
-		UserID:   old_session.UserID(),
-		IdleAt:   now.Add(gs.sessionActiveDuration),
-		ExpireAt: now.Add(gs.sessionIdleDuration),
-	})
+	new_session, err := gs.store.CreateSession(
+		ctx,
+		old_session.UserID(),
+		now.Add(gs.sessionActiveDuration),
+		now.Add(gs.sessionIdleDuration),
+	)
 	if err != nil {
 		return old_session, fmt.Errorf("create session: %w", err)
 	}
 
-	if err := gs.store.DeleteSession(ctx, old_session.ID()); err != nil {
+	if err := gs.store.DeleteSession(ctx, old_session.ID().String()); err != nil {
 		return new_session, fmt.Errorf("delete session: %w", err)
 	}
 	return new_session, nil
@@ -124,27 +125,22 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 		return r
 	}
 
-	sessionIDRaw, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
+	sessionID, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
 	if err != nil {
 		gs.logError("failed to decode session cookie", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
-	id, err := gs.identifierFromBytes(sessionIDRaw)
+	session, err := gs.store.GetSession(ctx, string(sessionID))
 	if err != nil {
-		gs.logError("failed to parse session ID", err)
-		http.SetCookie(w, gs.expireSessionCookie())
-		return r
-	}
-
-	session, err := gs.store.GetSession(ctx, id)
-	if err != nil {
+		gs.logError("get session", err)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
 	if session.ExpireAt().Before(gs.now().UTC()) {
+		gs.logError("session expired", ErrSessionExpired)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}

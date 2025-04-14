@@ -1,148 +1,96 @@
 package providers
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"net/http"
+import (
+	"context"
+	"io"
+	"net/http"
 
-// 	"github.com/rlebel12/gosesh"
-// 	"golang.org/x/oauth2"
-// )
+	"github.com/rlebel12/gosesh"
+	"golang.org/x/oauth2"
+)
 
-// func NewTwitchProvider[ID gosesh.Identifier](gs *gosesh.Gosesh[ID], scopes TwitchScopes) TwitchProvider[ID] {
-// 	return TwitchProvider[ID]{
-// 		gs:  gs,
-// 		cfg: TwitchOauthConfig(*gs.Config, scopes),
-// 	}
-// }
+type (
+	Twitch struct {
+		Provider
+		keyMode twitchKeyMode
+	}
+)
 
-// type TwitchProvider[ID gosesh.Identifier] struct {
-// 	gs  *gosesh.Gosesh[ID]
-// 	cfg *oauth2.Config
-// }
+// Creates a new Twitch OAuth2 provider. redirectPath should have a leading slash.
+func NewTwitch(sesh Gosesher, clientID, clientSecret, redirectPath string, opts ...Opt[Twitch]) *Twitch {
+	twitch := &Twitch{
+		Provider: newProvider(sesh, []string{}, oauth2.Endpoint{
+			AuthURL:   "https://id.twitch.tv/oauth2/authorize",
+			TokenURL:  "https://id.twitch.tv/oauth2/token",
+			AuthStyle: oauth2.AuthStyleInParams,
+		}, clientID, clientSecret, redirectPath),
+		keyMode: TwitchKeyModeID,
+	}
+	for _, opt := range opts {
+		opt(twitch)
+	}
+	return twitch
+}
 
-// func (p *TwitchProvider[ID]) LoginHandler() http.HandlerFunc {
-// 	return p.gs.OAuth2Begin(p.cfg)
-// }
+func WithTwitchKeyMode(mode twitchKeyMode) Opt[Twitch] {
+	return func(t *Twitch) {
+		t.keyMode = mode
+	}
+}
 
-// func (p *TwitchProvider[ID]) Callback(w http.ResponseWriter, r *http.Request) error {
-// 	return p.gs.OAuth2Callback(gosesh.OAuth2CallbackParams{
-// 		W:            w,
-// 		R:            r,
-// 		User:         new(TwitchUser),
-// 		OAuth2Config: p.cfg,
-// 	})
-// }
+func WithEmailScope() Opt[Twitch] {
+	return func(t *Twitch) {
+		t.Config.Scopes = append(t.Config.Scopes, "user:read:email")
+	}
+}
 
-// type TwitchScopes struct {
-// 	Email bool
-// }
+type twitchKeyMode int
 
-// func (s TwitchScopes) Strings() []string {
-// 	scopes := []string{"identify"}
-// 	if s.Email {
-// 		scopes = append(scopes, "email")
-// 	}
-// 	return scopes
-// }
+const (
+	TwitchKeyModeID twitchKeyMode = iota
+	TwitchKeyModeEmail
+)
 
-// type TwitchUser struct {
-// 	ID       string `json:"id"`
-// 	Username string `json:"username"`
-// 	Email    string `json:"email,omitempty"`
-// 	Verified bool   `json:"verified,omitempty"`
-// }
+func (t *Twitch) OAuth2Begin() http.HandlerFunc {
+	return t.Gosesh.OAuth2Begin(t.Config)
+}
 
-// func (*TwitchUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
-// 	const oauthTwitchUrlAPI = "https://api.twitch.tv/helix/users"
-// 	providerConf := gs.Config.Providers[TwitchProviderKey]
-// 	req, err := http.NewRequest("GET", oauthTwitchUrlAPI, nil)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-// 	}
-// 	req.Header.Set("Authorization", "Bearer "+accessToken)
-// 	req.Header.Set("Client-Id", providerConf.ClientID)
-// 	client := &http.Client{}
-// 	return client.Do(req)
-// }
+func (t *Twitch) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
+	return t.Gosesh.OAuth2Callback(t.Config, t.requestUser, unmarshalUser(t.NewUser), handler)
+}
 
-// func (user *TwitchUser) Unmarshal(b []byte) error {
-// 	return json.Unmarshal(b, user)
-// }
+func (t *Twitch) requestUser(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+	return t.doRequest("GET", "https://api.twitch.tv/helix/users", http.Header{
+		"Authorization": {"Bearer " + accessToken},
+		"Client-Id":     {t.Config.ClientID},
+	})
+}
 
-// func (user *TwitchUser) String() string {
-// 	return user.ID
-// }
+func (t *Twitch) NewUser() *TwitchUser {
+	return &TwitchUser{keyMode: t.keyMode}
+}
 
-// const TwitchProviderKey = "twitch"
+type TwitchUser struct {
+	Data []struct {
+		ID    string `json:"id"`
+		Login string `json:"login"`
+		Email string `json:"email"`
+	} `json:"data"`
 
-// func TwitchOauthConfig(config gosesh.Config, scopes TwitchScopes) *oauth2.Config {
-// 	providerConf := config.Providers[TwitchProviderKey]
-// 	return &oauth2.Config{
-// 		ClientID:     providerConf.ClientID,
-// 		ClientSecret: providerConf.ClientSecret,
-// 		RedirectURL: fmt.Sprintf(
-// 			"%s://%s/auth/twitch/callback", config.Origin.Scheme, config.Origin.Host),
-// 		Scopes: scopes.Strings(),
-// 		Endpoint: oauth2.Endpoint{
-// 			AuthURL:   "https://twitch.com/oauth2/authorize",
-// 			TokenURL:  "https://twitch.com/api/oauth2/token",
-// 			AuthStyle: oauth2.AuthStyleInParams,
-// 		},
-// 	}
-// }
+	keyMode twitchKeyMode `json:"-"`
+}
 
-// const TwitchProviderKey = "twitch"
+func (user *TwitchUser) String() string {
+	if len(user.Data) == 0 {
+		return ""
+	}
 
-// func TwitchAuthLogin(gs *gosesh.Gosesh) http.HandlerFunc {
-// 	return gosesh.OAuthBeginHandler(gs, TwitchOauthConfig(gs))
-// }
-
-// func TwitchAuthCallback(gs *gosesh.Gosesh, completeHandler http.HandlerFunc) http.HandlerFunc {
-// 	return gosesh.OAuthCallbackHandler[TwitchUser](gs, TwitchOauthConfig(gs))
-// }
-
-// type TwitchUser struct {
-// 	Data []struct {
-// 		ID    string `json:"id"`
-// 		Email string `json:"email"`
-// 	} `json:"data"`
-// }
-
-// func (TwitchUser) Request(ctx context.Context, gs *gosesh.Gosesh, accessToken string) (*http.Response, error) {
-// 	const oauthTwitchUrlAPI = "https://api.twitch.tv/helix/users"
-// 	providerConf := gs.Config.Providers[TwitchProviderKey]
-// 	req, err := http.NewRequest("GET", oauthTwitchUrlAPI, nil)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-// 	}
-// 	req.Header.Set("Authorization", "Bearer "+accessToken)
-// 	req.Header.Set("Client-Id", providerConf.ClientID)
-// 	client := &http.Client{}
-// 	return client.Do(req)
-// }
-
-// func (user TwitchUser) GetEmail() string {
-// 	if len(user.Data) == 0 {
-// 		return ""
-// 	}
-// 	return user.Data[0].Email
-// }
-
-// func TwitchOauthConfig(gs *gosesh.Gosesh) *oauth2.Config {
-// 	providerConf := gs.Config.Providers[TwitchProviderKey]
-// 	return &oauth2.Config{
-// 		ClientID:     providerConf.ClientID,
-// 		ClientSecret: providerConf.ClientSecret,
-// 		RedirectURL: fmt.Sprintf(
-// 			"%s://%s/auth/twitch/callback", gs.Config.Origin.Scheme, gs.Config.Origin.Host),
-// 		Scopes: []string{
-// 			"user:read:email",
-// 		},
-// 		Endpoint: oauth2.Endpoint{
-// 			AuthURL:   "https://id.twitch.tv/oauth2/authorize",
-// 			TokenURL:  "https://id.twitch.tv/oauth2/token",
-// 			AuthStyle: oauth2.AuthStyleInParams,
-// 		},
-// 	}
-// }
+	switch user.keyMode {
+	case TwitchKeyModeEmail:
+		return user.Data[0].Email
+	case TwitchKeyModeID:
+		fallthrough
+	default:
+		return user.Data[0].ID
+	}
+}

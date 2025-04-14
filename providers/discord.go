@@ -2,8 +2,7 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/rlebel12/gosesh"
@@ -12,34 +11,19 @@ import (
 
 type (
 	Discord struct {
-		Gosesh      Gosesher
-		Config      *oauth2.Config
-		discordHost string
-		keyMode     discordKeyMode
+		Provider
+		keyMode discordKeyMode
 	}
-
-	DiscordOpt func(*Discord)
 )
 
 // Creates a new Discord OAuth2 provider. redirectPath should have a leading slash.
-func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Credentials, redirectPath string, opts ...DiscordOpt) *Discord {
-	oauth2Config := &oauth2.Config{
-		ClientID:     credentials.ClientID(),
-		ClientSecret: credentials.ClientSecret(),
-		RedirectURL: fmt.Sprintf(
-			"%s://%s%s", sesh.Scheme(), sesh.Host(), redirectPath),
-		Scopes: scopes.strings(),
-		Endpoint: oauth2.Endpoint{
+func NewDiscord(sesh Gosesher, clientID, clientSecret, redirectPath string, opts ...Opt[Discord]) *Discord {
+	discord := &Discord{
+		Provider: newProvider(sesh, []string{"identify"}, oauth2.Endpoint{
 			AuthURL:   "https://discord.com/oauth2/authorize",
 			TokenURL:  "https://discord.com/api/oauth2/token",
 			AuthStyle: oauth2.AuthStyleInParams,
-		},
-	}
-	discord := &Discord{
-		Gosesh:      sesh,
-		Config:      oauth2Config,
-		discordHost: "https://discord.com",
-		keyMode:     DiscordKeyModeID,
+		}, clientID, clientSecret, redirectPath),
 	}
 	for _, opt := range opts {
 		opt(discord)
@@ -47,16 +31,9 @@ func NewDiscord(sesh Gosesher, scopes DiscordScopes, credentials gosesh.OAuth2Cr
 	return discord
 }
 
-func WithDiscordKeyMode(mode discordKeyMode) DiscordOpt {
+func WithDiscordKeyMode(mode discordKeyMode) Opt[Discord] {
 	return func(d *Discord) {
 		d.keyMode = mode
-	}
-}
-
-// To help with testing, this function allows you to set the Discord host to a different value (i.e. httptest.Server.URL).
-func WithDiscodHost(host string) DiscordOpt {
-	return func(d *Discord) {
-		d.discordHost = host
 	}
 }
 
@@ -67,28 +44,26 @@ const (
 	DiscordKeyModeEmail
 )
 
+func WithDiscordEmailScope() Opt[Discord] {
+	return func(d *Discord) {
+		d.Config.Scopes = append(d.Config.Scopes, "email")
+	}
+}
+
 func (d *Discord) OAuth2Begin() http.HandlerFunc {
 	return d.Gosesh.OAuth2Begin(d.Config)
 }
 
-func (d *Discord) OAuth2Callback(handler gosesh.HandlerDone) http.HandlerFunc {
-	return d.Gosesh.OAuth2Callback(d.NewUser(), d.Config, handler)
+func (d *Discord) OAuth2Callback(handler gosesh.HandlerDoneFunc) http.HandlerFunc {
+	return d.Gosesh.OAuth2Callback(d.Config, d.requestUser, unmarshalUser(d.NewUser), handler)
 }
 
-func (d *Discord) NewUser() gosesh.OAuth2User {
-	return &DiscordUser{discord: d}
+func (d *Discord) requestUser(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+	return d.doRequest("GET", "https://discord.com/api/v9/users/@me", http.Header{"Authorization": {"Bearer " + accessToken}})
 }
 
-type DiscordScopes struct {
-	Email bool
-}
-
-func (s DiscordScopes) strings() []string {
-	scopes := []string{"identify"}
-	if s.Email {
-		scopes = append(scopes, "email")
-	}
-	return scopes
+func (d *Discord) NewUser() *DiscordUser {
+	return &DiscordUser{keyMode: d.keyMode}
 }
 
 type DiscordUser struct {
@@ -97,31 +72,16 @@ type DiscordUser struct {
 	Email    string `json:"email,omitempty"`
 	Verified bool   `json:"verified,omitempty"`
 
-	discord *Discord `json:"-"`
+	keyMode discordKeyMode `json:"-"`
 }
 
-func (user *DiscordUser) String() string {
-	switch user.discord.keyMode {
-	case DiscordKeyModeID:
-		return user.ID
+func (user DiscordUser) String() string {
+	switch user.keyMode {
 	case DiscordKeyModeEmail:
 		return user.Email
+	case DiscordKeyModeID:
+		fallthrough
 	default:
 		return user.ID
 	}
-}
-
-func (user *DiscordUser) Request(ctx context.Context, accessToken string) (*http.Response, error) {
-	url := fmt.Sprintf("%s/api/v9/users/@me", user.discord.discordHost)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating request: %s", err.Error())
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	client := &http.Client{}
-	return client.Do(req)
-}
-
-func (user *DiscordUser) Unmarshal(b []byte) error {
-	return json.Unmarshal(b, user)
 }
