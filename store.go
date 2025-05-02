@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,7 @@ func NewMemoryStore() *MemoryStore {
 
 type (
 	MemoryStore struct {
+		mu         sync.RWMutex
 		sessions   map[string]*MemoryStoreSession
 		sequenceID MemoryStoreIdentifier
 	}
@@ -36,10 +38,16 @@ func (id MemoryStoreIdentifier) String() string {
 }
 
 func (ms *MemoryStore) UpsertUser(ctx context.Context, userID Identifier) (Identifier, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	return userID, nil
 }
 
 func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idleAt, expireAt time.Time) (Session, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	ms.sequenceID++
 	s := &MemoryStoreSession{
 		id:       ms.sequenceID,
@@ -52,6 +60,9 @@ func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idl
 }
 
 func (ms *MemoryStore) GetSession(ctx context.Context, sessionID string) (Session, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
 	s, ok := ms.sessions[sessionID]
 	if !ok {
 		return nil, errors.New("session not found")
@@ -60,6 +71,9 @@ func (ms *MemoryStore) GetSession(ctx context.Context, sessionID string) (Sessio
 }
 
 func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID string) error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	_, ok := ms.sessions[sessionID]
 	if !ok {
 		return errors.New("session not found")
@@ -69,6 +83,9 @@ func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID string) erro
 }
 
 func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID Identifier) (int, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
 	var count int
 	for _, s := range ms.sessions {
 		if s.UserID() == userID {
