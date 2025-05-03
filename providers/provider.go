@@ -10,25 +10,30 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type (
-	Gosesher interface {
-		OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc
-		OAuth2Callback(
-			config *oauth2.Config, request gosesh.RequestFunc, unmarshal gosesh.UnmarshalFunc, done gosesh.HandlerDoneFunc,
-		) http.HandlerFunc
-		Scheme() string
-		Host() string
-	}
+// Gosesher is an interface that defines the required methods for OAuth2 authentication.
+// It is implemented by the gosesh.Gosesh type and used by providers to handle the OAuth2 flow.
+type Gosesher interface {
+	OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc
+	OAuth2Callback(
+		config *oauth2.Config, request gosesh.RequestFunc, unmarshal gosesh.UnmarshalFunc, done gosesh.HandlerDoneFunc,
+	) http.HandlerFunc
+	Scheme() string
+	Host() string
+}
 
-	Provider struct {
-		Gosesh    Gosesher
-		Config    *oauth2.Config
-		doRequest requestDoer
-	}
+// Provider is the base type for all OAuth2 providers.
+// It contains common functionality shared by all providers.
+type Provider struct {
+	Gosesh    Gosesher
+	Config    *oauth2.Config
+	doRequest requestDoer
+}
 
-	Opt[T any] func(*T)
-)
+// Opt is a function type for configuring provider options.
+type Opt[T any] func(*T)
 
+// newProvider creates a new Provider instance with the given configuration.
+// It sets up the OAuth2 config and request handler for the provider.
 func newProvider(sesh Gosesher, scopes []string, endpoint oauth2.Endpoint, clientID, clientSecret, redirectPath string) Provider {
 	return Provider{
 		Gosesh: sesh,
@@ -44,16 +49,23 @@ func newProvider(sesh Gosesher, scopes []string, endpoint oauth2.Endpoint, clien
 	}
 }
 
+// setDoRequest sets a custom request handler for the provider.
+// This is primarily used for testing purposes.
 func (p *Provider) setDoRequest(doRequest requestDoer) {
 	p.doRequest = doRequest
 }
 
+// getConfig returns the provider's OAuth2 configuration.
 func (p *Provider) getConfig() *oauth2.Config {
 	return p.Config
 }
 
+// requestDoer is a function type that defines how HTTP requests should be made.
+// It allows for customization of the request process, particularly useful for testing.
 type requestDoer func(method, url string, header http.Header) (io.ReadCloser, error)
 
+// doRequest performs an HTTP request with the given method, URL, and headers.
+// It handles common error cases and returns the response body.
 func doRequest(method, url string, header http.Header) (io.ReadCloser, error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
@@ -74,6 +86,8 @@ func doRequest(method, url string, header http.Header) (io.ReadCloser, error) {
 	return resp.Body, err
 }
 
+// unmarshalUser creates an UnmarshalFunc for a specific user type.
+// It uses a generic type parameter to ensure the user type implements the Identifier interface.
 func unmarshalUser[T gosesh.Identifier](newUser func() T) gosesh.UnmarshalFunc {
 	return func(b []byte) (gosesh.Identifier, error) {
 		user := newUser()
@@ -85,4 +99,5 @@ func unmarshalUser[T gosesh.Identifier](newUser func() T) gosesh.UnmarshalFunc {
 	}
 }
 
+// Ensure Gosesh implements the Gosesher interface
 var _ Gosesher = &gosesh.Gosesh{}

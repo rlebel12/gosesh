@@ -10,11 +10,11 @@ import (
 	"time"
 )
 
-type contextKey string
+// sessionContextKey is the type used for the session context key.
+type sessionContextKey struct{}
 
-const (
-	SessionContextKey contextKey = "session"
-)
+// sessionKey is the context key used to store the current session.
+var sessionKey = sessionContextKey{}
 
 func (gs *Gosesh) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,14 +69,14 @@ func (gs *Gosesh) replaceSession(ctx context.Context, old_session Session, now t
 	return new_session, nil
 }
 
+// RequireAuth creates middleware that requires a valid session.
+// If no valid session exists, it returns a 401 Unauthorized response.
 func (gs *Gosesh) RequireAuthentication(next http.Handler) http.Handler {
 	return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, ok := CurrentSession(r)
-		if !ok {
-			w.WriteHeader(http.StatusUnauthorized)
+		if _, ok := CurrentSession(r); !ok {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
-
 		next.ServeHTTP(w, r)
 	}))
 }
@@ -106,8 +106,10 @@ func (gs *Gosesh) RedirectUnauthenticated(loginURL url.URL, isRedirectableOpt ..
 	}
 }
 
+// CurrentSession retrieves the current session from the request context.
+// Returns the session and true if a session exists, nil and false otherwise.
 func CurrentSession(r *http.Request) (Session, bool) {
-	session, ok := r.Context().Value(SessionContextKey).(Session)
+	session, ok := r.Context().Value(sessionKey).(Session)
 	return session, ok
 }
 
@@ -150,6 +152,6 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 func (gs *Gosesh) newRequestWithSession(r *http.Request, session Session) *http.Request {
 	ctx := r.Context()
-	ctx = context.WithValue(ctx, SessionContextKey, session)
+	ctx = context.WithValue(ctx, sessionKey, session)
 	return r.WithContext(ctx)
 }

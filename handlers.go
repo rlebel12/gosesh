@@ -15,6 +15,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// OAuth2Begin creates a handler that initiates the OAuth2 flow.
+// It generates a secure state parameter, sets it in a cookie, and redirects to the OAuth2 provider.
 func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		setSecureCookieHeaders(w)
@@ -42,14 +44,22 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 }
 
 type (
+	// HandlerDoneFunc is a function type that handles the completion of an OAuth2 flow.
+	// It is called with the response writer, request, and any error that occurred.
 	HandlerDoneFunc func(http.ResponseWriter, *http.Request, error)
-	RequestFunc     func(ctx context.Context, accessToken string) (io.ReadCloser, error)
-	UnmarshalFunc   func(b []byte) (Identifier, error)
+
+	// RequestFunc is a function type that retrieves user data from an OAuth2 provider.
+	// It takes a context and access token, and returns a reader with the user data.
+	RequestFunc func(ctx context.Context, accessToken string) (io.ReadCloser, error)
+
+	// UnmarshalFunc is a function type that unmarshals user data into an Identifier.
+	// It takes the raw user data and returns an Identifier and any error that occurred.
+	UnmarshalFunc func(b []byte) (Identifier, error)
 )
 
-// Create a handler for the OAuth2 callback. This handler performs the token exchange and retrieves
-// user data from the provider. When the OAuth2 flow has completed, the input `done` will be invoked, with
-// the error value set to nil if the flow was successful, or an error if it was not.
+// OAuth2Callback creates a handler that completes the OAuth2 flow.
+// It validates the state parameter, exchanges the code for a token, retrieves user data,
+// and creates a session. When complete, it calls the provided done handler.
 func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unmarshal UnmarshalFunc, done HandlerDoneFunc) http.HandlerFunc {
 	if done == nil {
 		gs.logWarn("no done handler provided for OAuth2Callback, using default")
@@ -105,6 +115,7 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 	}
 }
 
+// unmarshalUserData retrieves and unmarshals user data from an OAuth2 provider.
 func unmarshalUserData(
 	ctx context.Context,
 	request RequestFunc,
@@ -132,6 +143,8 @@ var (
 	ErrFailedDeletingSession = errors.New("failed deleting session(s)")
 )
 
+// Logout creates a handler that terminates a user's session.
+// If the "all" query parameter is present, it terminates all sessions for the user.
 func (gs *Gosesh) Logout(done HandlerDoneFunc) http.HandlerFunc {
 	if done == nil {
 		gs.logWarn("no done handler provided for Logout, using default")
@@ -157,11 +170,13 @@ func (gs *Gosesh) Logout(done HandlerDoneFunc) http.HandlerFunc {
 		}
 
 		http.SetCookie(w, gs.expireSessionCookie())
-		ctx := context.WithValue(r.Context(), SessionContextKey, nil)
+		ctx := context.WithValue(r.Context(), sessionKey, nil)
 		done(w, r.WithContext(ctx), nil)
 	})).ServeHTTP
 }
 
+// CallbackRedirect creates a handler that redirects after an OAuth2 flow completes.
+// It uses the redirect cookie to determine where to redirect, falling back to the default target.
 func (gs *Gosesh) CallbackRedirect(defaultTarget string) http.HandlerFunc {
 	if defaultTarget == "" {
 		defaultTarget = "/"
@@ -197,6 +212,8 @@ func (gs *Gosesh) CallbackRedirect(defaultTarget string) http.HandlerFunc {
 	}
 }
 
+// defaultDoneHandler creates a default handler for OAuth2 flow completion.
+// It handles errors by setting appropriate HTTP status codes and redirects on success.
 func defaultDoneHandler(gs *Gosesh, handlerName string) HandlerDoneFunc {
 	redirect := gs.CallbackRedirect("/")
 	return func(w http.ResponseWriter, r *http.Request, err error) {

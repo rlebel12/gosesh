@@ -80,7 +80,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				userID := internal.NewFakeIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
-				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 				return r
 			},
 			wantLogs:       []string{"msg=\"replace session\" error=\"create session: mock failure\""},
@@ -91,7 +91,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				userID := internal.NewFakeIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
-				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 				return r
 			},
 			wantLogs:       []string{"msg=\"replace session\" error=\"delete session: mock failure\""},
@@ -102,7 +102,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				userID := internal.NewFakeIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
-				r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 				return r
 			},
 			wantCookie: true,
@@ -190,7 +190,7 @@ func TestRequireAuthentication(t *testing.T) {
 			now,
 			now.Add(time.Hour),
 		)
-		r = r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+		r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 
 		handlerCalled := false
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +233,7 @@ func TestRedirectUnauthenticated(t *testing.T) {
 					time.Now(),
 					time.Now().Add(time.Hour),
 				)
-				return r.WithContext(context.WithValue(r.Context(), SessionContextKey, session))
+				return r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 			},
 			wantStatus: http.StatusOK,
 		},

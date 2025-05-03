@@ -487,7 +487,7 @@ func (t *logoutTest) succeedParsingID() {
 
 func (t *logoutTest) authenticated() *http.Request {
 	original := t.req
-	ctx := context.WithValue(t.req.Context(), SessionContextKey, t.session)
+	ctx := context.WithValue(t.req.Context(), sessionKey, t.session)
 	t.req = t.req.WithContext(ctx)
 	return original
 }
