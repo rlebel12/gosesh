@@ -32,11 +32,13 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		wantLogs                []string
 		wantSecureCookieHeaders bool
 		wantCookie              bool
+		giveOpts                []Opt[Gosesh]
 	}{
 		"no current session": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				return r
 			},
+			wantLogs:                []string{"msg=\"monitor audit authentication failure\" error=\"fake error: authentication failure\""},
 			wantSecureCookieHeaders: true,
 			wantCookie:              false,
 		},
@@ -55,6 +57,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				})
 				return r
 			},
+			wantLogs:                []string{"msg=\"monitor audit authentication success\" error=\"fake error: authentication success\""},
 			wantSecureCookieHeaders: true,
 		},
 		"session expired": {
@@ -72,7 +75,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				})
 				return r
 			},
-			wantLogs:                []string{"msg=\"session expired\""},
+			wantLogs:                []string{"msg=\"session expired\" error=\"session expired\"", "msg=\"monitor audit authentication failure\" error=\"fake error: authentication failure\""},
 			wantSecureCookieHeaders: true,
 		},
 		"session idle failed create replacement": {
@@ -105,6 +108,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 				return r
 			},
+			wantLogs:   []string{"msg=\"monitor audit session refreshed\" error=\"fake error: session refreshed\""},
 			wantCookie: true,
 		},
 	}
@@ -123,14 +127,16 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			}
 
 			withLogger, logger := withTestLogger()
-			sesh := New(
-				testStore,
+			opts := []Opt[Gosesh]{
 				WithNow(func() time.Time { return now }),
 				WithSessionCookieName("customName"),
-				WithSessionActiveDuration(17*time.Minute),
-				WithSessionIdleDuration(85*time.Minute),
+				WithSessionActiveDuration(17 * time.Minute),
+				WithSessionIdleDuration(85 * time.Minute),
 				withLogger,
-			)
+				WithMonitor(&ErrorMonitor{}),
+			}
+			opts = append(opts, tc.giveOpts...)
+			sesh := New(testStore, opts...)
 
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(err)

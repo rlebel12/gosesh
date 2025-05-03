@@ -117,9 +117,9 @@ func (l *testLogger) Write(p []byte) (n int, err error) {
 }
 
 func (l *testLogger) assertExpectedLogs(t *testing.T, expectedLogs []string) {
-	require.Equal(t, len(expectedLogs), len(l.logs), "Expected %d logs but got %d", len(expectedLogs), len(l.logs))
-	for i, actualLog := range l.logs {
-		assert.Contains(t, actualLog, expectedLogs[i], "Log message %d does not contain expected content", i)
+	require.Equal(t, len(expectedLogs), len(l.logs), "Expected %d logs but got %d\nExpected logs: %v\nActual logs: %v", len(expectedLogs), len(l.logs), expectedLogs, l.logs)
+	for i, expected := range expectedLogs {
+		assert.Contains(t, l.logs[i], expected, "Log at index %d does not contain expected content", i)
 	}
 }
 

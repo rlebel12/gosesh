@@ -80,24 +80,39 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 		http.SetCookie(w, stateCookie)
 
 		if r.FormValue("state") != oauthState.Value {
+			if err := gs.monitor.AuditAuthenticationFailure(ctx, nil, "invalid state cookie", nil); err != nil {
+				gs.logError("monitor audit authentication failure", err)
+			}
 			done(w, r, ErrInvalidStateCookie)
 			return
 		}
 
 		token, err := config.Exchange(ctx, r.FormValue("code"))
 		if err != nil {
+			if err := gs.monitor.AuditProviderTokenExchange(ctx, config.Endpoint.AuthURL, false, map[string]string{"error": err.Error()}); err != nil {
+				gs.logError("monitor audit provider token exchange", err)
+			}
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedExchangingToken, err))
 			return
+		}
+		if err := gs.monitor.AuditProviderTokenExchange(ctx, config.Endpoint.AuthURL, true, nil); err != nil {
+			gs.logError("monitor audit provider token exchange", err)
 		}
 
 		user, err := unmarshalUserData(ctx, request, unmarshal, token.AccessToken)
 		if err != nil {
+			if err := gs.monitor.AuditProviderError(ctx, config.Endpoint.AuthURL, err, nil); err != nil {
+				gs.logError("monitor audit provider error", err)
+			}
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err))
 			return
 		}
 
 		id, err := gs.store.UpsertUser(ctx, user)
 		if err != nil {
+			if err := gs.monitor.AuditAuthenticationFailure(ctx, user, "failed to upsert user", map[string]string{"error": err.Error()}); err != nil {
+				gs.logError("monitor audit authentication failure", err)
+			}
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err))
 			return
 		}
@@ -105,8 +120,18 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 		session, err := gs.store.CreateSession(
 			ctx, id, now.Add(gs.sessionActiveDuration), now.Add(gs.sessionIdleDuration))
 		if err != nil {
+			if err := gs.monitor.AuditAuthenticationFailure(ctx, id, "failed to create session", map[string]string{"error": err.Error()}); err != nil {
+				gs.logError("monitor audit authentication failure", err)
+			}
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
 			return
+		}
+
+		if err := gs.monitor.AuditAuthenticationSuccess(ctx, id, nil); err != nil {
+			gs.logError("monitor audit authentication success", err)
+		}
+		if err := gs.monitor.AuditSessionCreated(ctx, session.ID(), id, nil); err != nil {
+			gs.logError("monitor audit session created", err)
 		}
 
 		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
@@ -161,8 +186,18 @@ func (gs *Gosesh) Logout(done HandlerDoneFunc) http.HandlerFunc {
 		switch {
 		case r.URL.Query().Get("all") != "":
 			_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID())
+			if err == nil {
+				if err := gs.monitor.AuditSessionDestroyed(r.Context(), session.ID(), session.UserID(), "user requested all sessions be destroyed", nil); err != nil {
+					gs.logError("monitor audit session destroyed", err)
+				}
+			}
 		default:
 			err = gs.store.DeleteSession(r.Context(), session.ID().String())
+			if err == nil {
+				if err := gs.monitor.AuditSessionDestroyed(r.Context(), session.ID(), session.UserID(), "user requested session be destroyed", nil); err != nil {
+					gs.logError("monitor audit session destroyed", err)
+				}
+			}
 		}
 		if err != nil {
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedDeletingSession, err))

@@ -44,6 +44,10 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
+		if err := gs.monitor.AuditSessionRefreshed(r.Context(), session.ID(), session.ID(), session.UserID(), nil); err != nil {
+			gs.logError("monitor audit session refreshed", err)
+		}
+
 		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
 		http.SetCookie(w, sessionCookie)
 
@@ -124,12 +128,18 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	sessionCookie, err := r.Cookie(gs.sessionCookieName)
 	if err != nil {
+		if err := gs.monitor.AuditAuthenticationFailure(ctx, nil, "no session cookie", nil); err != nil {
+			gs.logError("monitor audit authentication failure", err)
+		}
 		return r
 	}
 
 	sessionID, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
 	if err != nil {
 		gs.logError("failed to decode session cookie", err)
+		if err := gs.monitor.AuditAuthenticationFailure(ctx, nil, "invalid session cookie", nil); err != nil {
+			gs.logError("monitor audit authentication failure", err)
+		}
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
@@ -137,16 +147,25 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 	session, err := gs.store.GetSession(ctx, string(sessionID))
 	if err != nil {
 		gs.logError("get session", err)
+		if err := gs.monitor.AuditAuthenticationFailure(ctx, nil, "failed to get session", map[string]string{"error": err.Error()}); err != nil {
+			gs.logError("monitor audit authentication failure", err)
+		}
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
 	if session.ExpireAt().Before(gs.now().UTC()) {
 		gs.logError("session expired", ErrSessionExpired)
+		if err := gs.monitor.AuditAuthenticationFailure(ctx, session.UserID(), "session expired", nil); err != nil {
+			gs.logError("monitor audit authentication failure", err)
+		}
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}
 
+	if err := gs.monitor.AuditAuthenticationSuccess(ctx, session.UserID(), nil); err != nil {
+		gs.logError("monitor audit authentication success", err)
+	}
 	return gs.newRequestWithSession(r, session)
 }
 

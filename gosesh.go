@@ -24,6 +24,7 @@ type Gosesh struct {
 	sessionIdleDuration   time.Duration
 	now                   func() time.Time
 	cookieDomain          func() string
+	monitor               Monitor
 }
 
 // Identifier is an interface that represents a unique identifier for users and sessions.
@@ -49,7 +50,7 @@ func (gs *Gosesh) CookieDomain() string {
 
 // New creates a new Gosesh instance with the provided store and options.
 // The store is responsible for persisting user and session data.
-func New(store Storer, opts ...NewOpts) *Gosesh {
+func New(store Storer, opts ...Opt[Gosesh]) *Gosesh {
 	url, _ := url.Parse("http://localhost")
 	gs := &Gosesh{
 		store:                 store,
@@ -62,6 +63,7 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		origin:                url,
 		allowedHosts:          []string{url.Hostname()},
 		now:                   time.Now,
+		monitor:               &NoopMonitor{},
 	}
 	gs.cookieDomain = func() string { return gs.origin.Hostname() }
 	for _, opt := range opts {
@@ -141,6 +143,13 @@ func WithCookieDomain(fn func(*Gosesh) func() string) func(*Gosesh) {
 	}
 }
 
+// WithMonitor sets the activity monitor.
+func WithMonitor(monitor Monitor) func(*Gosesh) {
+	return func(g *Gosesh) {
+		g.monitor = monitor
+	}
+}
+
 // Storer is the interface that must be implemented by storage backends.
 // It defines the methods required for managing users and sessions.
 type Storer interface {
@@ -168,8 +177,8 @@ type Session interface {
 	ExpireAt() time.Time
 }
 
-// NewOpts is a function type for configuring a new Gosesh instance.
-type NewOpts func(*Gosesh)
+// Opt is a function type for configuring provider options.
+type Opt[T any] func(*T)
 
 func (gs *Gosesh) logError(msg string, err error, args ...any) {
 	if gs.logger == nil {

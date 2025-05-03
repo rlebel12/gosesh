@@ -1,6 +1,7 @@
 package gosesh
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -148,5 +149,99 @@ func (c StorerContract) Test(t *testing.T) {
 
 		_, err = store.GetSession(t.Context(), otherUserSession.ID().String())
 		assert.NoError(t, err)
+	})
+}
+
+type MonitorContract struct {
+	NewMonitor func() Monitor
+}
+
+func (c MonitorContract) Test(t *testing.T) {
+	t.Run("audits authentication success", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		userID := internal.NewFakeIdentifier("user-id")
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditAuthenticationSuccess(t.Context(), userID, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits authentication failure with user ID", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		userID := internal.NewFakeIdentifier("user-id")
+		reason := "invalid credentials"
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditAuthenticationFailure(t.Context(), userID, reason, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits authentication failure without user ID", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		reason := "invalid credentials"
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditAuthenticationFailure(t.Context(), nil, reason, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits session creation", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		sessionID := internal.NewFakeIdentifier("session-id")
+		userID := internal.NewFakeIdentifier("user-id")
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditSessionCreated(t.Context(), sessionID, userID, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits session destruction", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		sessionID := internal.NewFakeIdentifier("session-id")
+		userID := internal.NewFakeIdentifier("user-id")
+		reason := "user logout"
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditSessionDestroyed(t.Context(), sessionID, userID, reason, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits session refresh", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		oldSessionID := internal.NewFakeIdentifier("old-session-id")
+		newSessionID := internal.NewFakeIdentifier("new-session-id")
+		userID := internal.NewFakeIdentifier("user-id")
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditSessionRefreshed(t.Context(), oldSessionID, newSessionID, userID, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits provider token exchange success", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		provider := "github"
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditProviderTokenExchange(t.Context(), provider, true, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits provider token exchange failure", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		provider := "github"
+		metadata := map[string]string{"key": "value"}
+
+		err := monitor.AuditProviderTokenExchange(t.Context(), provider, false, metadata)
+		assert.NoError(t, err)
+	})
+
+	t.Run("audits provider error", func(t *testing.T) {
+		monitor := c.NewMonitor()
+		provider := "github"
+		err := fmt.Errorf("token exchange failed")
+		metadata := map[string]string{"key": "value"}
+
+		monitorErr := monitor.AuditProviderError(t.Context(), provider, err, metadata)
+		assert.NoError(t, monitorErr)
 	})
 }

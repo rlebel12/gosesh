@@ -74,7 +74,7 @@ func TestOAuth2Begin(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			assert, require := assert.New(t), require.New(t)
-			opts := []NewOpts{
+			opts := []Opt[Gosesh]{
 				WithNow(func() time.Time { return time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC) }),
 				WithOAuth2StateCookieName("customStateName"),
 				WithRedirectCookieName("customRedirectName"),
@@ -437,7 +437,7 @@ type logoutTest struct {
 	logger     *testLogger
 }
 
-func prepareLogoutTest(t *testing.T) *logoutTest {
+func prepareLogoutTest(t *testing.T, moreOpts ...Opt[Gosesh]) *logoutTest {
 	store := &erroringStore{Storer: NewMemoryStore()}
 	now := func() time.Time {
 		return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -445,7 +445,9 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	req := httptest.NewRequest(http.MethodGet, "/logout", nil).WithContext(context.Background())
 	resp := httptest.NewRecorder()
 	withTestLogger, logger := withTestLogger()
-	gosesh := New(store, WithNow(now), withTestLogger)
+	opts := []Opt[Gosesh]{WithNow(now), withTestLogger}
+	opts = append(opts, moreOpts...)
+	gosesh := New(store, opts...)
 	handler := gosesh.Logout(nil)
 
 	currentTime := now()
@@ -497,6 +499,7 @@ func TestLogoutHandler(t *testing.T) {
 		setup          func(t *testing.T, test *logoutTest)
 		wantStatusCode int
 		wantLogs       []string
+		giveOpts       []Opt[Gosesh]
 	}{
 		"no session cookie": {
 			setup:          func(t *testing.T, test *logoutTest) {},
@@ -585,7 +588,9 @@ func TestLogoutHandler(t *testing.T) {
 			wantStatusCode: http.StatusTemporaryRedirect,
 			wantLogs: []string{
 				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"monitor audit session destroyed",
 			},
+			giveOpts: []Opt[Gosesh]{WithMonitor(&ErrorMonitor{})},
 		},
 		"success deleting all sessions": {
 			setup: func(t *testing.T, test *logoutTest) {
@@ -595,13 +600,16 @@ func TestLogoutHandler(t *testing.T) {
 			wantStatusCode: http.StatusTemporaryRedirect,
 			wantLogs: []string{
 				"level=WARN msg=\"no done handler provided for Logout, using default\"",
+				"monitor audit session destroyed",
 			},
+			giveOpts: []Opt[Gosesh]{WithMonitor(&ErrorMonitor{})},
 		},
 	}
+
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			assert := assert.New(t)
-			test := prepareLogoutTest(t)
+			test := prepareLogoutTest(t, tc.giveOpts...)
 
 			tc.setup(t, test)
 			test.execute()
