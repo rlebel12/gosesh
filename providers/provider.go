@@ -15,7 +15,7 @@ import (
 type Gosesher interface {
 	OAuth2Begin(cfg *oauth2.Config) http.HandlerFunc
 	OAuth2Callback(
-		config *oauth2.Config, request gosesh.RequestFunc, unmarshal gosesh.UnmarshalFunc, done gosesh.HandlerDoneFunc,
+		config *oauth2.Config, tokenUser gosesh.TokenUser, done gosesh.HandlerDoneFunc,
 	) http.HandlerFunc
 	Scheme() string
 	Host() string

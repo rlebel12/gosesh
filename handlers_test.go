@@ -277,8 +277,7 @@ func (s *Oauth2CallbackHandlerSuite) TestErrNoStateCookie() {
 	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testCallbackErrNoStateCookie)
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("failed getting state cookie: http: named cookie not present"),
 	).ServeHTTP(rr, request)
 	response := rr.Result()
@@ -292,8 +291,7 @@ func (s *Oauth2CallbackHandlerSuite) TestErrInvalidStateCookie() {
 	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testCallbackInvalidStateCookie)
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("invalid state cookie"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -305,8 +303,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailedExchange() {
 	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedExchange)
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("failed exchanging token: oauth2: cannot fetch token: 404 Not Found\nResponse: not found\n"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -318,8 +315,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataRequest() {
 	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedUnmarshalRequest)
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("failed unmarshalling data: get user info: test error"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -331,8 +327,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalUserDataReadBody() {
 	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedUnmarshalReadBody)
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("failed unmarshalling data: read response: failed read"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -344,8 +339,7 @@ func (s *Oauth2CallbackHandlerSuite) TestFailUnmarshalDataFinal() {
 	request, config, _, _, requestFunc, unmarshalFunc := s.prepareTest(testFailedUnmarshalDataFinal)
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("failed unmarshalling data: unmarshal user data: failed unmarshal"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -357,8 +351,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrUpsertUser() {
 	sesh := New(store, WithNow(s.withNow))
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("failed upserting user: mock failure"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -370,8 +363,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackErrCreateSession() {
 	sesh := New(store, WithNow(s.withNow))
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		s.errCallback("failed creating session: mock failure"),
 	).ServeHTTP(rr, request)
 	s.assertCommonResponse(rr.Result())
@@ -385,8 +377,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
 	var success bool
 	sesh.OAuth2Callback(
 		config,
-		requestFunc,
-		unmarshalFunc,
+		NewCreateSession(sesh, requestFunc, unmarshalFunc),
 		func(w http.ResponseWriter, r *http.Request, err error) {
 			s.NoError(err)
 			success = true

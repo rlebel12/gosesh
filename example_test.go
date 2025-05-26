@@ -112,9 +112,8 @@ func Example_customProvider() {
 	mux.HandleFunc("/auth/custom", gs.OAuth2Begin(config))
 	mux.HandleFunc("/auth/custom/callback", gs.OAuth2Callback(
 		config,
-		requestUser,
-		unmarshalUser,
-		nil, // Optional: custom done handler
+		gosesh.NewCreateSession(gs, requestUser, unmarshalUser),
+		nil,
 	))
 }
 
@@ -173,12 +172,14 @@ func TestExamples(t *testing.T) {
 	// Test OAuth2Callback
 	handler = gs.OAuth2Callback(
 		config,
-		func(ctx context.Context, token string) (io.ReadCloser, error) {
-			return nil, nil
-		},
-		func(b []byte) (gosesh.Identifier, error) {
-			return gosesh.MemoryStoreIdentifier(1), nil
-		},
+		gosesh.NewCreateSession(gs,
+			func(ctx context.Context, token string) (io.ReadCloser, error) {
+				return nil, nil
+			},
+			func(b []byte) (gosesh.Identifier, error) {
+				return gosesh.MemoryStoreIdentifier(1), nil
+			},
+		),
 		nil,
 	)
 	if handler == nil {

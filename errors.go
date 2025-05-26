@@ -10,4 +10,5 @@ var (
 	ErrFailedUpsertingUser      = errors.New("failed upserting user")
 	ErrFailedCreatingSession    = errors.New("failed creating session")
 	ErrSessionExpired           = errors.New("session expired")
+	ErrUseToken                 = errors.New("failed using token")
 )

@@ -63,14 +63,16 @@ func (c GosesherContract) Test(t *testing.T) {
 		gosesher := c.NewGosesher("https", "example.com", nil)
 		handler := gosesher.OAuth2Callback(
 			&oauth2.Config{},
-			func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
-				return io.NopCloser(strings.NewReader("content")), nil
-			},
-			func(b []byte) (gosesh.Identifier, error) {
-				id := internal.NewFakeIdentifier(string(b))
-				gotIdentifier = id
-				return id, nil
-			},
+			gosesh.NewCreateSession(gosesher,
+				func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
+					return io.NopCloser(strings.NewReader("content")), nil
+				},
+				func(b []byte) (gosesh.Identifier, error) {
+					id := internal.NewFakeIdentifier(string(b))
+					gotIdentifier = id
+					return id, nil
+				},
+			),
 			func(w http.ResponseWriter, r *http.Request, err error) {
 				gotErr = err
 				gotCalled = true

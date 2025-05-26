@@ -55,16 +55,24 @@ type (
 	// UnmarshalFunc is a function type that unmarshals user data into an Identifier.
 	// It takes the raw user data and returns an Identifier and any error that occurred.
 	UnmarshalFunc func(b []byte) (Identifier, error)
+
+	// TokenUser is an interface that defines the method to use a token to create a session.
+	// It takes a context, response writer, request, current time, and token, and returns an error if any occurred.
+	TokenUser interface {
+		UseToken(ctx context.Context, w http.ResponseWriter, r *http.Request, now time.Time, token *oauth2.Token) error
+	}
 )
 
 // OAuth2Callback creates a handler that completes the OAuth2 flow.
-// It validates the state parameter, exchanges the code for a token, retrieves user data,
-// and creates a session. When complete, it calls the provided done handler.
-func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unmarshal UnmarshalFunc, done HandlerDoneFunc) http.HandlerFunc {
+// It validates the state parameter, exchanges the code for a token, and passes the token to the useToken function.
+// When complete, it calls the provided done handler.
+// The done handler can be nil, in which case a default handler is used.
+func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, tokenUser TokenUser, done HandlerDoneFunc) http.HandlerFunc {
 	if done == nil {
 		gs.logWarn("no done handler provided for OAuth2Callback, using default")
 		done = defaultDoneHandler(gs, "OAuth2Callback")
 	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		setSecureCookieHeaders(w)
 
@@ -90,29 +98,51 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 			return
 		}
 
-		user, err := unmarshalUserData(ctx, request, unmarshal, token.AccessToken)
-		if err != nil {
-			done(w, r, fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err))
+		if err := tokenUser.UseToken(ctx, w, r, now, token); err != nil {
+			done(w, r, fmt.Errorf("%w: %w", ErrUseToken, err))
 			return
 		}
 
-		id, err := gs.store.UpsertUser(ctx, user)
-		if err != nil {
-			done(w, r, fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err))
-			return
-		}
-
-		session, err := gs.store.CreateSession(
-			ctx, id, now.Add(gs.sessionActiveDuration), now.Add(gs.sessionIdleDuration))
-		if err != nil {
-			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
-			return
-		}
-
-		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
-		http.SetCookie(w, sessionCookie)
 		done(w, r, nil)
 	}
+}
+
+// CreateSession is a TokenUser that creates a session for the user.
+type CreateSession struct {
+	gs        *Gosesh
+	request   RequestFunc
+	unmarshal UnmarshalFunc
+}
+
+func NewCreateSession(gs *Gosesh, request RequestFunc, unmarshal UnmarshalFunc) *CreateSession {
+	return &CreateSession{
+		gs:        gs,
+		request:   request,
+		unmarshal: unmarshal,
+	}
+}
+
+func (c *CreateSession) UseToken(ctx context.Context, w http.ResponseWriter, r *http.Request, now time.Time, token *oauth2.Token) error {
+
+	user, err := unmarshalUserData(ctx, c.request, c.unmarshal, token.AccessToken)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err)
+	}
+
+	id, err := c.gs.store.UpsertUser(ctx, user)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err)
+	}
+
+	session, err := c.gs.store.CreateSession(
+		ctx, id, now.Add(c.gs.sessionActiveDuration), now.Add(c.gs.sessionIdleDuration))
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrFailedCreatingSession, err)
+	}
+
+	sessionCookie := c.gs.sessionCookie(session.ID(), session.ExpireAt())
+	http.SetCookie(w, sessionCookie)
+	return nil
 }
 
 // unmarshalUserData retrieves and unmarshals user data from an OAuth2 provider.
