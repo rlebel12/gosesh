@@ -124,16 +124,16 @@ func unmarshalUserData(
 ) (Identifier, error) {
 	response, err := request(ctx, accessToken)
 	if err != nil {
-		return nil, fmt.Errorf("get user info: %s", err.Error())
+		return nil, fmt.Errorf("get user info: %w", err)
 	}
 	defer response.Close()
 	contents, err := io.ReadAll(response)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %s", err.Error())
+		return nil, fmt.Errorf("read response: %w", err)
 	}
 	user, err := unmarshal(contents)
 	if err != nil {
-		return nil, fmt.Errorf("unmarshal user data: %s", err.Error())
+		return nil, fmt.Errorf("unmarshal user data: %w", err)
 	}
 	return user, nil
 }

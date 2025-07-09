@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/rlebel12/gosesh"
-	"github.com/rlebel12/gosesh/internal"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/oauth2"
 )
@@ -67,7 +66,7 @@ func (c GosesherContract) Test(t *testing.T) {
 				return io.NopCloser(strings.NewReader("content")), nil
 			},
 			func(b []byte) (gosesh.Identifier, error) {
-				id := internal.NewFakeIdentifier(string(b))
+				id := gosesh.StringIdentifier(b)
 				gotIdentifier = id
 				return id, nil
 			},

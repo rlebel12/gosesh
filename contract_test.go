@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rlebel12/gosesh/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +52,7 @@ type StorerContract struct {
 
 func (c StorerContract) Test(t *testing.T) {
 	t.Run("can upsert the same user in idempotent way", func(t *testing.T) {
-		authProviderID := internal.NewFakeIdentifier("user-id")
+		authProviderID := StringIdentifier("user-id")
 		store := c.NewStorer()
 		gotUser1, err := store.UpsertUser(t.Context(), authProviderID)
 		require.NoError(t, err)
@@ -65,7 +64,7 @@ func (c StorerContract) Test(t *testing.T) {
 
 		assert.Equal(t, gotUser1.String(), gotUser2.String())
 
-		anotherAuthProviderID := internal.NewFakeIdentifier("another-user-id")
+		anotherAuthProviderID := StringIdentifier("another-user-id")
 		gotUser3, err := store.UpsertUser(t.Context(), anotherAuthProviderID)
 		require.NoError(t, err)
 		assert.Equal(t, "another-user-id", gotUser3.String())
@@ -74,7 +73,7 @@ func (c StorerContract) Test(t *testing.T) {
 	})
 
 	t.Run("can create and get a session", func(t *testing.T) {
-		userID := internal.NewFakeIdentifier("user-id")
+		userID := StringIdentifier("user-id")
 		idleAt := time.Now()
 		expireAt := time.Now().Add(time.Hour)
 		store := c.NewStorer()
@@ -95,7 +94,7 @@ func (c StorerContract) Test(t *testing.T) {
 	})
 
 	t.Run("can delete one session", func(t *testing.T) {
-		userID := internal.NewFakeIdentifier("user-id")
+		userID := StringIdentifier("user-id")
 		idleAt := time.Now()
 		expireAt := time.Now().Add(time.Hour)
 		store := c.NewStorer()
@@ -122,8 +121,8 @@ func (c StorerContract) Test(t *testing.T) {
 	})
 
 	t.Run("can delete all sessions for a user", func(t *testing.T) {
-		userID := internal.NewFakeIdentifier("user-id")
-		otherUserID := internal.NewFakeIdentifier("other-user-id")
+		userID := StringIdentifier("user-id")
+		otherUserID := StringIdentifier("other-user-id")
 		idleAt := time.Now()
 		expireAt := time.Now().Add(time.Hour)
 		store := c.NewStorer()

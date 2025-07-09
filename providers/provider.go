@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 
 	"github.com/rlebel12/gosesh"
@@ -69,16 +70,14 @@ type requestDoer func(method, url string, header http.Header) (io.ReadCloser, er
 func doRequest(method, url string, header http.Header) (io.ReadCloser, error) {
 	req, err := http.NewRequest(method, url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %s", err.Error())
+		return nil, fmt.Errorf("create request: %w", err)
 	}
-	for k, v := range header {
-		req.Header[k] = v
-	}
+	maps.Copy(req.Header, header)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %s", err.Error())
+		return nil, fmt.Errorf("send request: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		err = fmt.Errorf("response not ok: %s", resp.Status)
@@ -93,7 +92,7 @@ func unmarshalUser[T gosesh.Identifier](newUser func() T) gosesh.UnmarshalFunc {
 		user := newUser()
 		err := json.Unmarshal(b, &user)
 		if err != nil {
-			return user, fmt.Errorf("unmarshal user data: %s", err.Error())
+			return user, fmt.Errorf("unmarshal user data: %w", err)
 		}
 		return user, nil
 	}

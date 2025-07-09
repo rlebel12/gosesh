@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rlebel12/gosesh/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +41,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"session active": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := internal.NewFakeIdentifier("identifier")
+				userID := StringIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
@@ -59,7 +58,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"session expired": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := internal.NewFakeIdentifier("identifier")
+				userID := StringIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(-1*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
@@ -77,7 +76,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"session idle failed create replacement": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := internal.NewFakeIdentifier("identifier")
+				userID := StringIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
@@ -88,7 +87,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"session idle failed delete old": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := internal.NewFakeIdentifier("identifier")
+				userID := StringIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
@@ -99,7 +98,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"session idle success": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := internal.NewFakeIdentifier("identifier")
+				userID := StringIdentifier("identifier")
 				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
@@ -185,8 +184,8 @@ func TestRequireAuthentication(t *testing.T) {
 		rr := httptest.NewRecorder()
 
 		session := NewFakeSession(
-			internal.NewFakeIdentifier("session-id"),
-			internal.NewFakeIdentifier("user-id"),
+			StringIdentifier("session-id"),
+			StringIdentifier("user-id"),
 			now,
 			now.Add(time.Hour),
 		)
@@ -228,8 +227,8 @@ func TestRedirectUnauthenticated(t *testing.T) {
 		"authenticated": {
 			giveSession: func(t *testing.T, r *http.Request) *http.Request {
 				session := NewFakeSession(
-					internal.NewFakeIdentifier("session-id"),
-					internal.NewFakeIdentifier("user-id"),
+					StringIdentifier("session-id"),
+					StringIdentifier("user-id"),
 					time.Now(),
 					time.Now().Add(time.Hour),
 				)

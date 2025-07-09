@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rlebel12/gosesh/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -223,7 +222,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
-	user = internal.NewFakeIdentifier("user")
+	user = StringIdentifier("user")
 
 	if mode == testFailedUnmarshalRequest {
 		requestFunc = func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
@@ -249,7 +248,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	unmarshalFunc = func(_ []byte) (Identifier, error) {
-		return internal.NewFakeIdentifier("user"), nil
+		return StringIdentifier("user"), nil
 	}
 
 	if mode == testCallbackErrUpsertUser {
@@ -451,7 +450,7 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	currentTime := now()
 	session, err := store.CreateSession(
 		context.Background(),
-		internal.NewFakeIdentifier("identifier"),
+		StringIdentifier("identifier"),
 		currentTime,
 		currentTime.Add(time.Hour),
 	)
@@ -459,7 +458,7 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 
 	return &logoutTest{
 		store:      store,
-		identifier: internal.NewFakeIdentifier("identifier"),
+		identifier: StringIdentifier("identifier"),
 		now:        now,
 		req:        req,
 		resp:       resp,

@@ -175,7 +175,7 @@ func (gs *Gosesh) logError(msg string, err error, args ...any) {
 	if gs.logger == nil {
 		return
 	}
-	args = append([]any{"error", err.Error()}, args...)
+	args = append([]any{"error", err}, args...)
 	gs.logger.Error(msg, args...)
 }
 
@@ -191,4 +191,10 @@ func WithNow(fn func() time.Time) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.now = fn
 	}
+}
+
+type StringIdentifier string
+
+func (s StringIdentifier) String() string {
+	return string(s)
 }

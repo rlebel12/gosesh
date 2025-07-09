@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rlebel12/gosesh/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,10 +43,10 @@ func NewFakeSession(id, userID Identifier, idleAt, expireAt time.Time) *FakeSess
 	}
 }
 
-func TestFakeIdentifierContract(t *testing.T) {
+func TestStringIdentifierContract(t *testing.T) {
 	IdentifierContract{
 		NewIdentifier: func(id string) Identifier {
-			return internal.NewFakeIdentifier(id)
+			return StringIdentifier(id)
 		},
 	}.Test(t)
 }
@@ -58,7 +57,7 @@ func TestFakeSessionContract(t *testing.T) {
 			return NewFakeSession(id, userID, idleAt, expireAt)
 		},
 		NewIdentifier: func(id string) Identifier {
-			return internal.NewFakeIdentifier(id)
+			return StringIdentifier(id)
 		},
 	}.Test(t)
 }

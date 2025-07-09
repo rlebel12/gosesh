@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/rlebel12/gosesh"
-	"github.com/rlebel12/gosesh/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -100,6 +99,14 @@ func TestDoRequest(t *testing.T) {
 	}
 }
 
+type fakeUser struct {
+	ID string `json:"id"`
+}
+
+func (u fakeUser) String() string {
+	return u.ID
+}
+
 func TestUnmarshalUser(t *testing.T) {
 	for name, tc := range map[string]struct {
 		giveContent []byte
@@ -108,7 +115,7 @@ func TestUnmarshalUser(t *testing.T) {
 	}{
 		"success": {
 			giveContent: []byte(`{"id": "123"}`),
-			wantUser:    internal.NewFakeIdentifier("123"),
+			wantUser:    fakeUser{"123"},
 		},
 		"unmarshal error": {
 			wantErr: "unmarshal user data",
@@ -116,7 +123,7 @@ func TestUnmarshalUser(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			got, err := unmarshalUser(
-				func() gosesh.Identifier { return internal.NewFakeIdentifier("") },
+				func() fakeUser { return fakeUser{} },
 			)(tc.giveContent)
 			if tc.wantErr != "" {
 				require.Error(t, err)
