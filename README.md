@@ -195,19 +195,3 @@ var (
     // ... more error types
 )
 ```
-
-## Security Considerations
-
-- Always use HTTPS in production
-- Set appropriate session durations
-- Implement proper session storage
-- Handle sensitive data securely
-- Use secure cookie settings
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
