@@ -103,13 +103,13 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 		}
 
 		session, err := gs.store.CreateSession(
-			ctx, id, now.Add(gs.sessionActiveDuration), now.Add(gs.sessionIdleDuration))
+			ctx, id, now.Add(gs.sessionIdleTimeout), now.Add(gs.sessionMaxLifetime))
 		if err != nil {
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
 			return
 		}
 
-		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
+		sessionCookie := gs.sessionCookie(session.ID(), session.AbsoluteDeadline())
 		http.SetCookie(w, sessionCookie)
 		done(w, r, nil)
 	}

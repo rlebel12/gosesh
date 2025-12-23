@@ -69,6 +69,7 @@ type erroringStore struct {
 	deleteUserSessionsError bool
 	upsertUserError         bool
 	getSessionError         bool
+	extendSessionError      bool
 }
 
 func (s *erroringStore) CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
@@ -104,6 +105,13 @@ func (s *erroringStore) GetSession(ctx context.Context, sessionID string) (Sessi
 		return nil, errors.New("mock failure")
 	}
 	return s.Storer.GetSession(ctx, sessionID)
+}
+
+func (s *erroringStore) ExtendSession(ctx context.Context, sessionID string, newIdleDeadline time.Time) error {
+	if s.extendSessionError {
+		return errors.New("mock failure")
+	}
+	return s.Storer.ExtendSession(ctx, sessionID, newIdleDeadline)
 }
 
 type testLogger struct {

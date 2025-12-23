@@ -3,11 +3,9 @@ package gosesh
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // sessionContextKey is the type used for the session context key.
@@ -32,41 +30,32 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 		}
 
 		now := gs.now().UTC()
-		if session.IdleAt().After(now) {
+		timeUntilIdle := session.IdleDeadline().Sub(now)
+
+		// Only extend if within refresh threshold
+		if timeUntilIdle > gs.sessionRefreshThreshold {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		session, err := gs.replaceSession(r.Context(), session, now)
-		if err != nil {
-			gs.logError("replace session", err)
+		// Calculate new idle deadline, capped at absolute deadline
+		newIdleDeadline := now.Add(gs.sessionIdleTimeout)
+		if newIdleDeadline.After(session.AbsoluteDeadline()) {
+			newIdleDeadline = session.AbsoluteDeadline()
+		}
+
+		if err := gs.store.ExtendSession(r.Context(), session.ID().String(), newIdleDeadline); err != nil {
+			gs.logError("extend session", err)
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		sessionCookie := gs.sessionCookie(session.ID(), session.ExpireAt())
+		// Update cookie expiration
+		sessionCookie := gs.sessionCookie(session.ID(), session.AbsoluteDeadline())
 		http.SetCookie(w, sessionCookie)
 
-		r = gs.newRequestWithSession(r, session)
 		next.ServeHTTP(w, r)
 	}))
-}
-
-func (gs *Gosesh) replaceSession(ctx context.Context, old_session Session, now time.Time) (Session, error) {
-	new_session, err := gs.store.CreateSession(
-		ctx,
-		old_session.UserID(),
-		now.Add(gs.sessionActiveDuration),
-		now.Add(gs.sessionIdleDuration),
-	)
-	if err != nil {
-		return old_session, fmt.Errorf("create session: %w", err)
-	}
-
-	if err := gs.store.DeleteSession(ctx, old_session.ID().String()); err != nil {
-		return new_session, fmt.Errorf("delete session: %w", err)
-	}
-	return new_session, nil
 }
 
 // RequireAuth creates middleware that requires a valid session.
@@ -141,8 +130,18 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 		return r
 	}
 
-	if session.ExpireAt().Before(gs.now().UTC()) {
-		gs.logError("session expired", ErrSessionExpired)
+	now := gs.now().UTC()
+
+	// Check idle deadline (sliding window)
+	if session.IdleDeadline().Before(now) {
+		gs.logError("session idle expired", ErrSessionExpired)
+		http.SetCookie(w, gs.expireSessionCookie())
+		return r
+	}
+
+	// Check absolute deadline (hard limit)
+	if session.AbsoluteDeadline().Before(now) {
+		gs.logError("session absolute expired", ErrSessionExpired)
 		http.SetCookie(w, gs.expireSessionCookie())
 		return r
 	}

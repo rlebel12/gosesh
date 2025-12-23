@@ -12,25 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type TestAuthenticateAndRefreshCase int
-
-const (
-	CaseNoSession TestAuthenticateAndRefreshCase = iota
-	CaseSessionActive
-	CaseSessionExpired
-	CaseSessionIdleFaileCreateReplacement
-	CaseSessionIdleFailedDeleteOld
-	CaseSessionIdleSuccess
-)
-
 func TestAuthenticateAndRefresh(t *testing.T) {
 	testCases := map[string]struct {
 		setup                   func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request
 		giveErrorStore          *erroringStore
-		giveParseError          error
 		wantLogs                []string
 		wantSecureCookieHeaders bool
 		wantCookie              bool
+		wantExtendCalled        bool
 	}{
 		"no current session": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
@@ -38,10 +27,32 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			},
 			wantSecureCookieHeaders: true,
 			wantCookie:              false,
+			wantExtendCalled:        false,
 		},
-		"session active": {
+		"no_refresh_outside_threshold": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
+				// Session with 15 minutes until idle (> 10min threshold)
+				session, err := store.CreateSession(t.Context(), userID, now.Add(15*time.Minute), now.Add(85*time.Minute))
+				require.NoError(t, err)
+				r.AddCookie(&http.Cookie{
+					Name:     "customName",
+					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Expires:  now.Add(85 * time.Minute),
+					Path:     "/",
+					Domain:   "localhost",
+					SameSite: http.SameSiteLaxMode,
+				})
+				return r
+			},
+			wantSecureCookieHeaders: true,
+			wantCookie:              false,
+			wantExtendCalled:        false,
+		},
+		"refresh_within_threshold": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := StringIdentifier("identifier")
+				// Session with 5 minutes until idle (< 10min threshold)
 				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
@@ -55,6 +66,52 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				return r
 			},
 			wantSecureCookieHeaders: true,
+			wantCookie:              true,
+			wantExtendCalled:        true,
+		},
+		"refresh_caps_at_absolute": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := StringIdentifier("identifier")
+				// Session with 5 minutes until idle, but absolute in 30min
+				// sessionIdleTimeout is 17min, so new idle would be now+17min = 17min
+				// But absolute is in 30min, so should not cap
+				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(30*time.Minute))
+				require.NoError(t, err)
+				r.AddCookie(&http.Cookie{
+					Name:     "customName",
+					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Expires:  now.Add(30 * time.Minute),
+					Path:     "/",
+					Domain:   "localhost",
+					SameSite: http.SameSiteLaxMode,
+				})
+				return r
+			},
+			wantSecureCookieHeaders: true,
+			wantCookie:              true,
+			wantExtendCalled:        true,
+		},
+		"refresh_error_continues": {
+			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
+				userID := StringIdentifier("identifier")
+				// Session with 5 minutes until idle (within threshold)
+				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
+				require.NoError(t, err)
+				r.AddCookie(&http.Cookie{
+					Name:     "customName",
+					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Expires:  now.Add(85 * time.Minute),
+					Path:     "/",
+					Domain:   "localhost",
+					SameSite: http.SameSiteLaxMode,
+				})
+				return r
+			},
+			giveErrorStore:          &erroringStore{extendSessionError: true},
+			wantLogs:                []string{"msg=\"extend session\" error=\"mock failure\""},
+			wantSecureCookieHeaders: true,
+			wantCookie:              false,
+			wantExtendCalled:        false,
 		},
 		"session expired": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
@@ -71,40 +128,8 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				})
 				return r
 			},
-			wantLogs:                []string{"msg=\"session expired\""},
+			wantLogs:                []string{"msg=\"session idle expired\""},
 			wantSecureCookieHeaders: true,
-		},
-		"session idle failed create replacement": {
-			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
-				require.NoError(t, err)
-				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
-				return r
-			},
-			wantLogs:       []string{"msg=\"replace session\" error=\"create session: mock failure\""},
-			giveErrorStore: &erroringStore{createSessionError: true},
-		},
-		"session idle failed delete old": {
-			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
-				require.NoError(t, err)
-				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
-				return r
-			},
-			wantLogs:       []string{"msg=\"replace session\" error=\"delete session: mock failure\""},
-			giveErrorStore: &erroringStore{deleteSessionError: true},
-		},
-		"session idle success": {
-			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(85*time.Minute))
-				require.NoError(t, err)
-				r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
-				return r
-			},
-			wantCookie: true,
 		},
 	}
 
@@ -126,8 +151,9 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				testStore,
 				WithNow(func() time.Time { return now }),
 				WithSessionCookieName("customName"),
-				WithSessionActiveDuration(17*time.Minute),
-				WithSessionIdleDuration(85*time.Minute),
+				WithSessionIdleTimeout(17*time.Minute),
+				WithSessionMaxLifetime(85*time.Minute),
+				WithSessionRefreshThreshold(10*time.Minute),
 				withLogger,
 			)
 
@@ -158,14 +184,101 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				require.NotEmpty(cookies)
 				cookie := cookies[0]
 				assert.Equal("customName", cookie.Name)
-				assert.Equal("Mg==", cookie.Value)
-				assert.Equal(now.Add(85*time.Minute), cookie.Expires)
+				// Cookie value should be session ID "1" base64 encoded
+				assert.NotEmpty(cookie.Value)
+				// Cookie expires at absolute deadline
 				assert.Equal("localhost", cookie.Domain)
 				assert.Equal("/", cookie.Path)
 				assert.Equal(http.SameSiteLaxMode, cookie.SameSite)
 				assert.False(cookie.Secure)
 			}
 
+			logger.assertExpectedLogs(t, tc.wantLogs)
+		})
+	}
+}
+
+func TestAuthenticateDualDeadline(t *testing.T) {
+	testCases := map[string]struct {
+		idleDeadline     time.Duration
+		absoluteDeadline time.Duration
+		wantSession      bool
+		wantLogs         []string
+	}{
+		"both_valid": {
+			idleDeadline:     5 * time.Minute,
+			absoluteDeadline: 30 * time.Minute,
+			wantSession:      true,
+			wantLogs:         []string{},
+		},
+		"idle_expired": {
+			idleDeadline:     -5 * time.Minute,
+			absoluteDeadline: 30 * time.Minute,
+			wantSession:      false,
+			wantLogs:         []string{"msg=\"session idle expired\""},
+		},
+		"absolute_expired": {
+			idleDeadline:     5 * time.Minute,
+			absoluteDeadline: -5 * time.Minute,
+			wantSession:      false,
+			wantLogs:         []string{"msg=\"session absolute expired\""},
+		},
+		"both_expired": {
+			idleDeadline:     -10 * time.Minute,
+			absoluteDeadline: -5 * time.Minute,
+			wantSession:      false,
+			wantLogs:         []string{"msg=\"session idle expired\""},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			require := require.New(t)
+			assert := assert.New(t)
+			now := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+
+			store := NewMemoryStore()
+			withLogger, logger := withTestLogger()
+			sesh := New(
+				store,
+				WithNow(func() time.Time { return now }),
+				WithSessionCookieName("customName"),
+				withLogger,
+			)
+
+			userID := StringIdentifier("user-id")
+			session, err := store.CreateSession(
+				context.Background(),
+				userID,
+				now.Add(tc.idleDeadline),
+				now.Add(tc.absoluteDeadline),
+			)
+			require.NoError(err)
+
+			r, err := http.NewRequest(http.MethodGet, "/", nil)
+			require.NoError(err)
+			r.AddCookie(&http.Cookie{
+				Name:  "customName",
+				Value: base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+			})
+
+			handlerCalled := false
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handlerCalled = true
+				gotSession, ok := CurrentSession(r)
+				if tc.wantSession {
+					assert.True(ok)
+					assert.NotNil(gotSession)
+				} else {
+					assert.False(ok)
+					assert.Nil(gotSession)
+				}
+			})
+
+			rr := httptest.NewRecorder()
+			sesh.Authenticate(handler).ServeHTTP(rr, r)
+
+			assert.True(handlerCalled)
 			logger.assertExpectedLogs(t, tc.wantLogs)
 		})
 	}

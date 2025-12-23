@@ -34,8 +34,8 @@ func Example_configuration() {
 	gs := gosesh.New(store,
 		gosesh.WithLogger(logger),                     // Set a custom logger
 		gosesh.WithSessionCookieName("my_session"),    // Custom session cookie name
-		gosesh.WithSessionIdleDuration(24*time.Hour),  // Session idle timeout
-		gosesh.WithSessionActiveDuration(1*time.Hour), // Session active duration
+		gosesh.WithSessionMaxLifetime(24*time.Hour),   // Maximum session lifetime
+		gosesh.WithSessionIdleTimeout(1*time.Hour),    // Session idle timeout
 		gosesh.WithOrigin(&url.URL{ // Set your application's origin
 			Scheme: "https",
 			Host:   "example.com",
@@ -134,8 +134,8 @@ func TestExamples(t *testing.T) {
 	// Configuration
 	gs = gosesh.New(store,
 		gosesh.WithSessionCookieName("test_session"),
-		gosesh.WithSessionIdleDuration(time.Hour),
-		gosesh.WithSessionActiveDuration(30*time.Minute),
+		gosesh.WithSessionMaxLifetime(time.Hour),
+		gosesh.WithSessionIdleTimeout(30*time.Minute),
 	)
 	if gs == nil {
 		t.Error("gosesh.New with options returned nil")
