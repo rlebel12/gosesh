@@ -6,7 +6,7 @@ title: "Session duration naming, parameter ordering, and refresh strategy need r
 type: improvement
 priority: high
 complexity: moderate
-estimated_effort: half-day
+estimated_effort: full-day
 context:
   files_involved: [gosesh.go, handlers.go, middleware.go, store.go]
   conversation_extract: "Cookie expiration mismatch discovered in scribe project; traced to inverted semantics and parameter swap"
@@ -15,7 +15,7 @@ context:
 
 ## Executive Summary
 
-The session duration system has multiple interrelated problems: field naming conventions are inverted from industry standards, parameters are swapped when calling `CreateSession`, and the session refresh strategy (token rotation) differs from the more common TTL extension pattern. These issues cause confusion when implementing the `Storer` interface and lead to unexpected session expiration behavior.
+The session duration system has multiple interrelated problems: field naming conventions are inverted from industry standards, parameters are swapped when calling `CreateSession`, and the session refresh strategy (token rotation) is more complex than needed. This document proposes a revised design with clear naming, TTL extension with a configurable refresh gate, and proper two-timer session protection.
 
 ---
 
@@ -56,79 +56,187 @@ gs.store.CreateSession(ctx, id,
 
 The interface says `(idleAt, expireAt)` but the call passes `(activeDuration, idleDuration)`.
 
-**Effect with default values**:
-- `idleAt` = now + 1 hour
-- `expireAt` = now + 24 hours
-- Cookie expires at 24 hours, refresh triggers after 1 hour
-- This accidentally works correctly
+**Effect with default values**: Accidentally works (inversions cancel out).
 
 **Effect when user configures conventionally** (e.g., idle=30min, active=24h):
-- `idleAt` = now + 24 hours
-- `expireAt` = now + 30 minutes
 - Cookie expires at 30 minutes
-- Refresh never triggers (would need 24 hours)
+- Refresh never triggers
 - Session dies prematurely with no renewal
 
-### 3. Non-Conventional Refresh Strategy
+### 3. Token Rotation Complexity
 
 **Current approach** (middleware.go:40, 55-70):
-- When refresh is needed, create entirely new session token
+- When refresh triggers, create new session token
 - Delete old session from store
 - Set new cookie with new token
+- Results in INSERT + DELETE per refresh
 
-**Industry-standard approach**:
-- Extend `idleDeadline` on activity (sliding window)
+**Simpler approach** (TTL extension):
+- Extend `idleDeadline` timestamp on activity
 - Cap extension at `absoluteDeadline`
 - Same token throughout session lifetime
-- Simpler, fewer DB writes
+- Single UPDATE per refresh
 
-**Trade-offs**:
+### 4. No Refresh Threshold Configuration
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| Token rotation (current) | Limits token exposure window; OWASP recommended for sensitive ops | More DB writes; implementation complexity |
-| TTL extension | Simpler; fewer DB operations; easier to reason about | Same token valid longer |
-
-Token rotation is more secure but may be overkill for many use cases. The current implementation doesn't clearly document this as a deliberate security choice.
+The current design has no way to configure when refresh should trigger. The refresh gate is implicitly tied to `idleAt`, which is conflated with the idle timeout itself.
 
 ---
 
-## Investigation Roadmap
+## Proposed Design
 
-### Primary Hypothesis: Rename and Reorder for Clarity
+### New Naming Convention
 
-Align naming with industry conventions:
+| Current Name | New Name | Meaning | Example |
+|--------------|----------|---------|---------|
+| `sessionActiveDuration` | `SessionIdleTimeout` | How long without activity before session expires | 30 min |
+| `sessionIdleDuration` | `SessionMaxLifetime` | Maximum session duration regardless of activity | 7 days |
+| _(none)_ | `SessionRefreshThreshold` | How close to idle expiry before triggering refresh | 5 min |
 
-1. Rename `sessionIdleDuration` to `sessionAbsoluteDuration` (or keep as longer value)
-2. Rename `sessionActiveDuration` to `sessionIdleDuration` (or use as shorter value)
-3. Update `CreateSession` calls to pass parameters in correct order
-4. Update defaults to conventional values (e.g., idle=30min, absolute=24h)
+### Session Lifecycle
 
-**If confirmed, resolution approach:**
-- Breaking change to configuration API
-- Requires major version bump
-- Update all documentation
+```
+Login at 9:00 AM
+├── IdleTimeout: 30 min
+├── MaxLifetime: 7 days
+├── RefreshThreshold: 5 min
+│
+├── IdleDeadline = 9:30 AM
+├── AbsoluteDeadline = 9:00 AM + 7 days
+│
+├── 9:00 - 9:25 AM: Requests served, no DB writes
+│                   (time until idle expiry > RefreshThreshold)
+├── 9:26 AM: Request arrives, 4 min until idle expiry
+│            → Within refresh window
+│            → Extend IdleDeadline to 9:56 AM (single UPDATE)
+├── 9:26 - 9:51 AM: Requests served, no DB writes
+├── 9:52 AM: Within window again, extend to 10:22 AM
+│
+└── If no activity for 30+ min: session expires
+└── After 7 days from login: session expires regardless
+```
 
-### Alternative Hypothesis: Keep Names, Fix Parameter Order
+### Updated Interfaces
 
-Minimal change - just fix the parameter swap:
+**Session interface**:
+```go
+type Session interface {
+    ID() Identifier
+    UserID() Identifier
+    IdleDeadline() time.Time     // when session expires from inactivity
+    AbsoluteDeadline() time.Time // when session expires regardless
+}
+```
 
-1. Keep current naming (accept it's non-standard)
-2. Fix handlers.go and middleware.go to pass parameters correctly
-3. Document the unconventional naming clearly
+**Storer interface** (add ExtendSession):
+```go
+type Storer interface {
+    UpsertUser(ctx context.Context, authProviderID Identifier) (userID Identifier, err error)
+    CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error)
+    ExtendSession(ctx context.Context, sessionID string, newIdleDeadline time.Time) error
+    GetSession(ctx context.Context, sessionID string) (Session, error)
+    DeleteSession(ctx context.Context, sessionID string) error
+    DeleteUserSessions(ctx context.Context, userID Identifier) (int, error)
+}
+```
 
-**Trade-off**: Less disruption but ongoing confusion for new users.
+**Configuration options**:
+```go
+func WithSessionIdleTimeout(d time.Duration) func(*Gosesh)
+func WithSessionMaxLifetime(d time.Duration) func(*Gosesh)
+func WithSessionRefreshThreshold(d time.Duration) func(*Gosesh)
+```
 
-### Alternative Hypothesis: Simplify to TTL Extension
+**Gosesh struct fields**:
+```go
+type Gosesh struct {
+    // ...
+    sessionIdleTimeout      time.Duration // e.g., 30 * time.Minute
+    sessionMaxLifetime      time.Duration // e.g., 7 * 24 * time.Hour
+    sessionRefreshThreshold time.Duration // e.g., 5 * time.Minute
+}
+```
 
-Replace token rotation with TTL extension:
+### Middleware Logic
 
-1. Remove `CreateSession` from refresh path
-2. Add `ExtendSession(ctx, sessionID, newIdleDeadline)` to Storer
-3. Update middleware to extend rather than replace
-4. Simpler mental model, fewer DB writes
+```go
+func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
+    return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        session, ok := CurrentSession(r)
+        if !ok {
+            next.ServeHTTP(w, r)
+            return
+        }
 
-**Trade-off**: Less secure (same token lives longer), but sufficient for most apps.
+        now := gs.now().UTC()
+        timeUntilIdle := session.IdleDeadline().Sub(now)
+
+        // Only extend if within refresh threshold
+        if timeUntilIdle > gs.sessionRefreshThreshold {
+            next.ServeHTTP(w, r)
+            return
+        }
+
+        // Calculate new idle deadline, capped at absolute deadline
+        newIdleDeadline := now.Add(gs.sessionIdleTimeout)
+        if newIdleDeadline.After(session.AbsoluteDeadline()) {
+            newIdleDeadline = session.AbsoluteDeadline()
+        }
+
+        if err := gs.store.ExtendSession(r.Context(), session.ID().String(), newIdleDeadline); err != nil {
+            gs.logError("extend session", err)
+            next.ServeHTTP(w, r)
+            return
+        }
+
+        // Update cookie expiration
+        sessionCookie := gs.sessionCookie(session.ID(), session.AbsoluteDeadline())
+        http.SetCookie(w, sessionCookie)
+
+        next.ServeHTTP(w, r)
+    }))
+}
+```
+
+### Validation Logic
+
+```go
+func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Request {
+    // ... get session from cookie ...
+
+    now := gs.now().UTC()
+
+    // Check idle deadline (sliding window)
+    if session.IdleDeadline().Before(now) {
+        gs.logError("session idle expired", ErrSessionExpired)
+        http.SetCookie(w, gs.expireSessionCookie())
+        return r
+    }
+
+    // Check absolute deadline (hard limit)
+    if session.AbsoluteDeadline().Before(now) {
+        gs.logError("session absolute expired", ErrSessionExpired)
+        http.SetCookie(w, gs.expireSessionCookie())
+        return r
+    }
+
+    return gs.newRequestWithSession(r, session)
+}
+```
+
+### Default Values
+
+```go
+func New(store Storer, opts ...NewOpts) *Gosesh {
+    gs := &Gosesh{
+        // ...
+        sessionIdleTimeout:      30 * time.Minute,
+        sessionMaxLifetime:      7 * 24 * time.Hour,
+        sessionRefreshThreshold: 5 * time.Minute,
+    }
+    // ...
+}
+```
 
 ---
 
@@ -140,44 +248,43 @@ Replace token rotation with TTL extension:
 - `gosesh.go:109-121` - Duration option functions
 - `gosesh.go:144-157` - Storer interface definition
 - `handlers.go:105-106` - CreateSession call in OAuth2Callback
-- `middleware.go:55-70` - replaceSession function (token rotation)
-- `middleware.go:35-38` - Refresh trigger condition
+- `middleware.go:26-52` - AuthenticateAndRefresh middleware
+- `middleware.go:55-70` - replaceSession function (to be removed)
+- `middleware.go:116-151` - authenticate function
 
-### How Validation Currently Works
+### Migration Path
 
-**Session expiration check** (middleware.go:144):
-```go
-if session.ExpireAt().Before(gs.now().UTC()) {
-    // session expired
-}
-```
-
-**Refresh trigger** (middleware.go:35-38):
-```go
-if session.IdleAt().After(now) {
-    // IdleAt still in future, skip refresh
-    return
-}
-// IdleAt passed, refresh session
-```
+1. Add new fields and options alongside old ones
+2. Deprecate old option functions with clear messages
+3. Add `ExtendSession` to Storer interface
+4. Update middleware to use TTL extension
+5. Remove `replaceSession` function
+6. Major version bump (v1.0.0 or v0.8.0)
 
 ### Dependencies & Constraints
 
-- Breaking changes require major version bump
-- Existing implementations of `Storer` interface would need updates
-- Cookie expiration is tied to `Session.ExpireAt()` return value
+- Breaking change to Storer interface (adds `ExtendSession`)
+- Breaking change to Session interface (renames methods)
+- Breaking change to configuration options (renames)
+- Requires major version bump
+- Existing implementations need migration guide
 
 ---
 
 ## Success Criteria
 
-- [ ] Duration field names align with their semantic meaning
-- [ ] `CreateSession` parameters match interface definition order
-- [ ] Default values produce expected behavior (shorter idle, longer absolute)
-- [ ] User configuring `idle=30min, absolute=24h` gets 24h cookie expiration
-- [ ] Documentation clearly explains the session lifecycle
-- [ ] Existing tests updated and passing
-- [ ] If keeping token rotation: document as deliberate security feature
+- [ ] New naming: `SessionIdleTimeout`, `SessionMaxLifetime`, `SessionRefreshThreshold`
+- [ ] All three durations are configurable via `With*` options
+- [ ] Default values: idle=30min, max=7days, threshold=5min
+- [ ] Storer interface includes `ExtendSession(ctx, sessionID, newIdleDeadline) error`
+- [ ] Session interface uses `IdleDeadline()` and `AbsoluteDeadline()`
+- [ ] Middleware uses TTL extension (UPDATE) instead of token rotation (INSERT+DELETE)
+- [ ] Refresh only triggers when within threshold of idle expiry
+- [ ] Cookie `Expires` set to `AbsoluteDeadline`
+- [ ] Validation checks both deadlines
+- [ ] Documentation explains the session lifecycle clearly
+- [ ] All tests updated and passing
+- [ ] Migration guide for existing Storer implementations
 
 ---
 
@@ -192,7 +299,7 @@ activeDuration: 24 * time.Hour,
 Expected: Sessions last up to 24 hours with 30-minute idle refresh.
 Actual: Cookies expire after 30 minutes with no refresh opportunity.
 
-Root cause traced to parameter swap combined with inverted naming conventions. The library's defaults accidentally work because both inversions cancel out, but any user following conventional naming patterns will experience broken session behavior.
+Root cause traced to parameter swap combined with inverted naming conventions. Investigation led to broader redesign proposal addressing naming, TTL extension, and configurable refresh threshold.
 
 ---
 
