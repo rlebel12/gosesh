@@ -20,8 +20,9 @@ type Gosesh struct {
 	oAuth2StateCookieName string
 	redirectCookieName    string
 	redirectParamName     string
-	sessionActiveDuration time.Duration
-	sessionIdleDuration   time.Duration
+	sessionIdleTimeout      time.Duration
+	sessionMaxLifetime      time.Duration
+	sessionRefreshThreshold time.Duration
 	now                   func() time.Time
 	cookieDomain          func() string
 }
@@ -57,8 +58,9 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		oAuth2StateCookieName: "oauthstate",
 		redirectCookieName:    "redirect",
 		redirectParamName:     "next",
-		sessionActiveDuration: 1 * time.Hour,
-		sessionIdleDuration:   24 * time.Hour,
+		sessionIdleTimeout:      1 * time.Hour,
+		sessionMaxLifetime:      24 * time.Hour,
+		sessionRefreshThreshold: 10 * time.Minute,
 		origin:                url,
 		allowedHosts:          []string{url.Hostname()},
 		now:                   time.Now,
@@ -106,17 +108,29 @@ func WithRedirectParamName(name string) func(*Gosesh) {
 	}
 }
 
-// WithSessionIdleDuration sets the duration after which a session becomes idle.
-func WithSessionIdleDuration(d time.Duration) func(*Gosesh) {
+// WithSessionIdleTimeout sets the duration of inactivity after which a session expires.
+// This represents the idle expiry window - the session will expire if there is no activity
+// within this duration.
+func WithSessionIdleTimeout(d time.Duration) func(*Gosesh) {
 	return func(c *Gosesh) {
-		c.sessionIdleDuration = d
+		c.sessionIdleTimeout = d
 	}
 }
 
-// WithSessionActiveDuration sets the duration for which a session remains active.
-func WithSessionActiveDuration(d time.Duration) func(*Gosesh) {
+// WithSessionMaxLifetime sets the absolute maximum lifetime of a session.
+// The session will expire after this duration regardless of activity.
+func WithSessionMaxLifetime(d time.Duration) func(*Gosesh) {
 	return func(c *Gosesh) {
-		c.sessionActiveDuration = d
+		c.sessionMaxLifetime = d
+	}
+}
+
+// WithSessionRefreshThreshold sets the time window before idle expiry that triggers a refresh.
+// When a session is accessed and its idle deadline is within this threshold, the session
+// will be extended to prevent expiry.
+func WithSessionRefreshThreshold(d time.Duration) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.sessionRefreshThreshold = d
 	}
 }
 
@@ -146,8 +160,13 @@ func WithCookieDomain(fn func(*Gosesh) func() string) func(*Gosesh) {
 type Storer interface {
 	// UpsertUser creates or updates a user based on their OAuth2 provider ID.
 	UpsertUser(ctx context.Context, authProviderID Identifier) (userID Identifier, err error)
-	// CreateSession creates a new session for a user.
-	CreateSession(ctx context.Context, userID Identifier, idleAt, expireAt time.Time) (Session, error)
+	// CreateSession creates a new session for a user with the specified deadlines.
+	// idleDeadline is when the session expires from inactivity.
+	// absoluteDeadline is when the session expires regardless of activity.
+	CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error)
+	// ExtendSession extends the idle deadline of an existing session.
+	// This is used to refresh a session's TTL without creating a new session.
+	ExtendSession(ctx context.Context, sessionID string, newIdleDeadline time.Time) error
 	// GetSession retrieves a session by its ID.
 	GetSession(ctx context.Context, sessionID string) (Session, error)
 	// DeleteSession deletes a session by its ID.
@@ -162,10 +181,10 @@ type Session interface {
 	ID() Identifier
 	// UserID returns the ID of the user associated with this session.
 	UserID() Identifier
-	// IdleAt returns the time at which the session will become idle.
-	IdleAt() time.Time
-	// ExpireAt returns the time at which the session will expire.
-	ExpireAt() time.Time
+	// IdleDeadline returns the time at which the session expires from inactivity.
+	IdleDeadline() time.Time
+	// AbsoluteDeadline returns the time at which the session expires regardless of activity.
+	AbsoluteDeadline() time.Time
 }
 
 // NewOpts is a function type for configuring a new Gosesh instance.
