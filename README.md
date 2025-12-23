@@ -47,11 +47,12 @@ gs := gosesh.New(store)
 
 ```go
 gs := gosesh.New(store,
-    gosesh.WithLogger(logger),                    // Set a custom logger
-    gosesh.WithSessionCookieName("my_session"),   // Custom session cookie name
-    gosesh.WithSessionIdleDuration(24 * time.Hour), // Session idle timeout
-    gosesh.WithSessionActiveDuration(1 * time.Hour), // Session active duration
-    gosesh.WithOrigin(&url.URL{                   // Set your application's origin
+    gosesh.WithLogger(logger),                      // Set a custom logger
+    gosesh.WithSessionCookieName("my_session"),     // Custom session cookie name
+    gosesh.WithSessionIdleTimeout(1 * time.Hour),   // Session idle timeout (sliding window)
+    gosesh.WithSessionMaxLifetime(24 * time.Hour),  // Maximum session lifetime (hard limit)
+    gosesh.WithSessionRefreshThreshold(10 * time.Minute), // Refresh threshold
+    gosesh.WithOrigin(&url.URL{                     // Set your application's origin
         Scheme: "https",
         Host:   "example.com",
     }),
