@@ -16,7 +16,7 @@ Revise session duration naming conventions, replace token rotation with TTL exte
 | Phase | Description | Depends On | Status |
 |-------|-------------|------------|--------|
 | [01-interfaces](phases/01-interfaces.md) | Update Session, Storer interfaces and Gosesh config | None | Complete |
-| [02-memory-store](phases/02-memory-store.md) | Update MemoryStore with new methods | Phase 01 | Pending |
+| [02-memory-store](phases/02-memory-store.md) | Update MemoryStore with new methods | Phase 01 | Complete |
 | [03-core-logic](phases/03-core-logic.md) | Update handlers and middleware | Phase 02 | Pending |
 | [04-tests](phases/04-tests.md) | Update all test files | Phase 03 | Pending |
 
@@ -43,8 +43,8 @@ Revise session duration naming conventions, replace token rotation with TTL exte
 
 ## Status
 
-**Progress:** 1/4 phases complete
-**Current Phase:** Phase 02 - Memory Store
+**Progress:** 2/4 phases complete
+**Current Phase:** Phase 03 - Core Logic
 **Blocked:** None
 
 ---

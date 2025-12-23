@@ -26,7 +26,7 @@ func (c IdentifierContract) Test(t *testing.T) {
 }
 
 type SessionContract struct {
-	NewSession    func(id, userID Identifier, idleAt, expireAt time.Time) Session
+	NewSession    func(id, userID Identifier, idleDeadline, absoluteDeadline time.Time) Session
 	NewIdentifier func(giveID string) Identifier
 }
 
@@ -34,15 +34,15 @@ func (c SessionContract) Test(t *testing.T) {
 	t.Run("returns correct values", func(t *testing.T) {
 		id := c.NewIdentifier("session-id")
 		userID := c.NewIdentifier("user-id")
-		idleAt := time.Now()
-		expireAt := time.Now().Add(time.Hour)
+		idleDeadline := time.Now()
+		absoluteDeadline := time.Now().Add(time.Hour)
 
-		session := c.NewSession(id, userID, idleAt, expireAt)
+		session := c.NewSession(id, userID, idleDeadline, absoluteDeadline)
 
 		assert.Equal(t, id, session.ID())
 		assert.Equal(t, userID, session.UserID())
-		assert.Equal(t, idleAt, session.IdleAt())
-		assert.Equal(t, expireAt, session.ExpireAt())
+		assert.Equal(t, idleDeadline, session.IdleDeadline())
+		assert.Equal(t, absoluteDeadline, session.AbsoluteDeadline())
 	})
 }
 
@@ -74,34 +74,34 @@ func (c StorerContract) Test(t *testing.T) {
 
 	t.Run("can create and get a session", func(t *testing.T) {
 		userID := StringIdentifier("user-id")
-		idleAt := time.Now()
-		expireAt := time.Now().Add(time.Hour)
+		idleDeadline := time.Now()
+		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
 
-		gotSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
+		gotSession, err := store.CreateSession(t.Context(), userID, idleDeadline, absoluteDeadline)
 		require.NoError(t, err)
 		assert.Equal(t, "user-id", gotSession.UserID().String())
-		assert.Equal(t, idleAt, gotSession.IdleAt())
-		assert.Equal(t, expireAt, gotSession.ExpireAt())
+		assert.Equal(t, idleDeadline, gotSession.IdleDeadline())
+		assert.Equal(t, absoluteDeadline, gotSession.AbsoluteDeadline())
 
 		gotSession2, err := store.GetSession(t.Context(), gotSession.ID().String())
 		require.NoError(t, err)
 		assert.Equal(t, "user-id", gotSession2.UserID().String())
-		assert.Equal(t, idleAt, gotSession2.IdleAt())
-		assert.Equal(t, expireAt, gotSession2.ExpireAt())
+		assert.Equal(t, idleDeadline, gotSession2.IdleDeadline())
+		assert.Equal(t, absoluteDeadline, gotSession2.AbsoluteDeadline())
 
 		assert.Equal(t, gotSession.ID(), gotSession2.ID())
 	})
 
 	t.Run("can delete one session", func(t *testing.T) {
 		userID := StringIdentifier("user-id")
-		idleAt := time.Now()
-		expireAt := time.Now().Add(time.Hour)
+		idleDeadline := time.Now()
+		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
 
-		gotSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
+		gotSession, err := store.CreateSession(t.Context(), userID, idleDeadline, absoluteDeadline)
 		require.NoError(t, err)
-		otherSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
+		otherSession, err := store.CreateSession(t.Context(), userID, idleDeadline, absoluteDeadline)
 		require.NoError(t, err)
 
 		err = store.DeleteSession(t.Context(), gotSession.ID().String())
@@ -123,16 +123,16 @@ func (c StorerContract) Test(t *testing.T) {
 	t.Run("can delete all sessions for a user", func(t *testing.T) {
 		userID := StringIdentifier("user-id")
 		otherUserID := StringIdentifier("other-user-id")
-		idleAt := time.Now()
-		expireAt := time.Now().Add(time.Hour)
+		idleDeadline := time.Now()
+		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
 
-		gotSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
+		gotSession, err := store.CreateSession(t.Context(), userID, idleDeadline, absoluteDeadline)
 		require.NoError(t, err)
-		anotherSession, err := store.CreateSession(t.Context(), userID, idleAt, expireAt)
+		anotherSession, err := store.CreateSession(t.Context(), userID, idleDeadline, absoluteDeadline)
 		require.NoError(t, err)
 
-		otherUserSession, err := store.CreateSession(t.Context(), otherUserID, idleAt, expireAt)
+		otherUserSession, err := store.CreateSession(t.Context(), otherUserID, idleDeadline, absoluteDeadline)
 		require.NoError(t, err)
 
 		deleted, err := store.DeleteUserSessions(t.Context(), userID)
@@ -147,5 +147,52 @@ func (c StorerContract) Test(t *testing.T) {
 
 		_, err = store.GetSession(t.Context(), otherUserSession.ID().String())
 		assert.NoError(t, err)
+	})
+
+	t.Run("can extend an existing session", func(t *testing.T) {
+		userID := StringIdentifier("user-id")
+		idleDeadline := time.Now()
+		absoluteDeadline := time.Now().Add(time.Hour)
+		store := c.NewStorer()
+
+		gotSession, err := store.CreateSession(t.Context(), userID, idleDeadline, absoluteDeadline)
+		require.NoError(t, err)
+
+		newIdleDeadline := time.Now().Add(30 * time.Minute)
+		err = store.ExtendSession(t.Context(), gotSession.ID().String(), newIdleDeadline)
+		require.NoError(t, err)
+
+		// Verify the deadline was updated
+		updatedSession, err := store.GetSession(t.Context(), gotSession.ID().String())
+		require.NoError(t, err)
+		assert.Equal(t, newIdleDeadline, updatedSession.IdleDeadline())
+		assert.Equal(t, absoluteDeadline, updatedSession.AbsoluteDeadline()) // Should not change
+	})
+
+	t.Run("returns error when extending non-existent session", func(t *testing.T) {
+		store := c.NewStorer()
+		newIdleDeadline := time.Now().Add(30 * time.Minute)
+		err := store.ExtendSession(t.Context(), "non-existent-session-id", newIdleDeadline)
+		assert.Error(t, err)
+	})
+
+	t.Run("extend session updates deadline correctly", func(t *testing.T) {
+		userID := StringIdentifier("user-id")
+		originalIdleDeadline := time.Now().Add(10 * time.Minute)
+		absoluteDeadline := time.Now().Add(time.Hour)
+		store := c.NewStorer()
+
+		gotSession, err := store.CreateSession(t.Context(), userID, originalIdleDeadline, absoluteDeadline)
+		require.NoError(t, err)
+
+		// Extend the session
+		newIdleDeadline := time.Now().Add(20 * time.Minute)
+		err = store.ExtendSession(t.Context(), gotSession.ID().String(), newIdleDeadline)
+		require.NoError(t, err)
+
+		// Verify persistence
+		retrievedSession, err := store.GetSession(t.Context(), gotSession.ID().String())
+		require.NoError(t, err)
+		assert.Equal(t, newIdleDeadline, retrievedSession.IdleDeadline())
 	})
 }

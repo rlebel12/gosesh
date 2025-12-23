@@ -26,10 +26,10 @@ type (
 	MemoryStoreIdentifier int
 
 	MemoryStoreSession struct {
-		id       MemoryStoreIdentifier
-		userID   Identifier
-		idleAt   time.Time
-		expireAt time.Time
+		id               MemoryStoreIdentifier
+		userID           Identifier
+		idleDeadline     time.Time
+		absoluteDeadline time.Time
 	}
 )
 
@@ -44,16 +44,16 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, userID Identifier) (Ident
 	return userID, nil
 }
 
-func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idleAt, expireAt time.Time) (Session, error) {
+func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
 	ms.sequenceID++
 	s := &MemoryStoreSession{
-		id:       ms.sequenceID,
-		userID:   userID,
-		idleAt:   idleAt,
-		expireAt: expireAt,
+		id:               ms.sequenceID,
+		userID:           userID,
+		idleDeadline:     idleDeadline,
+		absoluteDeadline: absoluteDeadline,
 	}
 	ms.sessions[s.ID().String()] = s
 	return s, nil
@@ -96,6 +96,18 @@ func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID Identifier
 	return count, nil
 }
 
+func (ms *MemoryStore) ExtendSession(ctx context.Context, sessionID string, newIdleDeadline time.Time) error {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	s, ok := ms.sessions[sessionID]
+	if !ok {
+		return errors.New("session not found")
+	}
+	s.idleDeadline = newIdleDeadline
+	return nil
+}
+
 func (s MemoryStoreSession) ID() Identifier {
 	return s.id
 }
@@ -104,12 +116,12 @@ func (s MemoryStoreSession) UserID() Identifier {
 	return s.userID
 }
 
-func (s MemoryStoreSession) IdleAt() time.Time {
-	return s.idleAt
+func (s MemoryStoreSession) IdleDeadline() time.Time {
+	return s.idleDeadline
 }
 
-func (s MemoryStoreSession) ExpireAt() time.Time {
-	return s.expireAt
+func (s MemoryStoreSession) AbsoluteDeadline() time.Time {
+	return s.absoluteDeadline
 }
 
 // Ensure interfaces are implemented

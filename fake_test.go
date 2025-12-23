@@ -12,10 +12,10 @@ import (
 )
 
 type FakeSession struct {
-	IDValue       Identifier
-	UserIDValue   Identifier
-	IdleAtValue   time.Time
-	ExpireAtValue time.Time
+	IDValue               Identifier
+	UserIDValue           Identifier
+	IdleDeadlineValue     time.Time
+	AbsoluteDeadlineValue time.Time
 }
 
 func (f *FakeSession) ID() Identifier {
@@ -26,20 +26,20 @@ func (f *FakeSession) UserID() Identifier {
 	return f.UserIDValue
 }
 
-func (f *FakeSession) IdleAt() time.Time {
-	return f.IdleAtValue
+func (f *FakeSession) IdleDeadline() time.Time {
+	return f.IdleDeadlineValue
 }
 
-func (f *FakeSession) ExpireAt() time.Time {
-	return f.ExpireAtValue
+func (f *FakeSession) AbsoluteDeadline() time.Time {
+	return f.AbsoluteDeadlineValue
 }
 
-func NewFakeSession(id, userID Identifier, idleAt, expireAt time.Time) *FakeSession {
+func NewFakeSession(id, userID Identifier, idleDeadline, absoluteDeadline time.Time) *FakeSession {
 	return &FakeSession{
-		IDValue:       id,
-		UserIDValue:   userID,
-		IdleAtValue:   idleAt,
-		ExpireAtValue: expireAt,
+		IDValue:               id,
+		UserIDValue:           userID,
+		IdleDeadlineValue:     idleDeadline,
+		AbsoluteDeadlineValue: absoluteDeadline,
 	}
 }
 
@@ -53,8 +53,8 @@ func TestStringIdentifierContract(t *testing.T) {
 
 func TestFakeSessionContract(t *testing.T) {
 	SessionContract{
-		NewSession: func(id, userID Identifier, idleAt, expireAt time.Time) Session {
-			return NewFakeSession(id, userID, idleAt, expireAt)
+		NewSession: func(id, userID Identifier, idleDeadline, absoluteDeadline time.Time) Session {
+			return NewFakeSession(id, userID, idleDeadline, absoluteDeadline)
 		},
 		NewIdentifier: func(id string) Identifier {
 			return StringIdentifier(id)
@@ -71,11 +71,11 @@ type erroringStore struct {
 	getSessionError         bool
 }
 
-func (s *erroringStore) CreateSession(ctx context.Context, userID Identifier, idleAt, expireAt time.Time) (Session, error) {
+func (s *erroringStore) CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
 	if s.createSessionError {
 		return nil, errors.New("mock failure")
 	}
-	return s.Storer.CreateSession(ctx, userID, idleAt, expireAt)
+	return s.Storer.CreateSession(ctx, userID, idleDeadline, absoluteDeadline)
 }
 
 func (s *erroringStore) DeleteSession(ctx context.Context, sessionID string) error {
