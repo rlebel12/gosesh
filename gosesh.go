@@ -26,6 +26,7 @@ type Gosesh struct {
 	sessionRefreshThreshold time.Duration
 	now                   func() time.Time
 	cookieDomain          func() string
+	credentialSource      CredentialSource
 }
 
 // Identifier is an interface that represents a unique identifier for users and sessions.
@@ -69,6 +70,21 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 	gs.cookieDomain = func() string { return gs.origin.Hostname() }
 	for _, opt := range opts {
 		opt(gs)
+	}
+
+	// Backward compatibility: if no credential source specified, create a cookie source
+	// with the existing configuration options
+	if gs.credentialSource == nil {
+		gs.credentialSource = NewCookieCredentialSource(
+			WithCookieSourceName(gs.sessionCookieName),
+			WithCookieSourceDomain(gs.cookieDomain()),
+			WithCookieSourceSecure(gs.Scheme() == "https"),
+			WithCookieSourceSessionConfig(SessionConfig{
+				IdleDuration:     gs.sessionIdleTimeout,
+				AbsoluteDuration: gs.sessionMaxLifetime,
+				RefreshEnabled:   true,
+			}),
+		)
 	}
 
 	return gs
@@ -153,6 +169,26 @@ func WithAllowedHosts(hosts ...string) func(*Gosesh) {
 func WithCookieDomain(fn func(*Gosesh) func() string) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.cookieDomain = fn(c)
+	}
+}
+
+// WithCredentialSource sets the credential source for reading and writing session credentials.
+// This allows supporting different authentication methods (cookies, headers, etc.).
+// If not specified, a default cookie-based credential source will be created using the
+// existing cookie configuration options.
+func WithCredentialSource(source CredentialSource) func(*Gosesh) {
+	return func(gs *Gosesh) {
+		gs.credentialSource = source
+	}
+}
+
+// WithCredentialSources creates a composite credential source from multiple sources.
+// Sources are tried in order - the first one that returns a credential is used.
+// This allows supporting multiple authentication methods simultaneously
+// (e.g., cookies for browsers and headers for CLI/API clients).
+func WithCredentialSources(sources ...CredentialSource) func(*Gosesh) {
+	return func(gs *Gosesh) {
+		gs.credentialSource = NewCompositeCredentialSource(sources...)
 	}
 }
 

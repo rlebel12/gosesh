@@ -512,7 +512,6 @@ func TestLogoutHandler(t *testing.T) {
 			wantStatusCode: http.StatusUnauthorized,
 			wantLogs: []string{
 				"level=WARN msg=\"no done handler provided for Logout, using default\"",
-				"level=ERROR msg=\"failed to decode session cookie\" error=\"illegal base64 data at input byte 0\"\n",
 			},
 		},
 		"failed parsing ID": {

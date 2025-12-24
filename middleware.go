@@ -2,7 +2,6 @@ package gosesh
 
 import (
 	"context"
-	"encoding/base64"
 	"net/http"
 	"net/url"
 	"strings"
@@ -29,6 +28,12 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
+		// Check if refresh is enabled for this credential source
+		if !gs.credentialSource.SessionConfig().RefreshEnabled {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		now := gs.now().UTC()
 		timeUntilIdle := session.IdleDeadline().Sub(now)
 
@@ -50,9 +55,10 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
-		// Update cookie expiration
-		sessionCookie := gs.sessionCookie(session.ID(), session.AbsoluteDeadline())
-		http.SetCookie(w, sessionCookie)
+		// Write session to credential source
+		if err := gs.credentialSource.WriteSession(w, session); err != nil {
+			gs.logError("write session", err)
+		}
 
 		next.ServeHTTP(w, r)
 	}))
@@ -111,22 +117,16 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 	setSecureCookieHeaders(w)
 	ctx := r.Context()
 
-	sessionCookie, err := r.Cookie(gs.sessionCookieName)
-	if err != nil {
+	// Read session ID from credential source
+	sessionID := gs.credentialSource.ReadSessionID(r)
+	if sessionID == "" {
 		return r
 	}
 
-	sessionID, err := base64.URLEncoding.DecodeString(sessionCookie.Value)
-	if err != nil {
-		gs.logError("failed to decode session cookie", err)
-		http.SetCookie(w, gs.expireSessionCookie())
-		return r
-	}
-
-	session, err := gs.store.GetSession(ctx, string(sessionID))
+	session, err := gs.store.GetSession(ctx, sessionID)
 	if err != nil {
 		gs.logError("get session", err)
-		http.SetCookie(w, gs.expireSessionCookie())
+		gs.credentialSource.ClearSession(w)
 		return r
 	}
 
@@ -135,14 +135,14 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 	// Check idle deadline (sliding window)
 	if session.IdleDeadline().Before(now) {
 		gs.logError("session idle expired", ErrSessionExpired)
-		http.SetCookie(w, gs.expireSessionCookie())
+		gs.credentialSource.ClearSession(w)
 		return r
 	}
 
 	// Check absolute deadline (hard limit)
 	if session.AbsoluteDeadline().Before(now) {
 		gs.logError("session absolute expired", ErrSessionExpired)
-		http.SetCookie(w, gs.expireSessionCookie())
+		gs.credentialSource.ClearSession(w)
 		return r
 	}
 
