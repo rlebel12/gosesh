@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"time"
 )
@@ -185,6 +186,76 @@ type Session interface {
 	IdleDeadline() time.Time
 	// AbsoluteDeadline returns the time at which the session expires regardless of activity.
 	AbsoluteDeadline() time.Time
+}
+
+// SessionConfig configures session timeouts for a credential source.
+// It defines how long sessions from this source can remain active.
+type SessionConfig struct {
+	// IdleDuration is the time before idle expiry (0 = no idle timeout).
+	// When non-zero, the session expires if there is no activity within this duration.
+	IdleDuration time.Duration
+	// AbsoluteDuration is the maximum session lifetime (required, must be > 0).
+	// The session expires after this duration regardless of activity.
+	AbsoluteDuration time.Duration
+	// RefreshEnabled indicates whether AuthenticateAndRefresh extends the idle deadline.
+	// When true, session activity will extend the idle timeout up to the absolute deadline.
+	RefreshEnabled bool
+}
+
+// CredentialSource abstracts how session IDs are read from requests
+// and written to responses. This enables support for multiple authentication
+// methods (cookies, headers, etc.) with different session configurations.
+type CredentialSource interface {
+	// Name returns an identifier for this source (used for logging/debugging).
+	Name() string
+
+	// ReadSessionID extracts the session ID from a request.
+	// Returns empty string if no credential is present.
+	ReadSessionID(r *http.Request) string
+
+	// WriteSession writes the session credential to the response.
+	// For sources that cannot write (e.g., header-based auth where client stores token),
+	// this should be a no-op and return nil.
+	WriteSession(w http.ResponseWriter, session Session) error
+
+	// ClearSession removes the credential from the response.
+	// For sources that cannot write, this should be a no-op and return nil.
+	ClearSession(w http.ResponseWriter) error
+
+	// CanWrite returns whether this source can write credentials to responses.
+	// Returns true for cookies, false for headers (where client stores the token).
+	CanWrite() bool
+
+	// SessionConfig returns the timeout configuration for sessions from this source.
+	// Different sources can have different timeout policies (e.g., short-lived browser
+	// sessions vs. long-lived CLI tokens).
+	SessionConfig() SessionConfig
+}
+
+// DefaultBrowserSessionConfig returns the default session configuration for
+// cookie-based browser sessions. These sessions have:
+// - 30 minute idle timeout (session expires after 30 minutes of inactivity)
+// - 24 hour absolute timeout (session expires after 24 hours regardless of activity)
+// - Refresh enabled (activity extends the idle timeout)
+func DefaultBrowserSessionConfig() SessionConfig {
+	return SessionConfig{
+		IdleDuration:     30 * time.Minute,
+		AbsoluteDuration: 24 * time.Hour,
+		RefreshEnabled:   true,
+	}
+}
+
+// DefaultCLISessionConfig returns the default session configuration for
+// header-based CLI/API sessions. These sessions have:
+// - No idle timeout (0 duration means no idle expiry)
+// - 30 day absolute timeout (long-lived for CLI convenience)
+// - Refresh disabled (tokens are long-lived and not refreshed)
+func DefaultCLISessionConfig() SessionConfig {
+	return SessionConfig{
+		IdleDuration:     0, // No idle timeout
+		AbsoluteDuration: 30 * 24 * time.Hour,
+		RefreshEnabled:   false,
+	}
 }
 
 // NewOpts is a function type for configuring a new Gosesh instance.
