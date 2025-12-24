@@ -42,7 +42,7 @@ Extend gosesh to support multiple authentication methods beyond cookies:
 | [01-credential-source-interface](phases/01-credential-source-interface.md) | Define CredentialSource interface and SessionConfig type | None | Complete |
 | [02-cookie-credential-source](phases/02-cookie-credential-source.md) | Refactor existing cookie logic into CookieCredentialSource | Phase 01 | Complete |
 | [03-header-credential-source](phases/03-header-credential-source.md) | Implement HeaderCredentialSource for Bearer token auth | Phase 01 | Complete |
-| [04-composite-credential-source](phases/04-composite-credential-source.md) | Implement CompositeCredentialSource for multiple sources | Phase 02, 03 | Pending |
+| [04-composite-credential-source](phases/04-composite-credential-source.md) | Implement CompositeCredentialSource for multiple sources | Phase 02, 03 | Complete |
 | [05-middleware-integration](phases/05-middleware-integration.md) | Update middleware to use credential sources | Phase 04 | Pending |
 | [06-localhost-callback](phases/06-localhost-callback.md) | OAuth2 localhost callback flow for CLI clients | Phase 05 | Pending |
 | [07-device-code-flow](phases/07-device-code-flow.md) | Device code flow for headless CLI authentication | Phase 05 | Pending |
