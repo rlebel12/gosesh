@@ -15,21 +15,40 @@
 
 **Test Cases:**
 
+### Unique: Basic Properties
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
 | `name_returns_header` | New source | `Name()` returns `"header"` | Identifies source type |
-| `read_missing_header` | Request without Authorization header | `ReadSessionID()` returns `""` | No header = empty |
-| `read_valid_bearer` | Request with `Authorization: Bearer <id>` | Returns session ID | Standard Bearer token |
-| `read_bearer_base64` | Request with base64-encoded token | Returns decoded session ID | Base64 support |
-| `read_wrong_scheme` | Request with `Authorization: Basic xxx` | Returns `""` | Only Bearer supported |
-| `read_malformed_header` | Request with `Authorization: Bearer` (no token) | Returns `""` | Graceful handling |
-| `read_case_insensitive_scheme` | Request with `Authorization: bearer <id>` | Returns session ID | Scheme is case-insensitive |
-| `write_noop` | Write session | Response unchanged | Headers can't write |
-| `clear_noop` | Clear session | Response unchanged | Headers can't clear |
 | `can_write_false` | Any source | `CanWrite()` returns `false` | Headers not writable |
 | `session_config_defaults` | Default source | No idle timeout, 30 day absolute | CLI defaults |
-| `custom_header_name` | Source with `X-Session-ID` | Reads from that header | Configurable header |
-| `custom_scheme` | Source with `Token` scheme | Reads `Authorization: Token <id>` | Configurable scheme |
+
+### Parameterized: ReadSessionID Cases
+
+| Case Name | Authorization Header | Expected | Notes |
+|-----------|---------------------|----------|-------|
+| `read_missing_header` | (no header) | `""` | No header = empty |
+| `read_valid_bearer` | `Bearer abc123` | `"abc123"` | Standard Bearer token |
+| `read_bearer_base64` | `Bearer dXNlcjEyMw==` | `"user123"` | Base64 decoded |
+| `read_wrong_scheme` | `Basic xxx` | `""` | Only Bearer supported |
+| `read_malformed_no_token` | `Bearer ` | `""` | Missing token after scheme |
+| `read_malformed_no_space` | `Bearerabc123` | `""` | Missing space separator |
+| `read_case_insensitive` | `bearer abc123` | `"abc123"` | Scheme is case-insensitive |
+| `read_BEARER_caps` | `BEARER abc123` | `"abc123"` | Scheme is case-insensitive |
+
+### Unique: Write/Clear No-Op Behavior
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `write_noop` | Write session | Response headers unchanged | Headers can't write |
+| `clear_noop` | Clear session | Response headers unchanged | Headers can't clear |
+
+### Parameterized: Custom Options
+
+| Option | Input | Expected Effect | Notes |
+|--------|-------|-----------------|-------|
+| `WithHeaderName("X-Session-ID")` | `X-Session-ID: abc` | Returns `"abc"` | Configurable header |
+| `WithHeaderScheme("Token")` | `Authorization: Token abc` | Returns `"abc"` | Configurable scheme |
 
 **Assertions:**
 

@@ -15,22 +15,49 @@
 
 **Test Cases:**
 
+### Unique: Basic Properties
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
 | `name_returns_cookie` | New source | `Name()` returns `"cookie"` | Identifies source type |
-| `read_missing_cookie` | Request without session cookie | `ReadSessionID()` returns `""` | No cookie = empty |
-| `read_valid_cookie` | Request with base64-encoded session ID | Returns decoded session ID | Standard cookie read |
-| `read_invalid_base64` | Request with malformed cookie value | Returns `""` | Graceful handling |
-| `write_sets_cookie` | Write session | Response has `Set-Cookie` header | Cookie created |
-| `write_cookie_httponly` | Write session | Cookie has `HttpOnly` flag | Security requirement |
-| `write_cookie_secure` | Source with `secure=true` | Cookie has `Secure` flag | HTTPS mode |
-| `write_cookie_samesite` | Write session | Cookie has `SameSite=Lax` | CSRF protection |
-| `write_cookie_expiry` | Write session | Cookie expires at session's AbsoluteDeadline | Expiry from session |
-| `clear_expires_cookie` | Clear session | Cookie set to expired | Removal via expiry |
 | `can_write_true` | Any source | `CanWrite()` returns `true` | Cookies are writable |
 | `session_config_defaults` | Default source | Config has 30min idle, 24h absolute | Browser defaults |
-| `custom_cookie_name` | Source with custom name | Uses custom cookie name | Configurable |
-| `custom_domain` | Source with domain | Cookie has domain set | Multi-domain support |
+
+### Parameterized: ReadSessionID Cases
+
+| Case Name | Cookie Value | Expected | Notes |
+|-----------|--------------|----------|-------|
+| `read_missing_cookie` | (no cookie) | `""` | No cookie = empty |
+| `read_valid_cookie` | Base64-encoded session ID | Decoded session ID | Standard cookie read |
+| `read_invalid_base64` | `"not-valid-base64!!!"` | `""` | Graceful handling |
+| `read_empty_value` | `""` | `""` | Empty cookie value |
+
+### Parameterized: Cookie Attribute Verification
+
+Single `WriteSession` call, verify all attributes in one parameterized assertion.
+
+| Attribute | Expected Value | Notes |
+|-----------|----------------|-------|
+| `HttpOnly` | `true` | Security requirement |
+| `Secure` | Matches source config | HTTPS mode |
+| `SameSite` | `Lax` | CSRF protection |
+| `Path` | `"/"` | Site-wide scope |
+
+### Unique: Write/Clear Behavior
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `write_sets_cookie` | Write session | Response has `Set-Cookie` header | Cookie created |
+| `write_cookie_expiry` | Write session | Cookie expires at session's AbsoluteDeadline | Expiry from session |
+| `clear_expires_cookie` | Clear session | Cookie set to expired (MaxAge=-1) | Removal via expiry |
+
+### Parameterized: Custom Options
+
+| Option | Input | Expected Effect | Notes |
+|--------|-------|-----------------|-------|
+| `WithCookieName("custom")` | Custom name | Cookie uses that name | Configurable name |
+| `WithCookieDomain(".example.com")` | Domain option | Cookie has domain set | Multi-domain support |
+| `WithCookieSecure(false)` | Secure=false | Cookie lacks Secure flag | Development mode |
 
 **Assertions:**
 

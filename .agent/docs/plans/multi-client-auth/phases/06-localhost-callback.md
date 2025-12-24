@@ -15,22 +15,42 @@
 
 **Test Cases:**
 
+### Parameterized: OAuth2BeginCLI Callback URL Validation
+
+| Case Name | Callback URL | Expected | Notes |
+|-----------|--------------|----------|-------|
+| `begin_valid_callback_url` | `http://localhost:8080/cb` | Redirects to OAuth provider | Valid localhost |
+| `begin_callback_with_port` | `http://localhost:54321/cb` | Redirects to OAuth provider | Random port allowed |
+| `begin_callback_127_0_0_1` | `http://127.0.0.1:8080/cb` | Redirects to OAuth provider | 127.0.0.1 allowed |
+| `begin_invalid_callback_host` | `http://evil.com/cb` | 400 Bad Request | Non-localhost rejected |
+| `begin_callback_https_localhost` | `https://localhost:8080/cb` | 400 Bad Request | HTTPS localhost rejected |
+| `begin_missing_callback` | (none) | 400 Bad Request | Callback required |
+| `begin_callback_malformed` | `not-a-url` | 400 Bad Request | Invalid URL rejected |
+| `begin_callback_with_query` | `http://localhost:8080/cb?existing=param` | Redirects to OAuth provider | Query params preserved |
+
+### Unique: OAuth2BeginCLI State Handling
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
-| `begin_valid_callback_url` | `?callback=http://localhost:8080/cb` | Redirects to OAuth provider | Valid localhost callback |
-| `begin_callback_with_port` | `?callback=http://localhost:54321/cb` | Redirects to OAuth provider | Random port allowed |
-| `begin_callback_127_0_0_1` | `?callback=http://127.0.0.1:8080/cb` | Redirects to OAuth provider | 127.0.0.1 allowed |
-| `begin_invalid_callback_host` | `?callback=http://evil.com/cb` | 400 Bad Request | Non-localhost rejected |
-| `begin_callback_https_localhost` | `?callback=https://localhost:8080/cb` | 400 Bad Request | HTTPS localhost rejected |
-| `begin_missing_callback` | No callback param | 400 Bad Request | Callback required |
-| `begin_sets_state_cookie` | Valid callback | State cookie set | CSRF protection |
-| `begin_stores_callback_in_state` | Valid callback | Callback URL in state | Passed through OAuth flow |
-| `callback_valid_flow` | Valid OAuth response + state | Redirects to localhost with token | Token in query param |
-| `callback_token_param_name` | Complete flow | `?token=<session_id>` | Token param name |
-| `callback_invalid_state` | Mismatched state | 400 Bad Request | CSRF protection |
-| `callback_oauth_error` | OAuth error response | Error passed to localhost | Error handling |
-| `callback_creates_session` | Valid flow | Session created with header source config | Uses header SessionConfig |
-| `callback_session_long_duration` | Valid flow | Session has 30-day absolute | CLI session config |
+| `begin_sets_state_cookie` | Valid callback | State cookie set with HttpOnly, Secure | CSRF protection |
+| `begin_stores_callback_in_state` | Valid callback | Callback URL encoded in state data | Passed through OAuth |
+
+### Parameterized: OAuth2CallbackCLI Response Scenarios
+
+| Case Name | OAuth Response | State Match | Expected | Notes |
+|-----------|----------------|-------------|----------|-------|
+| `callback_valid_flow` | Valid code | Yes | Redirects to localhost with `?token=<id>` | Happy path |
+| `callback_invalid_state` | Valid code | No | 400 Bad Request | CSRF protection |
+| `callback_oauth_error` | `?error=access_denied` | Yes | Redirects with `?error=access_denied` | Error forwarded |
+| `callback_oauth_error_desc` | `?error=access_denied&error_description=User%20denied` | Yes | Redirects with error params | Description included |
+
+### Unique: OAuth2CallbackCLI Session Creation
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `callback_creates_session` | Valid OAuth flow | Session created in store | Session persists |
+| `callback_session_config` | Valid OAuth flow | Session has 30-day absolute, no idle | Uses CLI SessionConfig |
+| `callback_token_param_name` | Valid OAuth flow | Token in `?token=<id>` query param | Not in fragment |
 
 **Assertions:**
 

@@ -17,43 +17,65 @@
 
 **Test Cases - Localhost Callback Flow:**
 
-| Case Name | Input | Expected | Notes |
-|-----------|-------|----------|-------|
-| `e2e_localhost_full_flow` | CLI initiates OAuth, browser completes | CLI receives valid session token | Full happy path |
-| `e2e_localhost_token_works` | Token from callback used in request | Authenticated request succeeds | Token validation |
-| `e2e_localhost_protected_endpoint` | CLI accesses protected endpoint with token | 200 OK with session data | Full auth chain |
-| `e2e_localhost_expired_session` | Wait for session expiry, then request | 401 Unauthorized | Expiry works end-to-end |
-| `e2e_localhost_invalid_token` | CLI uses garbage token | 401 Unauthorized | Invalid token handling |
+### Unique: E2E Localhost OAuth Flow
+
+Each test requires distinct setup with FakeOAuthProvider.
+
+| Case Name | Scenario | Expected | Notes |
+|-----------|----------|----------|-------|
+| `e2e_localhost_full_flow` | CLI initiates, browser completes OAuth | CLI receives valid session token | Full happy path |
+| `e2e_localhost_token_works` | Use received token for API call | Authenticated request succeeds | Token validation |
+| `e2e_localhost_protected_endpoint` | Access /api/me with token | 200 OK with session data | Full auth chain |
+| `e2e_localhost_expired_session` | Wait for expiry, then request | 401 Unauthorized | Expiry works e2e |
+| `e2e_localhost_invalid_token` | Use garbage token | 401 Unauthorized | Invalid token handling |
 
 **Test Cases - Device Code Flow:**
 
-| Case Name | Input | Expected | Notes |
-|-----------|-------|----------|-------|
-| `e2e_device_full_flow` | CLI gets device code, user authorizes | CLI receives valid session via poll | Full happy path |
-| `e2e_device_poll_pending` | CLI polls before user authorizes | Returns pending status | Pending state |
-| `e2e_device_token_works` | Token from poll used in request | Authenticated request succeeds | Token validation |
-| `e2e_device_protected_endpoint` | CLI accesses protected endpoint with token | 200 OK with session data | Full auth chain |
-| `e2e_device_expired_code` | Wait for device code expiry, then poll | Returns expired status | Expiry works end-to-end |
-| `e2e_device_rate_limit` | CLI polls too frequently | 429 Too Many Requests | Rate limiting works |
+### Unique: E2E Device Code Flow
+
+Each test requires distinct state management.
+
+| Case Name | Scenario | Expected | Notes |
+|-----------|----------|----------|-------|
+| `e2e_device_full_flow` | CLI gets code, user authorizes | CLI receives token via poll | Full happy path |
+| `e2e_device_poll_pending` | CLI polls before authorization | `{"status": "pending"}` | Pending state |
+| `e2e_device_token_works` | Use received token for API call | Authenticated request succeeds | Token validation |
+| `e2e_device_protected_endpoint` | Access /api/me with token | 200 OK with session data | Full auth chain |
+| `e2e_device_expired_code` | Wait for expiry, then poll | `{"status": "expired"}` | Expiry works e2e |
+| `e2e_device_rate_limit` | Poll faster than interval | 429 Too Many Requests | Rate limiting works |
 
 **Test Cases - Header vs Cookie Auth:**
 
-| Case Name | Input | Expected | Notes |
-|-----------|-------|----------|-------|
-| `e2e_header_auth_works` | Request with Authorization: Bearer | Authenticated | Header source works |
-| `e2e_cookie_auth_works` | Request with session cookie | Authenticated | Cookie source works |
-| `e2e_composite_prefers_cookie` | Request with both cookie and header | Uses cookie session | Priority works |
-| `e2e_header_no_refresh` | Header auth with RefreshEnabled=false | No session refresh | Config respected |
-| `e2e_cookie_with_refresh` | Cookie auth with RefreshEnabled=true | Session refreshed | Config respected |
+### Parameterized: Credential Source E2E Verification
+
+| Case Name | Credential Source | Request Type | Expected | Notes |
+|-----------|-------------------|--------------|----------|-------|
+| `e2e_header_auth_works` | Header | Bearer token | Authenticated | Header source works |
+| `e2e_cookie_auth_works` | Cookie | Session cookie | Authenticated | Cookie source works |
+| `e2e_composite_prefers_cookie` | Composite | Both present | Uses cookie session | Priority works |
+
+### Parameterized: Refresh Behavior E2E
+
+| Case Name | Source Type | RefreshEnabled | Expected After Request | Notes |
+|-----------|-------------|----------------|------------------------|-------|
+| `e2e_header_no_refresh` | Header | `false` | IdleDeadline unchanged | No refresh |
+| `e2e_cookie_with_refresh` | Cookie | `true` | IdleDeadline extended | Refresh works |
 
 **Test Cases - Session Behavior:**
 
-| Case Name | Input | Expected | Notes |
-|-----------|-------|----------|-------|
-| `e2e_header_session_long_duration` | Create session via CLI flow | 30-day absolute deadline | CLI config applied |
-| `e2e_cookie_session_short_duration` | Create session via browser flow | 24-hour absolute deadline | Browser config applied |
-| `e2e_header_no_idle_timeout` | CLI session with no activity | Session still valid | No idle timeout for CLI |
-| `e2e_cookie_idle_timeout` | Cookie session with no activity | Session expires | Idle timeout for browser |
+### Parameterized: Session Duration by Flow
+
+| Case Name | Auth Flow | Expected AbsoluteDuration | Expected IdleDuration | Notes |
+|-----------|-----------|---------------------------|----------------------|-------|
+| `e2e_header_session_config` | CLI (localhost or device) | 30 days | None (0) | CLI config |
+| `e2e_cookie_session_config` | Browser OAuth | 24 hours | 30 minutes | Browser config |
+
+### Unique: Idle Timeout Behavior E2E
+
+| Case Name | Scenario | Expected | Notes |
+|-----------|----------|----------|-------|
+| `e2e_header_no_idle_timeout` | CLI session, wait past "normal" idle period | Session still valid | No idle for CLI |
+| `e2e_cookie_idle_timeout` | Cookie session, wait past idle period | Session expired, 401 | Idle works for browser |
 
 **Assertions:**
 

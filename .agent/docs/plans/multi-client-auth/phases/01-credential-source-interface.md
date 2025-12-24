@@ -17,15 +17,33 @@
 
 Contract tests validate any CredentialSource implementation. Use parameterized approach with factory functions (following existing `contract_test.go` pattern).
 
+### Parameterized: Contract Tests Across Implementations
+
+Run each contract test against all implementations (Cookie, Header, Composite).
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
 | `name_not_empty` | Any implementation | `Name()` returns non-empty string | Identifies source for logging |
 | `read_empty_request` | Request with no credentials | `ReadSessionID()` returns `""` | No credentials = empty string |
 | `read_returns_consistent` | Same request twice | Same session ID both times | Deterministic read |
-| `write_then_read` | Write session, create request from response | `ReadSessionID()` returns written ID | Round-trip for writable sources |
-| `clear_then_read` | Clear session, read from response | `ReadSessionID()` returns `""` | Clear removes credential |
-| `can_write_consistency` | Source that `CanWrite() == false` | `WriteSession()` is no-op, no error | Headers can't write |
 | `session_config_valid` | Any implementation | `SessionConfig()` has non-zero `AbsoluteDuration` | Must have absolute deadline |
+
+### Parameterized: Write/Clear Round-Trip (Writable Sources Only)
+
+Run against sources where `CanWrite() == true` (Cookie, Composite with Cookie).
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `write_then_read` | Write session, create request from response | `ReadSessionID()` returns written ID | Round-trip works |
+| `clear_then_read` | Clear session, read from response | `ReadSessionID()` returns `""` | Clear removes credential |
+
+### Unique: Non-Writable Source Behavior
+
+Separate test for sources where `CanWrite() == false`.
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `can_write_false_noop` | Header source with `CanWrite() == false` | `WriteSession()` is no-op, no error | Headers can't write |
 
 **Contract Struct:**
 

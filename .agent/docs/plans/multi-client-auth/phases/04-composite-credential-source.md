@@ -15,19 +15,43 @@
 
 **Test Cases:**
 
+### Unique: Basic Properties
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
 | `name_returns_composite` | New source | `Name()` returns `"composite"` | Identifies source type |
-| `read_first_source` | Request with cookie only | Returns cookie session ID | First matching source wins |
-| `read_second_source` | Request with header only | Returns header session ID | Fallback to second source |
-| `read_both_present` | Request with cookie AND header | Returns cookie session ID | First source takes priority |
-| `read_neither_present` | Request with no credentials | Returns `""` | No match = empty |
-| `write_to_writable` | Write session | Only cookie source writes | Headers can't write |
-| `write_multiple_writable` | Two cookie sources | Both receive write | All writable sources get write |
-| `clear_to_writable` | Clear session | Only cookie source clears | Headers can't clear |
-| `can_write_any_writable` | Cookie + header sources | `CanWrite()` returns `true` | True if any can write |
-| `can_write_none_writable` | Header-only sources | `CanWrite()` returns `false` | False if none can write |
 | `session_config_first_source` | Cookie + header sources | Returns cookie's config | Config from first source |
+
+### Parameterized: ReadSessionID Priority
+
+| Case Name | Sources (order) | Request Has | Expected | Notes |
+|-----------|----------------|-------------|----------|-------|
+| `read_first_source` | [Cookie, Header] | Cookie only | Cookie session ID | First matching wins |
+| `read_second_source` | [Cookie, Header] | Header only | Header session ID | Fallback to second |
+| `read_both_present` | [Cookie, Header] | Cookie AND Header | Cookie session ID | First takes priority |
+| `read_neither_present` | [Cookie, Header] | Nothing | `""` | No match = empty |
+| `read_reversed_order` | [Header, Cookie] | Both | Header session ID | Order matters |
+
+### Parameterized: CanWrite Based on Composition
+
+| Case Name | Sources | Expected | Notes |
+|-----------|---------|----------|-------|
+| `can_write_any_writable` | [Cookie, Header] | `true` | Cookie can write |
+| `can_write_none_writable` | [Header, Header] | `false` | Neither can write |
+| `can_write_all_writable` | [Cookie, Cookie] | `true` | Both can write |
+
+### Unique: Write/Clear Fan-Out Behavior
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `write_to_writable` | [Cookie, Header], write session | Only cookie source writes | Headers can't write |
+| `write_multiple_writable` | [Cookie1, Cookie2], write session | Both cookies receive write | All writable get write |
+| `clear_to_writable` | [Cookie, Header], clear session | Only cookie source clears | Headers can't clear |
+
+### Unique: Edge Cases
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
 | `empty_sources` | No sources | All operations return empty/no-op | Graceful handling |
 | `single_source` | Just cookie source | Behaves like cookie source | Passthrough behavior |
 

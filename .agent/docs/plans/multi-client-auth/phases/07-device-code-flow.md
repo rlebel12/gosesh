@@ -16,36 +16,66 @@
 
 **Test Cases - DeviceCodeStore Contract:**
 
+### Parameterized: Store CRUD Operations
+
+| Case Name | Operation | Input | Expected | Notes |
+|-----------|-----------|-------|----------|-------|
+| `create_returns_device_code` | Create | Valid user code | Non-empty device code | Device code generated |
+| `create_stores_entry` | Create + Get | Valid entry | Get returns same entry | Persistence works |
+| `delete_success` | Delete + Get | Existing code | Get returns not found | Deletion works |
+| `delete_nonexistent` | Delete | Unknown code | No error | Idempotent delete |
+
+### Parameterized: Store Error Conditions
+
+| Case Name | Operation | Input | Expected Error | Notes |
+|-----------|-----------|-------|----------------|-------|
+| `get_nonexistent` | Get | Unknown device code | `ErrDeviceCodeNotFound` | Not found handling |
+| `get_expired` | Get | Expired device code | `ErrDeviceCodeExpired` | Expiry check |
+| `complete_nonexistent` | Complete | Unknown code | `ErrDeviceCodeNotFound` | Not found handling |
+| `complete_already_complete` | Complete | Already completed | `ErrDeviceCodeAlreadyComplete` | Idempotency |
+
+### Unique: Store Special Cases
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
-| `create_returns_device_code` | Create with user code | Returns non-empty device code | Device code generated |
-| `create_stores_entry` | Create entry | Get returns same entry | Persistence works |
-| `get_nonexistent` | Get unknown device code | Returns ErrDeviceCodeNotFound | Not found handling |
-| `get_expired` | Get expired device code | Returns ErrDeviceCodeExpired | Expiry check |
-| `complete_success` | Complete with session ID | Entry marked complete | Completion works |
-| `complete_nonexistent` | Complete unknown code | Returns ErrDeviceCodeNotFound | Not found handling |
-| `complete_already_complete` | Complete twice | Returns ErrDeviceCodeAlreadyComplete | Idempotency check |
-| `delete_success` | Delete existing code | Get returns not found | Deletion works |
-| `delete_nonexistent` | Delete unknown code | No error | Idempotent delete |
-| `create_user_code_collision` | Create with existing user code | Generates new unique code | Collision retry |
+| `complete_success` | Complete with session ID | Entry marked complete, SessionID set | Completion works |
+| `create_user_code_collision` | Create with colliding user code | Retry generates new unique code | Collision handling |
 
 **Test Cases - Device Code Handlers:**
 
+### Unique: DeviceCodeBegin Response Structure
+
+| Case Name | Request | Expected | Notes |
+|-----------|---------|----------|-------|
+| `begin_returns_codes` | POST /auth/device/begin | JSON with device_code, user_code, verification_uri, expires_in, interval | All fields present |
+| `begin_user_code_format` | POST /auth/device/begin | user_code is `XXXX-XXXX` format, safe alphabet only | Human-readable |
+| `begin_expires_in` | POST /auth/device/begin | expires_in between 300-900 seconds | 5-15 min range |
+| `begin_interval` | POST /auth/device/begin | interval is 5 | 5 second polling |
+
+### Parameterized: DeviceCodePoll Status Cases
+
+| Case Name | Device Code State | Expected Response | Notes |
+|-----------|-------------------|-------------------|-------|
+| `poll_pending` | Created, not completed | `{"status": "pending"}` | Not yet authorized |
+| `poll_complete` | Completed with session | `{"status": "complete", "session_id": "..."}` | Authorization done |
+| `poll_expired` | Past expiry time | `{"status": "expired"}` | Device code expired |
+
+### Parameterized: DeviceCodePoll Error Cases
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
-| `begin_returns_codes` | POST /auth/device/begin | Returns device_code, user_code, verification_uri | Initial response |
-| `begin_user_code_format` | POST /auth/device/begin | user_code is 8 chars, alphanumeric | Human-readable |
-| `begin_expires_in` | POST /auth/device/begin | expires_in is reasonable (5-15 min) | Expiry info |
-| `begin_interval` | POST /auth/device/begin | interval is 5 seconds | Polling interval |
-| `poll_pending` | Poll before user completes | `{"status": "pending"}` | Not yet authorized |
-| `poll_complete` | Poll after user completes | `{"status": "complete", "session_id": "..."}` | Authorization complete |
-| `poll_expired` | Poll after expiry | `{"status": "expired"}` | Device code expired |
-| `poll_invalid_code` | Poll with bad device_code | 400 Bad Request | Invalid code handling |
-| `poll_rate_limit` | Poll faster than interval | 429 Too Many Requests | Rate limiting |
-| `authorize_page` | GET /auth/device | HTML page with form | User authorization page |
-| `authorize_submit_valid` | POST /auth/device with valid user_code | Redirects to OAuth | Initiates OAuth |
-| `authorize_submit_invalid` | POST /auth/device with bad user_code | Error message | Invalid code |
-| `authorize_callback` | OAuth callback for device | Completes device code | Links session to device |
+| `poll_invalid_code` | Unknown device_code | 400 Bad Request | Invalid code |
+| `poll_missing_code` | No device_code in body | 400 Bad Request | Required field |
+| `poll_rate_limit` | Poll within 5 seconds of last | 429 Too Many Requests | Rate limiting |
+
+### Unique: DeviceCodeAuthorize Flow
+
+| Case Name | Request | Expected | Notes |
+|-----------|---------|----------|-------|
+| `authorize_page_get` | GET /auth/device | HTML page with form | User enters code |
+| `authorize_submit_valid` | POST with valid user_code | Redirect to OAuth provider | Initiates OAuth |
+| `authorize_submit_invalid` | POST with unknown user_code | Error message on page | Invalid code |
+| `authorize_callback` | OAuth callback after authorization | Device code completed, success page | Links session to device |
 
 **Assertions:**
 

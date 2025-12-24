@@ -15,22 +15,49 @@
 
 **Test Cases:**
 
+### Parameterized: Authenticate Across Source Types
+
+| Case Name | Credential Source | Request Has | Expected | Notes |
+|-----------|-------------------|-------------|----------|-------|
+| `authenticate_cookie_source` | Cookie | Cookie | Session in context | Cookie auth works |
+| `authenticate_header_source` | Header | Bearer token | Session in context | Header auth works |
+| `authenticate_composite_cookie` | Composite[Cookie,Header] | Cookie | Session in context | First source wins |
+| `authenticate_composite_header` | Composite[Cookie,Header] | Header only | Session in context | Fallback to header |
+
+### Parameterized: Authentication Failure Cases
+
+| Case Name | Credential Source | Scenario | Expected | Notes |
+|-----------|-------------------|----------|----------|-------|
+| `authenticate_no_credentials` | Any | No credentials | No session in context | Graceful handling |
+| `authenticate_invalid_session` | Any | Non-existent session ID | No session, credential cleared | Invalid session |
+| `authenticate_expired_idle` | Cookie | Idle-expired session | No session, credential cleared | Idle expiry |
+| `authenticate_expired_absolute` | Any | Absolute-expired session | No session, credential cleared | Absolute expiry |
+
+### Parameterized: Refresh Behavior by Config
+
+| Case Name | Source Type | RefreshEnabled | Expected | Notes |
+|-----------|-------------|----------------|----------|-------|
+| `refresh_header_disabled` | Header | `false` | No refresh | Config respected |
+| `refresh_cookie_enabled` | Cookie | `true` | Session refreshed | Config respected |
+| `refresh_cookie_disabled` | Cookie | `false` | No refresh | Config overrides default |
+
+### Parameterized: RequireAuthentication Response
+
+| Case Name | Credential Source | Request Has | Expected | Notes |
+|-----------|-------------------|-------------|----------|-------|
+| `require_auth_header_missing` | Header | No token | 401 Unauthorized | Auth required |
+| `require_auth_cookie_missing` | Cookie | No cookie | 401 Unauthorized | Auth required |
+| `require_auth_header_present` | Header | Valid token | 200 OK, session in context | Auth succeeds |
+| `require_auth_cookie_present` | Cookie | Valid cookie | 200 OK, session in context | Auth succeeds |
+
+### Unique: Backward Compatibility
+
+These require distinct setup and cannot be easily parameterized.
+
 | Case Name | Input | Expected | Notes |
 |-----------|-------|----------|-------|
-| `authenticate_cookie_source` | Gosesh with cookie source, request with cookie | Session in context | Cookie auth works |
-| `authenticate_header_source` | Gosesh with header source, request with Bearer token | Session in context | Header auth works |
-| `authenticate_composite_source` | Gosesh with composite, request with cookie | Session in context | First source wins |
-| `authenticate_composite_fallback` | Gosesh with composite, request with header only | Session in context | Fallback to header |
-| `authenticate_no_credentials` | Request without credentials | No session in context | Graceful handling |
-| `authenticate_invalid_session` | Request with non-existent session ID | No session, credential cleared | Invalid session handling |
-| `authenticate_expired_idle` | Request with idle-expired session | No session, credential cleared | Idle expiry works |
-| `authenticate_expired_absolute` | Request with absolute-expired session | No session, credential cleared | Absolute expiry works |
-| `refresh_header_source_disabled` | Header source with RefreshEnabled=false | No refresh occurs | Respect config |
-| `refresh_cookie_source_enabled` | Cookie source with RefreshEnabled=true | Session refreshed | Respect config |
-| `require_auth_header_source` | Header source, no token | 401 Unauthorized | Auth required |
-| `require_auth_cookie_source` | Cookie source, no cookie | 401 Unauthorized | Auth required |
-| `backward_compat_no_source` | Gosesh without explicit source | Cookie source default | Backward compatibility |
-| `backward_compat_old_options` | Gosesh with WithSessionCookieName | Cookie source uses that name | Old options work |
+| `backward_compat_no_source` | Gosesh without explicit source | Cookie source default | Zero config still works |
+| `backward_compat_old_options` | Gosesh with WithSessionCookieName | Cookie source uses that name | Old options honored |
 | `backward_compat_existing_sessions` | Session created with old API, read with new | Session still valid | Zero-downtime upgrade |
 
 **Assertions:**
