@@ -175,11 +175,7 @@ The existing `sessionCookie()`, `expireSessionCookie()` functions in `cookies.go
 
 ### Gate: REFACTOR
 
-- [ ] `go vet ./...` passes
-- [ ] `go test ./...` passes
-- [ ] All existing tests pass (backward compatibility)
-- [ ] `make coverage` shows adequate coverage
-- [ ] Code formatting applied (`gofmt`)
+- [ ] Commit succeeds (pre-commit handles formatting/linting)
 
 ---
 

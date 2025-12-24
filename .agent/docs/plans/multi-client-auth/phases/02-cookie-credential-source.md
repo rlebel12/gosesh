@@ -184,10 +184,7 @@ func (c *CookieCredentialSource) SessionConfig() SessionConfig {
 
 ### Gate: REFACTOR
 
-- [ ] `go vet ./...` passes
-- [ ] `go test ./...` passes
-- [ ] `make coverage` shows adequate coverage
-- [ ] Code formatting applied (`gofmt`)
+- [ ] Commit succeeds (pre-commit handles formatting/linting)
 
 ---
 

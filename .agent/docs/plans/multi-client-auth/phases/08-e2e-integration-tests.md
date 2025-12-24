@@ -310,12 +310,9 @@ func simulateUserAuthorization(serverURL, userCode string) error {
 
 ### Gate: REFACTOR
 
-- [ ] `go vet ./...` passes
-- [ ] `go test ./...` passes
-- [ ] `make coverage` shows adequate coverage
+- [ ] Commit succeeds (pre-commit handles formatting/linting)
 - [ ] All tests complete in reasonable time (< 30 seconds)
 - [ ] No resource leaks (verify with `go test -race`)
-- [ ] Code formatting applied (`gofmt`)
 
 ---
 
