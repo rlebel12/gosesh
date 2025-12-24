@@ -108,6 +108,16 @@ func (ms *MemoryStore) ExtendSession(ctx context.Context, sessionID string, newI
 	return nil
 }
 
+// Reset clears all sessions and resets the sequence ID.
+// This is useful for testing to isolate state between test cases.
+func (ms *MemoryStore) Reset() {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	ms.sessions = make(map[string]*MemoryStoreSession)
+	ms.sequenceID = 0
+}
+
 func (s MemoryStoreSession) ID() Identifier {
 	return s.id
 }
@@ -122,6 +132,18 @@ func (s MemoryStoreSession) IdleDeadline() time.Time {
 
 func (s MemoryStoreSession) AbsoluteDeadline() time.Time {
 	return s.absoluteDeadline
+}
+
+// SetIdleDeadline updates the idle deadline for testing purposes.
+// This should only be used in tests to simulate expired sessions.
+func (s *MemoryStoreSession) SetIdleDeadline(deadline time.Time) {
+	s.idleDeadline = deadline
+}
+
+// SetAbsoluteDeadline updates the absolute deadline for testing purposes.
+// This should only be used in tests to simulate expired sessions.
+func (s *MemoryStoreSession) SetAbsoluteDeadline(deadline time.Time) {
+	s.absoluteDeadline = deadline
 }
 
 // Ensure interfaces are implemented

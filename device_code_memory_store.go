@@ -174,5 +174,15 @@ func (m *MemoryDeviceCodeStore) CleanupExpired(ctx context.Context) error {
 	return nil
 }
 
+// Reset clears all device codes.
+// This is useful for testing to isolate state between test cases.
+func (m *MemoryDeviceCodeStore) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.byDeviceCode = make(map[string]*DeviceCodeEntry)
+	m.byUserCode = make(map[string]string)
+}
+
 // Ensure MemoryDeviceCodeStore implements DeviceCodeStore
 var _ DeviceCodeStore = (*MemoryDeviceCodeStore)(nil)
