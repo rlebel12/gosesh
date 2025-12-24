@@ -1,0 +1,311 @@
+# Phase 08: End-to-End Integration Tests
+
+**Depends on:** Phase 06, Phase 07
+**Status:** Pending
+
+---
+
+## RED: Write Tests
+
+**Objective:** Create end-to-end integration tests that test full authentication flows with real HTTP server and minimal CLI client
+
+**Files:**
+
+- `e2e_test.go`
+- `e2e/cli_client.go` (minimal CLI client for testing)
+- `e2e/test_server.go` (test server setup)
+
+**Test Cases - Localhost Callback Flow:**
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `e2e_localhost_full_flow` | CLI initiates OAuth, browser completes | CLI receives valid session token | Full happy path |
+| `e2e_localhost_token_works` | Token from callback used in request | Authenticated request succeeds | Token validation |
+| `e2e_localhost_protected_endpoint` | CLI accesses protected endpoint with token | 200 OK with session data | Full auth chain |
+| `e2e_localhost_expired_session` | Wait for session expiry, then request | 401 Unauthorized | Expiry works end-to-end |
+| `e2e_localhost_invalid_token` | CLI uses garbage token | 401 Unauthorized | Invalid token handling |
+
+**Test Cases - Device Code Flow:**
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `e2e_device_full_flow` | CLI gets device code, user authorizes | CLI receives valid session via poll | Full happy path |
+| `e2e_device_poll_pending` | CLI polls before user authorizes | Returns pending status | Pending state |
+| `e2e_device_token_works` | Token from poll used in request | Authenticated request succeeds | Token validation |
+| `e2e_device_protected_endpoint` | CLI accesses protected endpoint with token | 200 OK with session data | Full auth chain |
+| `e2e_device_expired_code` | Wait for device code expiry, then poll | Returns expired status | Expiry works end-to-end |
+| `e2e_device_rate_limit` | CLI polls too frequently | 429 Too Many Requests | Rate limiting works |
+
+**Test Cases - Header vs Cookie Auth:**
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `e2e_header_auth_works` | Request with Authorization: Bearer | Authenticated | Header source works |
+| `e2e_cookie_auth_works` | Request with session cookie | Authenticated | Cookie source works |
+| `e2e_composite_prefers_cookie` | Request with both cookie and header | Uses cookie session | Priority works |
+| `e2e_header_no_refresh` | Header auth with RefreshEnabled=false | No session refresh | Config respected |
+| `e2e_cookie_with_refresh` | Cookie auth with RefreshEnabled=true | Session refreshed | Config respected |
+
+**Test Cases - Session Behavior:**
+
+| Case Name | Input | Expected | Notes |
+|-----------|-------|----------|-------|
+| `e2e_header_session_long_duration` | Create session via CLI flow | 30-day absolute deadline | CLI config applied |
+| `e2e_cookie_session_short_duration` | Create session via browser flow | 24-hour absolute deadline | Browser config applied |
+| `e2e_header_no_idle_timeout` | CLI session with no activity | Session still valid | No idle timeout for CLI |
+| `e2e_cookie_idle_timeout` | Cookie session with no activity | Session expires | Idle timeout for browser |
+
+**Assertions:**
+
+- Full OAuth2 flow completes without manual intervention (using fake OAuth provider)
+- Session tokens are valid and work for authenticated requests
+- Session timeouts are correctly applied based on credential source
+- Both localhost callback and device code flows work end-to-end
+
+**Edge Cases:**
+
+- Network interruption during OAuth flow
+- Concurrent authentication requests
+- Session created by one source, accessed via another (if using composite)
+
+### Gate: RED
+
+- [ ] Test files created with all enumerated test cases
+- [ ] All tests FAIL (implementation does not exist yet)
+- [ ] Test coverage includes happy path and all edge cases
+
+---
+
+## GREEN: Implement
+
+**Objective:** Implement test infrastructure and end-to-end tests
+
+**Files:**
+
+- `e2e_test.go`
+- `e2e/cli_client.go`
+- `e2e/test_server.go`
+- `e2e/fake_oauth_provider.go`
+
+**Implementation Guidance:**
+
+```go
+// e2e/test_server.go
+
+// TestServer wraps a real HTTP server with gosesh for e2e testing
+type TestServer struct {
+    Server       *httptest.Server
+    Gosesh       *gosesh.Gosesh
+    Store        gosesh.Storer
+    DeviceStore  gosesh.DeviceCodeStore
+    OAuthServer  *FakeOAuthProvider
+}
+
+func NewTestServer(opts ...TestServerOption) *TestServer {
+    // Implementation approach:
+    // 1. Create MemoryStore for sessions
+    // 2. Create MemoryDeviceCodeStore for device codes
+    // 3. Create FakeOAuthProvider
+    // 4. Configure Gosesh with:
+    //    - CompositeCredentialSource (cookie + header)
+    //    - Test OAuth config pointing to fake provider
+    // 5. Set up routes:
+    //    - /auth/login (browser OAuth begin)
+    //    - /auth/callback (browser OAuth callback)
+    //    - /auth/cli/begin (CLI OAuth begin)
+    //    - /auth/cli/callback (CLI OAuth callback)
+    //    - /auth/device/begin (device code begin)
+    //    - /auth/device/poll (device code poll)
+    //    - /auth/device (device authorization page)
+    //    - /auth/device/callback (device OAuth callback)
+    //    - /api/me (protected endpoint returning session info)
+    // 6. Start httptest.Server
+    // 7. Return TestServer
+}
+
+func (ts *TestServer) Close() {
+    ts.Server.Close()
+    ts.OAuthServer.Close()
+}
+```
+
+```go
+// e2e/cli_client.go
+
+// CLIClient simulates a CLI application authenticating with the server
+type CLIClient struct {
+    BaseURL     string
+    Token       string // stored session token
+    HTTPClient  *http.Client
+}
+
+func NewCLIClient(baseURL string) *CLIClient { ... }
+
+// AuthenticateViaLocalhost performs localhost callback flow
+func (c *CLIClient) AuthenticateViaLocalhost(ctx context.Context) error {
+    // Implementation approach:
+    // 1. Start local HTTP server on random port
+    // 2. Build callback URL: http://localhost:<port>/callback
+    // 3. GET /auth/cli/begin?callback=<url>
+    // 4. Follow redirect to OAuth provider (FakeOAuthProvider auto-approves)
+    // 5. Wait for callback on local server
+    // 6. Extract token from query param
+    // 7. Store token in c.Token
+    // 8. Close local server
+}
+
+// AuthenticateViaDeviceCode performs device code flow
+func (c *CLIClient) AuthenticateViaDeviceCode(ctx context.Context, authorizeFunc func(userCode string) error) error {
+    // Implementation approach:
+    // 1. POST /auth/device/begin
+    // 2. Parse response for device_code, user_code
+    // 3. Call authorizeFunc(userCode) - simulates user authorizing in browser
+    // 4. Poll /auth/device/poll with device_code
+    // 5. When status="complete", extract session_id
+    // 6. Store token in c.Token
+}
+
+// Request makes an authenticated request using Bearer token
+func (c *CLIClient) Request(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+    // Implementation approach:
+    // 1. Create request
+    // 2. Set Authorization: Bearer <c.Token>
+    // 3. Execute request
+    // 4. Return response
+}
+
+// GetMe calls /api/me to verify authentication
+func (c *CLIClient) GetMe(ctx context.Context) (*MeResponse, error) {
+    // Implementation approach:
+    // 1. Call Request(ctx, "GET", "/api/me", nil)
+    // 2. Parse JSON response
+    // 3. Return session info
+}
+```
+
+```go
+// e2e/fake_oauth_provider.go
+
+// FakeOAuthProvider simulates an OAuth2 provider for testing
+type FakeOAuthProvider struct {
+    Server       *httptest.Server
+    Config       *oauth2.Config
+    AutoApprove  bool // automatically approve authorization
+}
+
+func NewFakeOAuthProvider() *FakeOAuthProvider {
+    // Implementation approach:
+    // 1. Create httptest.Server with routes:
+    //    - GET /authorize (authorization endpoint)
+    //    - POST /token (token exchange endpoint)
+    //    - GET /userinfo (user info endpoint)
+    // 2. If AutoApprove, /authorize immediately redirects with code
+    // 3. /token returns access token for valid code
+    // 4. /userinfo returns fake user data
+    // 5. Return provider with oauth2.Config pointing to server
+}
+
+func (p *FakeOAuthProvider) OAuthConfig() *oauth2.Config {
+    return p.Config
+}
+
+func (p *FakeOAuthProvider) Close() {
+    p.Server.Close()
+}
+```
+
+```go
+// e2e_test.go
+
+func TestE2E_LocalhostCallback_FullFlow(t *testing.T) {
+    // Implementation approach:
+    // 1. Create TestServer
+    // 2. Create CLIClient
+    // 3. Call cli.AuthenticateViaLocalhost(ctx)
+    // 4. Assert cli.Token is non-empty
+    // 5. Call cli.GetMe(ctx)
+    // 6. Assert response contains valid session info
+    // 7. Cleanup
+}
+
+func TestE2E_DeviceCode_FullFlow(t *testing.T) {
+    // Implementation approach:
+    // 1. Create TestServer
+    // 2. Create CLIClient
+    // 3. Call cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+    //        // Simulate user authorizing via browser
+    //        return simulateUserAuthorization(ts.Server.URL, userCode)
+    //    })
+    // 4. Assert cli.Token is non-empty
+    // 5. Call cli.GetMe(ctx)
+    // 6. Assert response contains valid session info
+    // 7. Cleanup
+}
+
+func TestE2E_HeaderAuth_ProtectedEndpoint(t *testing.T) {
+    // Implementation approach:
+    // 1. Create TestServer
+    // 2. Create CLIClient and authenticate
+    // 3. Make request to protected endpoint
+    // 4. Assert 200 OK
+    // 5. Assert response contains session data
+}
+
+func TestE2E_SessionExpiry(t *testing.T) {
+    // Implementation approach:
+    // 1. Create TestServer with very short session duration
+    // 2. Authenticate CLI
+    // 3. Wait for session expiry
+    // 4. Make request with token
+    // 5. Assert 401 Unauthorized
+}
+
+// Helper function
+func simulateUserAuthorization(serverURL, userCode string) error {
+    // POST to /auth/device with user_code
+    // Follow OAuth redirects (FakeOAuthProvider auto-approves)
+    // Return nil on success
+}
+```
+
+### Gate: GREEN
+
+- [ ] All tests from RED phase now PASS
+- [ ] Test command: `go test -v -run TestE2E`
+- [ ] All e2e tests pass with real HTTP traffic
+- [ ] Implementation follows pseudocode logic flow
+
+---
+
+## REFACTOR: Quality
+
+**Focus:** Code quality, not new functionality.
+
+- Ensure test cleanup is thorough (no leaked goroutines or servers)
+- Add test timeouts to prevent hanging
+- Consider table-driven tests for similar test cases
+- Document how to run e2e tests separately
+
+### Gate: REFACTOR
+
+- [ ] `go vet ./...` passes
+- [ ] `go test ./...` passes
+- [ ] `make coverage` shows adequate coverage
+- [ ] All tests complete in reasonable time (< 30 seconds)
+- [ ] No resource leaks (verify with `go test -race`)
+- [ ] Code formatting applied (`gofmt`)
+
+---
+
+## Phase Complete
+
+When all gates pass:
+
+1. Update this file's status to **Complete**
+2. Update index.md status table
+3. Implementation complete - proceed with cleanup
+
+---
+
+**Previous:** [Phase 06](06-localhost-callback.md) and [Phase 07](07-device-code-flow.md)
+**Next:** Final phase - implementation complete
