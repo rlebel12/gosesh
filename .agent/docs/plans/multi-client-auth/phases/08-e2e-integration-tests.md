@@ -111,6 +111,8 @@ Each test requires distinct state management.
 
 **Implementation Guidance:**
 
+**Note:** Use a single shared test server started via `TestMain` to minimize overhead. Tests isolate state by clearing sessions between runs, not by creating new servers.
+
 ```go
 // e2e/test_server.go
 
@@ -118,8 +120,8 @@ Each test requires distinct state management.
 type TestServer struct {
     Server       *httptest.Server
     Gosesh       *gosesh.Gosesh
-    Store        gosesh.Storer
-    DeviceStore  gosesh.DeviceCodeStore
+    Store        *gosesh.MemoryStore      // Concrete type for Reset()
+    DeviceStore  *MemoryDeviceCodeStore   // Concrete type for Reset()
     OAuthServer  *FakeOAuthProvider
 }
 
@@ -143,6 +145,15 @@ func NewTestServer(opts ...TestServerOption) *TestServer {
     //    - /api/me (protected endpoint returning session info)
     // 6. Start httptest.Server
     // 7. Return TestServer
+}
+
+func (ts *TestServer) Reset() {
+    // Implementation approach:
+    // 1. Clear all sessions from Store
+    // 2. Clear all device codes from DeviceStore
+    // 3. Reset FakeOAuthProvider state if needed
+    //
+    // Called between tests to isolate state without restarting server
 }
 
 func (ts *TestServer) Close() {
@@ -239,47 +250,71 @@ func (p *FakeOAuthProvider) Close() {
 ```go
 // e2e_test.go
 
+// Package-level shared test server
+var testServer *e2e.TestServer
+
+func TestMain(m *testing.M) {
+    // Implementation approach:
+    // 1. Create single TestServer instance
+    // 2. Store in package-level var
+    // 3. Run tests
+    // 4. Close server and exit
+    testServer = e2e.NewTestServer()
+    code := m.Run()
+    testServer.Close()
+    os.Exit(code)
+}
+
 func TestE2E_LocalhostCallback_FullFlow(t *testing.T) {
     // Implementation approach:
-    // 1. Create TestServer
-    // 2. Create CLIClient
+    // 1. Reset server state (clear sessions, device codes)
+    // 2. Create CLIClient pointing to shared server
     // 3. Call cli.AuthenticateViaLocalhost(ctx)
     // 4. Assert cli.Token is non-empty
     // 5. Call cli.GetMe(ctx)
     // 6. Assert response contains valid session info
-    // 7. Cleanup
+    testServer.Reset()
+    cli := e2e.NewCLIClient(testServer.Server.URL)
+    // ... test logic
 }
 
 func TestE2E_DeviceCode_FullFlow(t *testing.T) {
     // Implementation approach:
-    // 1. Create TestServer
-    // 2. Create CLIClient
+    // 1. Reset server state
+    // 2. Create CLIClient pointing to shared server
     // 3. Call cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
     //        // Simulate user authorizing via browser
-    //        return simulateUserAuthorization(ts.Server.URL, userCode)
+    //        return simulateUserAuthorization(testServer.Server.URL, userCode)
     //    })
     // 4. Assert cli.Token is non-empty
     // 5. Call cli.GetMe(ctx)
     // 6. Assert response contains valid session info
-    // 7. Cleanup
+    testServer.Reset()
+    cli := e2e.NewCLIClient(testServer.Server.URL)
+    // ... test logic
 }
 
 func TestE2E_HeaderAuth_ProtectedEndpoint(t *testing.T) {
     // Implementation approach:
-    // 1. Create TestServer
+    // 1. Reset server state
     // 2. Create CLIClient and authenticate
     // 3. Make request to protected endpoint
     // 4. Assert 200 OK
     // 5. Assert response contains session data
+    testServer.Reset()
+    // ... test logic
 }
 
 func TestE2E_SessionExpiry(t *testing.T) {
     // Implementation approach:
-    // 1. Create TestServer with very short session duration
+    // 1. Reset server state
     // 2. Authenticate CLI
-    // 3. Wait for session expiry
+    // 3. Directly manipulate session in Store to set expired deadline
+    //    (avoids waiting - Store is accessible via testServer.Store)
     // 4. Make request with token
     // 5. Assert 401 Unauthorized
+    testServer.Reset()
+    // ... test logic
 }
 
 // Helper function
@@ -307,6 +342,7 @@ func simulateUserAuthorization(serverURL, userCode string) error {
 - Add test timeouts to prevent hanging
 - Consider table-driven tests for similar test cases
 - Document how to run e2e tests separately
+- **Do not use `t.Parallel()`** - tests share server state and rely on `Reset()` between runs
 
 ### Gate: REFACTOR
 
