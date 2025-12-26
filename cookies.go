@@ -12,33 +12,6 @@ func setSecureCookieHeaders(w http.ResponseWriter) {
 	w.Header().Set("Vary", "Cookie")
 }
 
-// sessionCookie creates a secure session cookie with the given session ID and expiration.
-func (gs *Gosesh) sessionCookie(sessionID Identifier, expireAt time.Time) *http.Cookie {
-	return &http.Cookie{
-		Name:     gs.sessionCookieName,
-		Value:    base64.URLEncoding.EncodeToString([]byte(sessionID.String())),
-		Path:     "/",
-		Domain:   gs.CookieDomain(),
-		Expires:  expireAt,
-		Secure:   gs.Scheme() == "https",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	}
-}
-
-// expireSessionCookie creates a cookie that expires the session cookie.
-func (gs *Gosesh) expireSessionCookie() *http.Cookie {
-	return &http.Cookie{
-		Name:     gs.sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		Expires:  time.Unix(0, 0),
-		Secure:   gs.Scheme() == "https",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	}
-}
-
 // oauthStateCookie creates a secure OAuth2 state cookie with the given state and expiration.
 func (gs *Gosesh) oauthStateCookie(state string, expireAt time.Time) *http.Cookie {
 	return &http.Cookie{
