@@ -109,8 +109,10 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 			return
 		}
 
-		sessionCookie := gs.sessionCookie(session.ID(), session.AbsoluteDeadline())
-		http.SetCookie(w, sessionCookie)
+		if err := gs.credentialSource.WriteSession(w, session); err != nil {
+			done(w, r, fmt.Errorf("write session: %w", err))
+			return
+		}
 		done(w, r, nil)
 	}
 }
@@ -169,7 +171,10 @@ func (gs *Gosesh) Logout(done HandlerDoneFunc) http.HandlerFunc {
 			return
 		}
 
-		http.SetCookie(w, gs.expireSessionCookie())
+		if err := gs.credentialSource.ClearSession(w); err != nil {
+			done(w, r, fmt.Errorf("clear session: %w", err))
+			return
+		}
 		ctx := context.WithValue(r.Context(), sessionKey, nil)
 		done(w, r.WithContext(ctx), nil)
 	})).ServeHTTP

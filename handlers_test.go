@@ -407,6 +407,42 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
 	s.assertCommonResponse(response)
 }
 
+func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccessWithCustomCredentialSource() {
+	request, config, _, store, requestFunc, unmarshalFunc := s.prepareTest(testCallbackSuccess)
+	rr := httptest.NewRecorder()
+
+	customCookieName := "custom_session"
+	credentialSource := NewCookieCredentialSource(
+		WithCookieSourceName(customCookieName),
+		WithCookieSourceSecure(false),
+	)
+	sesh := New(store, WithNow(s.withNow), WithCredentialSources(credentialSource))
+
+	var success bool
+	sesh.OAuth2Callback(
+		config,
+		requestFunc,
+		unmarshalFunc,
+		func(w http.ResponseWriter, r *http.Request, err error) {
+			s.NoError(err)
+			success = true
+			w.WriteHeader(http.StatusOK)
+		},
+	)(rr, request)
+
+	s.True(success)
+	response := rr.Result()
+	s.Equal(2, len(response.Cookies()))
+	sessionCookie := response.Cookies()[1]
+	s.Equal(customCookieName, sessionCookie.Name)
+	s.Equal("MQ==", sessionCookie.Value)
+	s.Equal(s.now.Add(24*time.Hour), sessionCookie.Expires)
+	s.Equal("/", sessionCookie.Path)
+	s.Equal(http.SameSiteLaxMode, sessionCookie.SameSite)
+	s.False(sessionCookie.Secure)
+	s.assertCommonResponse(response)
+}
+
 func (s *Oauth2CallbackHandlerSuite) assertCommonResponse(response *http.Response) {
 	cookie := response.Cookies()[0]
 	s.Equal("oauthstate", cookie.Name)
@@ -608,6 +644,55 @@ func TestLogoutHandler(t *testing.T) {
 			test.logger.assertExpectedLogs(t, tc.wantLogs)
 		})
 	}
+}
+
+func TestLogoutWithCustomCredentialSource(t *testing.T) {
+	assert, require := assert.New(t), require.New(t)
+
+	store := NewMemoryStore()
+	now := func() time.Time {
+		return time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
+
+	customCookieName := "custom_session"
+	credentialSource := NewCookieCredentialSource(
+		WithCookieSourceName(customCookieName),
+		WithCookieSourceSecure(false),
+	)
+
+	gs := New(store, WithNow(now), WithCredentialSources(credentialSource))
+
+	currentTime := now()
+	session, err := store.CreateSession(
+		t.Context(),
+		StringIdentifier("user"),
+		currentTime.Add(time.Hour),
+		currentTime.Add(24*time.Hour),
+	)
+	require.NoError(err)
+
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	ctx := context.WithValue(req.Context(), sessionKey, session)
+	req = req.WithContext(ctx)
+
+	resp := httptest.NewRecorder()
+
+	var success bool
+	gs.Logout(func(w http.ResponseWriter, r *http.Request, err error) {
+		assert.NoError(err)
+		success = true
+		w.WriteHeader(http.StatusOK)
+	}).ServeHTTP(resp, req)
+
+	assert.True(success)
+
+	cookies := resp.Result().Cookies()
+	require.Len(cookies, 1)
+
+	clearedCookie := cookies[0]
+	assert.Equal(customCookieName, clearedCookie.Name)
+	assert.Equal("", clearedCookie.Value)
+	assert.Equal(-1, clearedCookie.MaxAge)
 }
 
 func TestCallbackRedirect(t *testing.T) {
