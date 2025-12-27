@@ -31,97 +31,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// TestE2E_LocalhostCallback_FullFlow tests the full localhost callback OAuth flow.
-func TestE2E_LocalhostCallback_FullFlow(t *testing.T) {
-	testServer.Reset()
-	ctx := t.Context()
-
-	cli := NewCLIClient(testServer.Server.URL)
-
-	// Authenticate via localhost callback
-	err := cli.AuthenticateViaLocalhost(ctx)
-	require.NoError(t, err, "Authentication should succeed")
-	assert.NotEmpty(t, cli.Token, "Token should be set")
-
-	// Verify token works
-	me, err := cli.GetMe(ctx)
-	require.NoError(t, err, "GetMe should succeed")
-	assert.NotEmpty(t, me.UserID, "UserID should be set")
-	assert.NotEmpty(t, me.SessionID, "SessionID should be set")
-}
-
-// TestE2E_LocalhostCallback_TokenWorks verifies the token received works for API calls.
-func TestE2E_LocalhostCallback_TokenWorks(t *testing.T) {
-	testServer.Reset()
-	ctx := t.Context()
-
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
-	require.NoError(t, err)
-
-	// Make authenticated request
-	resp, err := cli.Request(ctx, "GET", "/api/protected", nil)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, 200, resp.StatusCode, "Protected endpoint should allow authenticated request")
-}
-
-// TestE2E_LocalhostCallback_ProtectedEndpoint tests accessing protected endpoint with token.
-func TestE2E_LocalhostCallback_ProtectedEndpoint(t *testing.T) {
-	testServer.Reset()
-	ctx := t.Context()
-
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
-	require.NoError(t, err)
-
-	// Access /api/me
-	me, err := cli.GetMe(ctx)
-	require.NoError(t, err, "Should get session info")
-	assert.NotEmpty(t, me.SessionID)
-	assert.NotEmpty(t, me.UserID)
-}
-
-// TestE2E_LocalhostCallback_ExpiredSession tests session expiry behavior.
-func TestE2E_LocalhostCallback_ExpiredSession(t *testing.T) {
-	testServer.Reset()
-	ctx := t.Context()
-
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
-	require.NoError(t, err)
-
-	// Get the session and manipulate its deadline to be in the past
-	session, err := testServer.Store.GetSession(ctx, cli.Token)
-	require.NoError(t, err)
-
-	// Set deadlines to past
-	pastTime := time.Now().Add(-1 * time.Hour)
-	memSession := session.(*gosesh.MemoryStoreSession)
-	memSession.SetIdleDeadline(pastTime)
-	memSession.SetAbsoluteDeadline(pastTime)
-
-	// Try to use expired session
-	_, err = cli.GetMe(ctx)
-	assert.Error(t, err, "Expired session should fail")
-	assert.Contains(t, err.Error(), "401", "Should return 401 for expired session")
-}
-
-// TestE2E_LocalhostCallback_InvalidToken tests invalid token handling.
-func TestE2E_LocalhostCallback_InvalidToken(t *testing.T) {
-	testServer.Reset()
-	ctx := t.Context()
-
-	cli := NewCLIClient(testServer.Server.URL)
-	cli.Token = "invalid-garbage-token"
-
-	// Try to use invalid token
-	me, err := cli.GetMe(ctx)
-	assert.Error(t, err, "Invalid token should fail")
-	assert.Nil(t, me)
-}
-
 // TestE2E_DeviceCode_FullFlow tests the full device code OAuth flow.
 func TestE2E_DeviceCode_FullFlow(t *testing.T) {
 	testServer.Reset()
@@ -298,7 +207,9 @@ func TestE2E_HeaderAuth_Works(t *testing.T) {
 	ctx := t.Context()
 
 	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
+	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+		return SimulateUserAuthorization(testServer.Server.URL, userCode)
+	})
 	require.NoError(t, err)
 
 	// Use header authentication
@@ -332,9 +243,11 @@ func TestE2E_CompositeAuth_PrefersCookie(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	// Create two different sessions - one via CLI (header), one via browser (cookie)
+	// Create two different sessions - one via device code (header), one via browser (cookie)
 	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
+	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+		return SimulateUserAuthorization(testServer.Server.URL, userCode)
+	})
 	require.NoError(t, err)
 	headerToken := cli.Token
 
@@ -372,7 +285,9 @@ func TestE2E_HeaderAuth_NoRefresh(t *testing.T) {
 	ctx := t.Context()
 
 	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
+	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+		return SimulateUserAuthorization(testServer.Server.URL, userCode)
+	})
 	require.NoError(t, err)
 
 	// Get initial session info
@@ -435,7 +350,9 @@ func TestE2E_HeaderSession_Config(t *testing.T) {
 	ctx := t.Context()
 
 	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
+	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+		return SimulateUserAuthorization(testServer.Server.URL, userCode)
+	})
 	require.NoError(t, err)
 
 	me, err := cli.GetMe(ctx)
@@ -487,7 +404,9 @@ func TestE2E_HeaderSession_NoIdleTimeout(t *testing.T) {
 	ctx := t.Context()
 
 	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaLocalhost(ctx)
+	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+		return SimulateUserAuthorization(testServer.Server.URL, userCode)
+	})
 	require.NoError(t, err)
 
 	me, err := cli.GetMe(ctx)

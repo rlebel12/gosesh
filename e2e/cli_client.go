@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -15,7 +14,7 @@ import (
 )
 
 // CLIClient simulates a CLI application authenticating with the server.
-// It supports both localhost callback flow and device code flow.
+// It supports device code flow and browser OAuth flow.
 type CLIClient struct {
 	BaseURL    string
 	Token      string // stored session token
@@ -37,156 +36,6 @@ func NewCLIClient(baseURL string) *CLIClient {
 				return http.ErrUseLastResponse
 			},
 		},
-	}
-}
-
-// AuthenticateViaLocalhost performs the localhost callback OAuth flow.
-// This simulates a CLI tool that can open a browser and start a local server
-// to receive the OAuth callback.
-func (c *CLIClient) AuthenticateViaLocalhost(ctx context.Context) error {
-	// Start local callback server on random port
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return fmt.Errorf("start callback server: %w", err)
-	}
-	defer listener.Close()
-
-	callbackAddr := listener.Addr().String()
-	callbackURL := "http://" + callbackAddr + "/callback"
-
-	// Channel to receive token from callback
-	tokenCh := make(chan string, 1)
-	errCh := make(chan error, 1)
-
-	// Start callback server
-	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		token := r.URL.Query().Get("token")
-		if token == "" {
-			errCh <- fmt.Errorf("no token in callback")
-			http.Error(w, "No token received", http.StatusBadRequest)
-			return
-		}
-
-		tokenCh <- token
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte("<html><body><h1>Success!</h1><p>You can close this window.</p></body></html>"))
-	})
-
-	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
-	defer server.Shutdown(ctx)
-
-	// Build begin URL with callback parameter
-	beginURL := fmt.Sprintf("%s/auth/cli/begin?callback=%s", c.BaseURL, url.QueryEscape(callbackURL))
-
-	// Make request to begin endpoint (this will redirect to OAuth provider)
-	req, err := http.NewRequestWithContext(ctx, "GET", beginURL, nil)
-	if err != nil {
-		return fmt.Errorf("create begin request: %w", err)
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("begin request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Should redirect to OAuth provider
-	if resp.StatusCode != http.StatusTemporaryRedirect && resp.StatusCode != http.StatusFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected begin response: %d: %s", resp.StatusCode, string(body))
-	}
-
-	// Manually update cookie jar with response cookies (since we're not following redirects)
-	baseURL, _ := url.Parse(c.BaseURL)
-	if cookies := resp.Cookies(); len(cookies) > 0 {
-		c.HTTPClient.Jar.SetCookies(baseURL, cookies)
-	}
-
-	// Save cookies for later (includes state cookie)
-	savedCookies := c.HTTPClient.Jar.Cookies(baseURL)
-
-	// Follow redirect to OAuth provider (auto-approves in test)
-	oauthURL := resp.Header.Get("Location")
-	if oauthURL == "" {
-		return fmt.Errorf("no redirect location in begin response")
-	}
-
-	// Follow OAuth redirect
-	req, err = http.NewRequestWithContext(ctx, "GET", oauthURL, nil)
-	if err != nil {
-		return fmt.Errorf("create oauth request: %w", err)
-	}
-
-	resp, err = c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("oauth request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// OAuth provider should redirect back to our app's callback
-	if resp.StatusCode != http.StatusTemporaryRedirect && resp.StatusCode != http.StatusFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected oauth response: %d: %s", resp.StatusCode, string(body))
-	}
-
-	callbackRedirect := resp.Header.Get("Location")
-	if callbackRedirect == "" {
-		return fmt.Errorf("no redirect location in oauth response")
-	}
-
-	// Follow redirect to app callback (this processes the OAuth code)
-	req, err = http.NewRequestWithContext(ctx, "GET", callbackRedirect, nil)
-	if err != nil {
-		return fmt.Errorf("create callback request: %w", err)
-	}
-
-	// Restore cookies from begin request (includes state cookie)
-	for _, cookie := range savedCookies {
-		req.AddCookie(cookie)
-	}
-
-	resp, err = c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("callback request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// App callback should redirect to our local callback with token
-	if resp.StatusCode != http.StatusTemporaryRedirect && resp.StatusCode != http.StatusFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected callback response: %d: %s", resp.StatusCode, string(body))
-	}
-
-	localCallbackURL := resp.Header.Get("Location")
-	if localCallbackURL == "" {
-		return fmt.Errorf("no redirect to local callback")
-	}
-
-	// Follow redirect to local callback
-	req, err = http.NewRequestWithContext(ctx, "GET", localCallbackURL, nil)
-	if err != nil {
-		return fmt.Errorf("create local callback request: %w", err)
-	}
-
-	// Use default client for local callback (follows redirects)
-	localClient := &http.Client{Timeout: 5 * time.Second}
-	resp, err = localClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("local callback request: %w", err)
-	}
-	resp.Body.Close()
-
-	// Wait for token from callback server
-	select {
-	case token := <-tokenCh:
-		c.Token = token
-		return nil
-	case err := <-errCh:
-		return err
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("timeout waiting for callback")
 	}
 }
 

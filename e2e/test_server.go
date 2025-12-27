@@ -100,15 +100,6 @@ func NewTestServer(opts ...TestServerOption) *TestServer {
 	// Now configure OAuth redirects with actual server URL
 	ts.OAuthConfig.RedirectURL = ts.Server.URL + "/auth/callback"
 
-	// Create OAuth config for CLI
-	cliOAuthConfig := &oauth2.Config{
-		ClientID:     ts.OAuthConfig.ClientID,
-		ClientSecret: ts.OAuthConfig.ClientSecret,
-		Endpoint:     ts.OAuthConfig.Endpoint,
-		Scopes:       ts.OAuthConfig.Scopes,
-		RedirectURL:  ts.Server.URL + "/auth/cli/callback",
-	}
-
 	// Create OAuth config for device code flow
 	deviceOAuthConfig := &oauth2.Config{
 		ClientID:     ts.OAuthConfig.ClientID,
@@ -125,14 +116,6 @@ func NewTestServer(opts ...TestServerOption) *TestServer {
 		fakeRequestUser,
 		fakeUnmarshalUser,
 		nil, // Use default done handler
-	))
-
-	// CLI localhost callback routes
-	mux.HandleFunc("/auth/cli/begin", ts.Gosesh.OAuth2BeginCLI(cliOAuthConfig))
-	mux.HandleFunc("/auth/cli/callback", ts.Gosesh.OAuth2CallbackCLI(
-		cliOAuthConfig,
-		fakeRequestUser,
-		fakeUnmarshalUser,
 	))
 
 	// Device code routes
