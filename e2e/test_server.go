@@ -17,12 +17,12 @@ import (
 // TestServer wraps an HTTP test server with gosesh for e2e testing.
 // It provides a complete working server with OAuth2, sessions, and authentication.
 type TestServer struct {
-	Server       *httptest.Server
-	Gosesh       *gosesh.Gosesh
-	Store        *gosesh.MemoryStore
-	DeviceStore  *gosesh.MemoryDeviceCodeStore
-	OAuthServer  *FakeOAuthProvider
-	OAuthConfig  *oauth2.Config
+	Server      *httptest.Server
+	Gosesh      *gosesh.Gosesh
+	Store       *gosesh.MemoryStore
+	DeviceStore *gosesh.MemoryDeviceCodeStore
+	OAuthServer *FakeOAuthProvider
+	OAuthConfig *oauth2.Config
 }
 
 // TestServerOption configures a TestServer.

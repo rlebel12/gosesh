@@ -32,10 +32,10 @@ func Example_configuration() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	gs := gosesh.New(store,
-		gosesh.WithLogger(logger),                     // Set a custom logger
-		gosesh.WithSessionCookieName("my_session"),    // Custom session cookie name
-		gosesh.WithSessionMaxLifetime(24*time.Hour),   // Maximum session lifetime
-		gosesh.WithSessionIdleTimeout(1*time.Hour),    // Session idle timeout
+		gosesh.WithLogger(logger),                   // Set a custom logger
+		gosesh.WithSessionCookieName("my_session"),  // Custom session cookie name
+		gosesh.WithSessionMaxLifetime(24*time.Hour), // Maximum session lifetime
+		gosesh.WithSessionIdleTimeout(1*time.Hour),  // Session idle timeout
 		gosesh.WithOrigin(&url.URL{ // Set your application's origin
 			Scheme: "https",
 			Host:   "example.com",

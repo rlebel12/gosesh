@@ -261,9 +261,9 @@ func (gs *Gosesh) OAuth2CallbackCLI(
 
 // getCLISessionConfig returns the appropriate session configuration for CLI sessions.
 // It attempts to extract the configuration from the credential source:
-//   1. If using CompositeCredentialSource, finds the first HeaderCredentialSource
-//   2. If using HeaderCredentialSource directly, uses its config
-//   3. Otherwise, returns DefaultCLISessionConfig()
+//  1. If using CompositeCredentialSource, finds the first HeaderCredentialSource
+//  2. If using HeaderCredentialSource directly, uses its config
+//  3. Otherwise, returns DefaultCLISessionConfig()
 //
 // This allows CLI sessions to have different timeout characteristics than
 // browser sessions (e.g., 30-day absolute timeout, no idle timeout).

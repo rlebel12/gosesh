@@ -34,58 +34,58 @@ func (f *fakeIdentifier) String() string {
 // TestOAuth2BeginCLI_CallbackValidation tests callback URL validation in OAuth2BeginCLI
 func TestOAuth2BeginCLI_CallbackValidation(t *testing.T) {
 	tests := []struct {
-		name         string
-		callbackURL  string
+		name          string
+		callbackURL   string
 		shouldSucceed bool
-		expectedCode int
+		expectedCode  int
 	}{
 		{
-			name:         "begin_valid_callback_url",
-			callbackURL:  "http://localhost:8080/cb",
+			name:          "begin_valid_callback_url",
+			callbackURL:   "http://localhost:8080/cb",
 			shouldSucceed: true,
-			expectedCode: http.StatusTemporaryRedirect,
+			expectedCode:  http.StatusTemporaryRedirect,
 		},
 		{
-			name:         "begin_callback_with_port",
-			callbackURL:  "http://localhost:54321/cb",
+			name:          "begin_callback_with_port",
+			callbackURL:   "http://localhost:54321/cb",
 			shouldSucceed: true,
-			expectedCode: http.StatusTemporaryRedirect,
+			expectedCode:  http.StatusTemporaryRedirect,
 		},
 		{
-			name:         "begin_callback_127_0_0_1",
-			callbackURL:  "http://127.0.0.1:8080/cb",
+			name:          "begin_callback_127_0_0_1",
+			callbackURL:   "http://127.0.0.1:8080/cb",
 			shouldSucceed: true,
-			expectedCode: http.StatusTemporaryRedirect,
+			expectedCode:  http.StatusTemporaryRedirect,
 		},
 		{
-			name:         "begin_invalid_callback_host",
-			callbackURL:  "http://evil.com/cb",
+			name:          "begin_invalid_callback_host",
+			callbackURL:   "http://evil.com/cb",
 			shouldSucceed: false,
-			expectedCode: http.StatusBadRequest,
+			expectedCode:  http.StatusBadRequest,
 		},
 		{
-			name:         "begin_callback_https_localhost",
-			callbackURL:  "https://localhost:8080/cb",
+			name:          "begin_callback_https_localhost",
+			callbackURL:   "https://localhost:8080/cb",
 			shouldSucceed: false,
-			expectedCode: http.StatusBadRequest,
+			expectedCode:  http.StatusBadRequest,
 		},
 		{
-			name:         "begin_missing_callback",
-			callbackURL:  "",
+			name:          "begin_missing_callback",
+			callbackURL:   "",
 			shouldSucceed: false,
-			expectedCode: http.StatusBadRequest,
+			expectedCode:  http.StatusBadRequest,
 		},
 		{
-			name:         "begin_callback_malformed",
-			callbackURL:  "not-a-url",
+			name:          "begin_callback_malformed",
+			callbackURL:   "not-a-url",
 			shouldSucceed: false,
-			expectedCode: http.StatusBadRequest,
+			expectedCode:  http.StatusBadRequest,
 		},
 		{
-			name:         "begin_callback_with_query",
-			callbackURL:  "http://localhost:8080/cb?existing=param",
+			name:          "begin_callback_with_query",
+			callbackURL:   "http://localhost:8080/cb?existing=param",
 			shouldSucceed: true,
-			expectedCode: http.StatusTemporaryRedirect,
+			expectedCode:  http.StatusTemporaryRedirect,
 		},
 	}
 

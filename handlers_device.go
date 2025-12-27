@@ -80,7 +80,7 @@ func (gs *Gosesh) DeviceCodeBegin(store DeviceCodeStore) http.HandlerFunc {
 			UserCode:        userCode,
 			VerificationURI: verificationURI,
 			ExpiresIn:       int(15 * 60), // 15 minutes in seconds
-			Interval:        5,             // 5 seconds
+			Interval:        5,            // 5 seconds
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -14,10 +14,10 @@ import (
 // TestAuthenticateAcrossSourceTypes tests the Authenticate middleware with different credential sources.
 func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 	testCases := []struct {
-		name              string
-		credentialSource  CredentialSource
-		setupRequest      func(t *testing.T, r *http.Request, session Session)
-		wantSessionInCtx  bool
+		name             string
+		credentialSource CredentialSource
+		setupRequest     func(t *testing.T, r *http.Request, session Session)
+		wantSessionInCtx bool
 	}{
 		{
 			name:             "authenticate_cookie_source",

@@ -33,63 +33,63 @@ func TestHeaderCredentialSource_SessionConfigDefaults(t *testing.T) {
 
 func TestHeaderCredentialSource_ReadSessionID(t *testing.T) {
 	tests := []struct {
-		name             string
-		authHeader       string
+		name              string
+		authHeader        string
 		expectedSessionID string
 	}{
 		{
-			name:             "read_missing_header",
-			authHeader:       "",
+			name:              "read_missing_header",
+			authHeader:        "",
 			expectedSessionID: "",
 		},
 		{
-			name:             "read_valid_bearer",
-			authHeader:       "Bearer abc123",
+			name:              "read_valid_bearer",
+			authHeader:        "Bearer abc123",
 			expectedSessionID: "abc123",
 		},
 		{
-			name:             "read_bearer_base64",
-			authHeader:       "Bearer " + base64.StdEncoding.EncodeToString([]byte("user123")),
+			name:              "read_bearer_base64",
+			authHeader:        "Bearer " + base64.StdEncoding.EncodeToString([]byte("user123")),
 			expectedSessionID: "user123",
 		},
 		{
-			name:             "read_wrong_scheme",
-			authHeader:       "Basic xxx",
+			name:              "read_wrong_scheme",
+			authHeader:        "Basic xxx",
 			expectedSessionID: "",
 		},
 		{
-			name:             "read_malformed_no_token",
-			authHeader:       "Bearer ",
+			name:              "read_malformed_no_token",
+			authHeader:        "Bearer ",
 			expectedSessionID: "",
 		},
 		{
-			name:             "read_malformed_no_space",
-			authHeader:       "Bearerabc123",
+			name:              "read_malformed_no_space",
+			authHeader:        "Bearerabc123",
 			expectedSessionID: "",
 		},
 		{
-			name:             "read_case_insensitive",
-			authHeader:       "bearer abc123",
+			name:              "read_case_insensitive",
+			authHeader:        "bearer abc123",
 			expectedSessionID: "abc123",
 		},
 		{
-			name:             "read_BEARER_caps",
-			authHeader:       "BEARER abc123",
+			name:              "read_BEARER_caps",
+			authHeader:        "BEARER abc123",
 			expectedSessionID: "abc123",
 		},
 		{
-			name:             "read_extra_whitespace",
-			authHeader:       "Bearer   abc123  ",
+			name:              "read_extra_whitespace",
+			authHeader:        "Bearer   abc123  ",
 			expectedSessionID: "abc123",
 		},
 		{
-			name:             "read_token_with_special_chars",
-			authHeader:       "Bearer abc-123_xyz.token",
+			name:              "read_token_with_special_chars",
+			authHeader:        "Bearer abc-123_xyz.token",
 			expectedSessionID: "abc-123_xyz.token",
 		},
 		{
-			name:             "read_non_base64_token",
-			authHeader:       "Bearer not-valid-base64!",
+			name:              "read_non_base64_token",
+			authHeader:        "Bearer not-valid-base64!",
 			expectedSessionID: "not-valid-base64!",
 		},
 	}

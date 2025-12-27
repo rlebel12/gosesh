@@ -13,20 +13,20 @@ import (
 // It handles the OAuth2 flow, session creation and validation, and provides middleware
 // for protecting routes.
 type Gosesh struct {
-	store                 Storer
-	logger                *slog.Logger
-	origin                *url.URL
-	allowedHosts          []string
-	sessionCookieName     string
-	oAuth2StateCookieName string
-	redirectCookieName    string
-	redirectParamName     string
+	store                   Storer
+	logger                  *slog.Logger
+	origin                  *url.URL
+	allowedHosts            []string
+	sessionCookieName       string
+	oAuth2StateCookieName   string
+	redirectCookieName      string
+	redirectParamName       string
 	sessionIdleTimeout      time.Duration
 	sessionMaxLifetime      time.Duration
 	sessionRefreshThreshold time.Duration
-	now                   func() time.Time
-	cookieDomain          func() string
-	credentialSource      CredentialSource
+	now                     func() time.Time
+	cookieDomain            func() string
+	credentialSource        CredentialSource
 }
 
 // Identifier is an interface that represents a unique identifier for users and sessions.
@@ -55,17 +55,17 @@ func (gs *Gosesh) CookieDomain() string {
 func New(store Storer, opts ...NewOpts) *Gosesh {
 	url, _ := url.Parse("http://localhost")
 	gs := &Gosesh{
-		store:                 store,
-		sessionCookieName:     "session",
-		oAuth2StateCookieName: "oauthstate",
-		redirectCookieName:    "redirect",
-		redirectParamName:     "next",
+		store:                   store,
+		sessionCookieName:       "session",
+		oAuth2StateCookieName:   "oauthstate",
+		redirectCookieName:      "redirect",
+		redirectParamName:       "next",
 		sessionIdleTimeout:      1 * time.Hour,
 		sessionMaxLifetime:      24 * time.Hour,
 		sessionRefreshThreshold: 10 * time.Minute,
-		origin:                url,
-		allowedHosts:          []string{url.Hostname()},
-		now:                   time.Now,
+		origin:                  url,
+		allowedHosts:            []string{url.Hostname()},
+		now:                     time.Now,
 	}
 	gs.cookieDomain = func() string { return gs.origin.Hostname() }
 	for _, opt := range opts {
