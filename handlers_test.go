@@ -2,6 +2,7 @@ package gosesh
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -823,4 +824,229 @@ func TestCallbackRedirect(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExchangeExternalToken(t *testing.T) {
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	withNow := func() time.Time { return fixedTime }
+
+	// Helper to create a successful request func
+	successRequestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	// Helper to create a successful unmarshal func
+	successUnmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	tests := map[string]struct {
+		giveRequestBody   string
+		giveRequestFunc   RequestFunc
+		giveUnmarshalFunc UnmarshalFunc
+		giveStoreSetup    func(t *testing.T, store *erroringStore)
+		wantStatusCode    int
+		wantErrContains   string
+		wantSessionID     bool
+	}{
+		"valid_token_creates_session": {
+			giveRequestBody:   `{"access_token":"valid-token"}`,
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			wantStatusCode:    http.StatusOK,
+			wantSessionID:     true,
+		},
+		"invalid_json_body": {
+			giveRequestBody: `{invalid json`,
+			wantStatusCode:  http.StatusBadRequest,
+			wantErrContains: "parse request body",
+		},
+		"missing_access_token": {
+			giveRequestBody: `{"access_token":""}`,
+			wantStatusCode:  http.StatusBadRequest,
+			wantErrContains: "empty access_token",
+		},
+		"request_func_error": {
+			giveRequestBody: `{"access_token":"valid-token"}`,
+			giveRequestFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
+				return nil, errors.New("provider unreachable")
+			},
+			giveUnmarshalFunc: successUnmarshalFunc,
+			wantStatusCode:    http.StatusInternalServerError,
+			wantErrContains:   "failed exchanging token",
+		},
+		"unmarshal_error": {
+			giveRequestBody: `{"access_token":"valid-token"}`,
+			giveRequestFunc: successRequestFunc,
+			giveUnmarshalFunc: func(_ []byte) (Identifier, error) {
+				return nil, errors.New("invalid user data")
+			},
+			wantStatusCode:  http.StatusInternalServerError,
+			wantErrContains: "failed unmarshalling data",
+		},
+		"upsert_user_error": {
+			giveRequestBody:   `{"access_token":"valid-token"}`,
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveStoreSetup: func(t *testing.T, store *erroringStore) {
+				t.Helper()
+				store.upsertUserError = true
+			},
+			wantStatusCode:  http.StatusInternalServerError,
+			wantErrContains: "failed upserting user",
+		},
+		"create_session_error": {
+			giveRequestBody:   `{"access_token":"valid-token"}`,
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveStoreSetup: func(t *testing.T, store *erroringStore) {
+				t.Helper()
+				store.createSessionError = true
+			},
+			wantStatusCode:  http.StatusInternalServerError,
+			wantErrContains: "failed creating session",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert, require := assert.New(t), require.New(t)
+
+			store := &erroringStore{Storer: NewMemoryStore()}
+			if tc.giveStoreSetup != nil {
+				tc.giveStoreSetup(t, store)
+			}
+
+			gs := New(store, WithNow(withNow))
+
+			var capturedErr error
+			doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+				capturedErr = err
+				if err != nil {
+					code := http.StatusInternalServerError
+					errMsg := err.Error()
+					if strings.HasPrefix(errMsg, "parse request body:") ||
+						strings.HasPrefix(errMsg, "validate token:") {
+						code = http.StatusBadRequest
+					}
+					http.Error(w, err.Error(), code)
+					return
+				}
+			}
+
+			handler := gs.ExchangeExternalToken(tc.giveRequestFunc, tc.giveUnmarshalFunc, doneHandler)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(tc.giveRequestBody))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			assert.Equal(tc.wantStatusCode, rr.Code)
+
+			if tc.wantErrContains != "" {
+				require.Error(capturedErr)
+				assert.Contains(capturedErr.Error(), tc.wantErrContains)
+			}
+
+			if tc.wantSessionID {
+				assert.NoError(capturedErr)
+				assert.Equal("application/json", rr.Header().Get("Content-Type"))
+
+				var response ExchangeTokenResponse
+				err := json.NewDecoder(rr.Body).Decode(&response)
+				require.NoError(err)
+				assert.NotEmpty(response.SessionID)
+				assert.False(response.ExpiresAt.IsZero())
+			}
+		})
+	}
+}
+
+func TestExchangeExternalToken_CLISessionConfig(t *testing.T) {
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	withNow := func() time.Time { return fixedTime }
+
+	store := NewMemoryStore()
+	gs := New(store, WithNow(withNow))
+
+	requestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	unmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		require.NoError(t, err)
+	}
+
+	handler := gs.ExchangeExternalToken(requestFunc, unmarshalFunc, doneHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(`{"access_token":"valid-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+
+	// Parse the response to get the session ID
+	var response ExchangeTokenResponse
+	err := json.NewDecoder(rr.Body).Decode(&response)
+	require.NoError(t, err)
+
+	// Retrieve the session from the store
+	capturedSession, err := store.GetSession(t.Context(), response.SessionID)
+	require.NoError(t, err)
+
+	// Verify CLI session config: 30-day absolute, no idle timeout (idle = now)
+	cliConfig := DefaultCLISessionConfig()
+	expectedAbsoluteDeadline := fixedTime.Add(cliConfig.AbsoluteDuration)
+	expectedIdleDeadline := fixedTime.Add(cliConfig.IdleDuration) // Should be 0, so idle = now
+
+	assert.Equal(t, expectedAbsoluteDeadline, capturedSession.AbsoluteDeadline())
+	assert.Equal(t, expectedIdleDeadline, capturedSession.IdleDeadline())
+}
+
+func TestExchangeExternalToken_ResponseFormat(t *testing.T) {
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	withNow := func() time.Time { return fixedTime }
+
+	store := NewMemoryStore()
+	gs := New(store, WithNow(withNow))
+
+	requestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	unmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		require.NoError(t, err)
+	}
+
+	handler := gs.ExchangeExternalToken(requestFunc, unmarshalFunc, doneHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(`{"access_token":"valid-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+
+	// Verify response body has the required fields
+	var response map[string]interface{}
+	err := json.NewDecoder(rr.Body).Decode(&response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response, "session_id")
+	assert.Contains(t, response, "expires_at")
+	assert.NotEmpty(t, response["session_id"])
+	assert.NotEmpty(t, response["expires_at"])
 }

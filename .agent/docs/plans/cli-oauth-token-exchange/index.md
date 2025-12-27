@@ -10,7 +10,7 @@ Replace insecure CLI OAuth flow (session token in URL) with a secure token excha
 
 | Phase | Description | Depends On | Status |
 |-------|-------------|------------|--------|
-| [01-exchange-endpoint](phases/01-exchange-endpoint.md) | Add ExchangeExternalToken handler | None | Pending |
+| [01-exchange-endpoint](phases/01-exchange-endpoint.md) | Add ExchangeExternalToken handler | None | Complete |
 | [02-remove-cli-handlers](phases/02-remove-cli-handlers.md) | Remove OAuth2BeginCLI and OAuth2CallbackCLI | Phase 01 | Pending |
 
 ## Dependencies
@@ -28,8 +28,8 @@ Replace insecure CLI OAuth flow (session token in URL) with a secure token excha
 
 ## Status
 
-**Progress:** 0/2 phases complete
-**Current Phase:** Not started
+**Progress:** 1/2 phases complete
+**Current Phase:** Phase 02
 **Blocked:** None
 
 ---

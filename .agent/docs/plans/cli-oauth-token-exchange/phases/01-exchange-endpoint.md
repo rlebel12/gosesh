@@ -1,7 +1,7 @@
 # Phase 01: ExchangeExternalToken Endpoint
 
 **Depends on:** None
-**Status:** Pending
+**Status:** Complete
 
 ---
 

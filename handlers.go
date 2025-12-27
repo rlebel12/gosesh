@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -138,6 +140,127 @@ func unmarshalUserData(
 		return nil, fmt.Errorf("unmarshal user data: %w", err)
 	}
 	return user, nil
+}
+
+// ExchangeTokenRequest is the expected JSON body for the token exchange endpoint.
+type ExchangeTokenRequest struct {
+	AccessToken string `json:"access_token"`
+}
+
+// ExchangeTokenResponse is the JSON response for the token exchange endpoint.
+type ExchangeTokenResponse struct {
+	SessionID string    `json:"session_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// ExchangeExternalToken creates a handler that exchanges an external OAuth2 access token
+// for a gosesh session. This is used by CLI/desktop clients that handle OAuth2/PKCE
+// directly with the identity provider and then exchange the access token for a session.
+// The handler uses CLI session configuration (30-day absolute timeout, no idle timeout).
+func (gs *Gosesh) ExchangeExternalToken(
+	request RequestFunc,
+	unmarshal UnmarshalFunc,
+	done HandlerDoneFunc,
+) http.HandlerFunc {
+	if done == nil {
+		gs.logWarn("no done handler provided for ExchangeExternalToken, using default")
+		done = defaultExchangeTokenDoneHandler(gs)
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		var req ExchangeTokenRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			done(w, r, fmt.Errorf("parse request body: %w", err))
+			return
+		}
+
+		if req.AccessToken == "" {
+			done(w, r, errors.New("validate token: empty access_token"))
+			return
+		}
+
+		user, err := fetchAndUnmarshalUserData(ctx, request, unmarshal, req.AccessToken)
+		if err != nil {
+			done(w, r, err)
+			return
+		}
+
+		userID, err := gs.store.UpsertUser(ctx, user)
+		if err != nil {
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedUpsertingUser, err))
+			return
+		}
+
+		now := gs.now().UTC()
+		cliConfig := DefaultCLISessionConfig()
+		session, err := gs.store.CreateSession(
+			ctx,
+			userID,
+			now.Add(cliConfig.IdleDuration),
+			now.Add(cliConfig.AbsoluteDuration),
+		)
+		if err != nil {
+			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
+			return
+		}
+
+		response := ExchangeTokenResponse{
+			SessionID: session.ID().String(),
+			ExpiresAt: session.AbsoluteDeadline(),
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			done(w, r, fmt.Errorf("encode response: %w", err))
+			return
+		}
+		done(w, r, nil)
+	}
+}
+
+// fetchAndUnmarshalUserData retrieves and unmarshals user data from an OAuth2 provider.
+// Unlike unmarshalUserData, this function wraps errors with appropriate sentinel types
+// for the ExchangeExternalToken handler.
+func fetchAndUnmarshalUserData(
+	ctx context.Context,
+	request RequestFunc,
+	unmarshal UnmarshalFunc,
+	accessToken string,
+) (Identifier, error) {
+	response, err := request(ctx, accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: fetch user data: %w", ErrFailedExchangingToken, err)
+	}
+	defer response.Close()
+	contents, err := io.ReadAll(response)
+	if err != nil {
+		return nil, fmt.Errorf("%w: read response: %w", ErrFailedExchangingToken, err)
+	}
+	user, err := unmarshal(contents)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrFailedUnmarshallingData, err)
+	}
+	return user, nil
+}
+
+// defaultExchangeTokenDoneHandler creates a default handler for ExchangeExternalToken completion.
+// It handles errors by setting appropriate HTTP status codes.
+func defaultExchangeTokenDoneHandler(gs *Gosesh) HandlerDoneFunc {
+	return func(w http.ResponseWriter, r *http.Request, err error) {
+		if err != nil {
+			code := http.StatusInternalServerError
+			// Check for validation errors (should be 400)
+			errMsg := err.Error()
+			if strings.HasPrefix(errMsg, "parse request body:") ||
+				strings.HasPrefix(errMsg, "validate token:") {
+				code = http.StatusBadRequest
+			}
+			gs.logError("exchange token", err)
+			http.Error(w, http.StatusText(code), code)
+			return
+		}
+	}
 }
 
 var (
