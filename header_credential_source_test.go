@@ -25,7 +25,7 @@ func TestHeaderCredentialSource_SessionConfigDefaults(t *testing.T) {
 	source := NewHeaderCredentialSource()
 	config := source.SessionConfig()
 
-	// CLI defaults: no idle timeout, 30 day absolute
+	// Native app defaults: no idle timeout, 30 day absolute
 	assert.Equal(t, time.Duration(0), config.IdleDuration, "Default should have no idle timeout")
 	assert.Equal(t, 30*24*time.Hour, config.AbsoluteDuration, "Default should have 30 day absolute duration")
 	assert.False(t, config.RefreshEnabled, "Default should have refresh disabled")

@@ -41,7 +41,7 @@ func WithHeaderScheme(scheme string) HeaderSourceOption {
 }
 
 // WithHeaderSessionConfig sets the session configuration for header-based sessions.
-// Default is DefaultCLISessionConfig() (no idle timeout, 30 day absolute, no refresh).
+// Default is DefaultNativeAppSessionConfig() (no idle timeout, 30 day absolute, no refresh).
 func WithHeaderSessionConfig(cfg SessionConfig) HeaderSourceOption {
 	return func(h *HeaderCredentialSource) {
 		h.sessionConfig = cfg
@@ -54,7 +54,7 @@ func NewHeaderCredentialSource(opts ...HeaderSourceOption) *HeaderCredentialSour
 	h := &HeaderCredentialSource{
 		headerName:    "Authorization",
 		scheme:        "Bearer",
-		sessionConfig: DefaultCLISessionConfig(),
+		sessionConfig: DefaultNativeAppSessionConfig(),
 	}
 
 	for _, opt := range opts {

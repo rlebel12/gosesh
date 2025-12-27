@@ -9,7 +9,7 @@ import (
 // It writes/clears to all sources that support writing.
 //
 // This allows supporting multiple authentication methods simultaneously,
-// such as cookies for browsers and headers for CLI/API clients.
+// such as cookies for browsers and headers for native app/API clients.
 //
 // Source ordering matters:
 // - The first source that returns a non-empty session ID wins on read

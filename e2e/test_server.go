@@ -64,7 +64,7 @@ func NewTestServer(opts ...TestServerOption) *TestServer {
 	)
 
 	headerSource := gosesh.NewHeaderCredentialSource(
-		gosesh.WithHeaderSessionConfig(gosesh.DefaultCLISessionConfig()),
+		gosesh.WithHeaderSessionConfig(gosesh.DefaultNativeAppSessionConfig()),
 	)
 
 	// Cookie first in composite (takes precedence)
@@ -244,11 +244,11 @@ func (ts *TestServer) handleDeviceCallback(oauthConfig *oauth2.Config) http.Hand
 			return
 		}
 
-		// Create session with CLI config
-		cliConfig := gosesh.DefaultCLISessionConfig()
+		// Create session with native app config
+		nativeAppConfig := gosesh.DefaultNativeAppSessionConfig()
 		now := time.Now()
-		idleDeadline := now.Add(cliConfig.AbsoluteDuration) // No idle timeout
-		absoluteDeadline := now.Add(cliConfig.AbsoluteDuration)
+		idleDeadline := now.Add(nativeAppConfig.AbsoluteDuration) // No idle timeout
+		absoluteDeadline := now.Add(nativeAppConfig.AbsoluteDuration)
 
 		session, err := ts.Store.CreateSession(ctx, userID, idleDeadline, absoluteDeadline)
 		if err != nil {

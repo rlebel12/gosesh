@@ -154,9 +154,9 @@ type ExchangeTokenResponse struct {
 }
 
 // ExchangeExternalToken creates a handler that exchanges an external OAuth2 access token
-// for a gosesh session. This is used by CLI/desktop clients that handle OAuth2/PKCE
-// directly with the identity provider and then exchange the access token for a session.
-// The handler uses CLI session configuration (30-day absolute timeout, no idle timeout).
+// for a gosesh session. This is used by native app clients (desktop, mobile, CLI) that
+// handle OAuth2/PKCE directly with the identity provider and then exchange the access
+// token for a session. Uses native app session config (30-day absolute timeout, no idle timeout).
 func (gs *Gosesh) ExchangeExternalToken(
 	request RequestFunc,
 	unmarshal UnmarshalFunc,
@@ -193,12 +193,12 @@ func (gs *Gosesh) ExchangeExternalToken(
 		}
 
 		now := gs.now().UTC()
-		cliConfig := DefaultCLISessionConfig()
+		nativeAppConfig := DefaultNativeAppSessionConfig()
 		session, err := gs.store.CreateSession(
 			ctx,
 			userID,
-			now.Add(cliConfig.IdleDuration),
-			now.Add(cliConfig.AbsoluteDuration),
+			now.Add(nativeAppConfig.IdleDuration),
+			now.Add(nativeAppConfig.AbsoluteDuration),
 		)
 		if err != nil {
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))

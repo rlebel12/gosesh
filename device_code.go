@@ -8,7 +8,7 @@ import (
 
 // DeviceCodeEntry represents a pending device authorization.
 // It tracks the state of a device code flow, which allows headless clients
-// (like CLI tools) to authenticate by having the user enter a short code
+// (like native apps or CLI tools) to authenticate by having the user enter a short code
 // on another device with a browser.
 type DeviceCodeEntry struct {
 	// DeviceCode is the long, secret code that the device uses for polling.

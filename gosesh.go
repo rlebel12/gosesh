@@ -185,7 +185,7 @@ func WithCredentialSource(source CredentialSource) func(*Gosesh) {
 // WithCredentialSources creates a composite credential source from multiple sources.
 // Sources are tried in order - the first one that returns a credential is used.
 // This allows supporting multiple authentication methods simultaneously
-// (e.g., cookies for browsers and headers for CLI/API clients).
+// (e.g., cookies for browsers and headers for native app/API clients).
 func WithCredentialSources(sources ...CredentialSource) func(*Gosesh) {
 	return func(gs *Gosesh) {
 		gs.credentialSource = NewCompositeCredentialSource(sources...)
@@ -281,12 +281,12 @@ func DefaultBrowserSessionConfig() SessionConfig {
 	}
 }
 
-// DefaultCLISessionConfig returns the default session configuration for
-// header-based CLI/API sessions. These sessions have:
+// DefaultNativeAppSessionConfig returns the default session configuration for
+// native application sessions (desktop apps, CLI tools, mobile apps). These sessions have:
 // - No idle timeout (0 duration means no idle expiry)
-// - 30 day absolute timeout (long-lived for CLI convenience)
+// - 30 day absolute timeout (long-lived for native app convenience)
 // - Refresh disabled (tokens are long-lived and not refreshed)
-func DefaultCLISessionConfig() SessionConfig {
+func DefaultNativeAppSessionConfig() SessionConfig {
 	return SessionConfig{
 		IdleDuration:     0, // No idle timeout
 		AbsoluteDuration: 30 * 24 * time.Hour,

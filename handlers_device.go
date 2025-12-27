@@ -44,7 +44,7 @@ type DeviceCodePollResponse struct {
 }
 
 // DeviceCodeBegin creates a new device authorization request.
-// This endpoint is called by devices (like CLI tools) to initiate the device flow.
+// This endpoint is called by devices (like native apps or CLI tools) to initiate the device flow.
 //
 // POST /auth/device/begin
 // Response: DeviceCodeBeginResponse
@@ -293,7 +293,7 @@ func (gs *Gosesh) DeviceCodeAuthorize(store DeviceCodeStore) http.HandlerFunc {
 // DeviceCodeAuthorizeCallback handles the OAuth callback for device flow.
 // After the user completes OAuth, this links the session to the device code.
 //
-// This is similar to OAuth2Callback but uses CLI session config and completes the device code.
+// This is similar to OAuth2Callback but uses native app session config and completes the device code.
 func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 	store DeviceCodeStore,
 	oauthCfg *oauth2.Config,
@@ -327,17 +327,17 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 			return
 		}
 
-		// Create session with CLI session config (30 days, no idle timeout)
+		// Create session with native app session config (30 days, no idle timeout)
 		now := gs.now()
-		cliConfig := DefaultCLISessionConfig()
+		nativeAppConfig := DefaultNativeAppSessionConfig()
 		var idleDeadline time.Time
-		if cliConfig.IdleDuration > 0 {
-			idleDeadline = now.Add(cliConfig.IdleDuration)
+		if nativeAppConfig.IdleDuration > 0 {
+			idleDeadline = now.Add(nativeAppConfig.IdleDuration)
 		} else {
 			// No idle timeout - set to absolute deadline
-			idleDeadline = now.Add(cliConfig.AbsoluteDuration)
+			idleDeadline = now.Add(nativeAppConfig.AbsoluteDuration)
 		}
-		absoluteDeadline := now.Add(cliConfig.AbsoluteDuration)
+		absoluteDeadline := now.Add(nativeAppConfig.AbsoluteDuration)
 
 		session, err := gs.store.CreateSession(ctx, userID, idleDeadline, absoluteDeadline)
 		if err != nil {

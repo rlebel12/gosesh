@@ -963,7 +963,7 @@ func TestExchangeExternalToken(t *testing.T) {
 	}
 }
 
-func TestExchangeExternalToken_CLISessionConfig(t *testing.T) {
+func TestExchangeExternalToken_NativeAppSessionConfig(t *testing.T) {
 	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	withNow := func() time.Time { return fixedTime }
 
@@ -1001,10 +1001,10 @@ func TestExchangeExternalToken_CLISessionConfig(t *testing.T) {
 	capturedSession, err := store.GetSession(t.Context(), response.SessionID)
 	require.NoError(t, err)
 
-	// Verify CLI session config: 30-day absolute, no idle timeout (idle = now)
-	cliConfig := DefaultCLISessionConfig()
-	expectedAbsoluteDeadline := fixedTime.Add(cliConfig.AbsoluteDuration)
-	expectedIdleDeadline := fixedTime.Add(cliConfig.IdleDuration) // Should be 0, so idle = now
+	// Verify native app session config: 30-day absolute, no idle timeout (idle = now)
+	nativeAppConfig := DefaultNativeAppSessionConfig()
+	expectedAbsoluteDeadline := fixedTime.Add(nativeAppConfig.AbsoluteDuration)
+	expectedIdleDeadline := fixedTime.Add(nativeAppConfig.IdleDuration) // Should be 0, so idle = now
 
 	assert.Equal(t, expectedAbsoluteDeadline, capturedSession.AbsoluteDeadline())
 	assert.Equal(t, expectedIdleDeadline, capturedSession.IdleDeadline())

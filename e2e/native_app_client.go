@@ -13,20 +13,20 @@ import (
 	"time"
 )
 
-// CLIClient simulates a CLI application authenticating with the server.
+// NativeAppClient simulates a native application (desktop, mobile, CLI) authenticating with the server.
 // It supports device code flow and browser OAuth flow.
-type CLIClient struct {
+type NativeAppClient struct {
 	BaseURL    string
 	Token      string // stored session token
 	HTTPClient *http.Client
 }
 
-// NewCLIClient creates a new CLI client that talks to the given base URL.
-func NewCLIClient(baseURL string) *CLIClient {
+// NewNativeAppClient creates a new native app client that talks to the given base URL.
+func NewNativeAppClient(baseURL string) *NativeAppClient {
 	// Create cookie jar to maintain state cookies between requests
 	jar, _ := cookiejar.New(nil)
 
-	return &CLIClient{
+	return &NativeAppClient{
 		BaseURL: baseURL,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -42,7 +42,7 @@ func NewCLIClient(baseURL string) *CLIClient {
 // AuthenticateViaDeviceCode performs the device code OAuth flow.
 // The authorizeFunc is called with the user code and should simulate
 // the user authorizing the device via browser.
-func (c *CLIClient) AuthenticateViaDeviceCode(ctx context.Context, authorizeFunc func(userCode string) error) error {
+func (c *NativeAppClient) AuthenticateViaDeviceCode(ctx context.Context, authorizeFunc func(userCode string) error) error {
 	// Step 1: Request device code
 	beginURL := fmt.Sprintf("%s/auth/device/begin", c.BaseURL)
 	req, err := http.NewRequestWithContext(ctx, "POST", beginURL, nil)
@@ -145,7 +145,7 @@ func (c *CLIClient) AuthenticateViaDeviceCode(ctx context.Context, authorizeFunc
 }
 
 // Request makes an authenticated HTTP request using the stored token.
-func (c *CLIClient) Request(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+func (c *NativeAppClient) Request(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
 	url := c.BaseURL + path
 
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
@@ -170,7 +170,7 @@ type MeResponse struct {
 }
 
 // GetMe calls /api/me to verify authentication and get session info.
-func (c *CLIClient) GetMe(ctx context.Context) (*MeResponse, error) {
+func (c *NativeAppClient) GetMe(ctx context.Context) (*MeResponse, error) {
 	resp, err := c.Request(ctx, "GET", "/api/me", nil)
 	if err != nil {
 		return nil, fmt.Errorf("request: %w", err)
@@ -192,7 +192,7 @@ func (c *CLIClient) GetMe(ctx context.Context) (*MeResponse, error) {
 
 // RequestWithCookie makes an HTTP request with the token sent as a cookie instead of header.
 // This simulates browser-based authentication.
-func (c *CLIClient) RequestWithCookie(ctx context.Context, method, path, cookieName string) (*http.Response, error) {
+func (c *NativeAppClient) RequestWithCookie(ctx context.Context, method, path, cookieName string) (*http.Response, error) {
 	url := c.BaseURL + path
 
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
@@ -232,7 +232,7 @@ func ExtractTokenFromSetCookie(resp *http.Response, cookieName string) string {
 
 // BrowserAuthFlow simulates a browser OAuth flow and returns the session cookie.
 // This is used for testing cookie-based authentication.
-func (c *CLIClient) BrowserAuthFlow(ctx context.Context) error {
+func (c *NativeAppClient) BrowserAuthFlow(ctx context.Context) error {
 	// Step 1: Begin OAuth
 	beginURL := fmt.Sprintf("%s/auth/login", c.BaseURL)
 

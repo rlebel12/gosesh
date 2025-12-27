@@ -36,17 +36,17 @@ func TestE2E_DeviceCode_FullFlow(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
+	client := NewNativeAppClient(testServer.Server.URL)
 
 	// Authenticate via device code flow
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err, "Device code authentication should succeed")
-	assert.NotEmpty(t, cli.Token, "Token should be set")
+	assert.NotEmpty(t, client.Token, "Token should be set")
 
 	// Verify token works
-	me, err := cli.GetMe(ctx)
+	me, err := client.GetMe(ctx)
 	require.NoError(t, err, "GetMe should succeed")
 	assert.NotEmpty(t, me.UserID, "UserID should be set")
 	assert.NotEmpty(t, me.SessionID, "SessionID should be set")
@@ -89,14 +89,14 @@ func TestE2E_DeviceCode_TokenWorks(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	client := NewNativeAppClient(testServer.Server.URL)
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err)
 
 	// Make authenticated request
-	resp, err := cli.Request(ctx, "GET", "/api/protected", nil)
+	resp, err := client.Request(ctx, "GET", "/api/protected", nil)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -108,14 +108,14 @@ func TestE2E_DeviceCode_ProtectedEndpoint(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	client := NewNativeAppClient(testServer.Server.URL)
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err)
 
 	// Access /api/me
-	me, err := cli.GetMe(ctx)
+	me, err := client.GetMe(ctx)
 	require.NoError(t, err, "Should get session info")
 	assert.NotEmpty(t, me.SessionID)
 	assert.NotEmpty(t, me.UserID)
@@ -206,14 +206,14 @@ func TestE2E_HeaderAuth_Works(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	client := NewNativeAppClient(testServer.Server.URL)
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err)
 
 	// Use header authentication
-	me, err := cli.GetMe(ctx)
+	me, err := client.GetMe(ctx)
 	require.NoError(t, err)
 	assert.NotEmpty(t, me.SessionID)
 }
@@ -223,15 +223,15 @@ func TestE2E_CookieAuth_Works(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
+	client := NewNativeAppClient(testServer.Server.URL)
 
 	// Do browser OAuth flow
-	err := cli.BrowserAuthFlow(ctx)
+	err := client.BrowserAuthFlow(ctx)
 	require.NoError(t, err)
-	assert.NotEmpty(t, cli.Token, "Should have session cookie")
+	assert.NotEmpty(t, client.Token, "Should have session cookie")
 
 	// Use cookie authentication
-	resp, err := cli.RequestWithCookie(ctx, "GET", "/api/me", "session")
+	resp, err := client.RequestWithCookie(ctx, "GET", "/api/me", "session")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -244,17 +244,17 @@ func TestE2E_CompositeAuth_PrefersCookie(t *testing.T) {
 	ctx := t.Context()
 
 	// Create two different sessions - one via device code (header), one via browser (cookie)
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	client := NewNativeAppClient(testServer.Server.URL)
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err)
-	headerToken := cli.Token
+	headerToken := client.Token
 
 	// Create browser session with different user
-	err = cli.BrowserAuthFlow(ctx)
+	err = client.BrowserAuthFlow(ctx)
 	require.NoError(t, err)
-	cookieToken := cli.Token
+	cookieToken := client.Token
 
 	// headerToken and cookieToken should be different
 	assert.NotEqual(t, headerToken, cookieToken, "Sessions should be different")
@@ -284,14 +284,14 @@ func TestE2E_HeaderAuth_NoRefresh(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	client := NewNativeAppClient(testServer.Server.URL)
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err)
 
 	// Get initial session info
-	me1, err := cli.GetMe(ctx)
+	me1, err := client.GetMe(ctx)
 	require.NoError(t, err)
 	initialIdleDeadline := me1.IdleDeadline
 
@@ -299,7 +299,7 @@ func TestE2E_HeaderAuth_NoRefresh(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Get session info again
-	me2, err := cli.GetMe(ctx)
+	me2, err := client.GetMe(ctx)
 	require.NoError(t, err)
 
 	// Idle deadline should be unchanged (no refresh for header sessions)
@@ -311,14 +311,14 @@ func TestE2E_CookieAuth_WithRefresh(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
+	client := NewNativeAppClient(testServer.Server.URL)
 
 	// Do browser OAuth flow (creates cookie session with refresh enabled)
-	err := cli.BrowserAuthFlow(ctx)
+	err := client.BrowserAuthFlow(ctx)
 	require.NoError(t, err)
 
 	// Get initial session info via cookie
-	resp1, err := cli.RequestWithCookie(ctx, "GET", "/api/me", "session")
+	resp1, err := client.RequestWithCookie(ctx, "GET", "/api/me", "session")
 	require.NoError(t, err)
 	defer resp1.Body.Close()
 
@@ -330,7 +330,7 @@ func TestE2E_CookieAuth_WithRefresh(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Make another request - should refresh idle deadline
-	resp2, err := cli.RequestWithCookie(ctx, "GET", "/api/me", "session")
+	resp2, err := client.RequestWithCookie(ctx, "GET", "/api/me", "session")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -344,21 +344,21 @@ func TestE2E_CookieAuth_WithRefresh(t *testing.T) {
 		"Cookie sessions should refresh idle deadline")
 }
 
-// TestE2E_HeaderSession_Config tests CLI session configuration.
+// TestE2E_HeaderSession_Config tests native app session configuration.
 func TestE2E_HeaderSession_Config(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	client := NewNativeAppClient(testServer.Server.URL)
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err)
 
-	me, err := cli.GetMe(ctx)
+	me, err := client.GetMe(ctx)
 	require.NoError(t, err)
 
-	// CLI sessions should have 30-day absolute duration
+	// Native app sessions should have 30-day absolute duration
 	expectedAbsolute := time.Now().Add(30 * 24 * time.Hour)
 	actualAbsolute := me.AbsoluteDeadline
 
@@ -372,14 +372,14 @@ func TestE2E_CookieSession_Config(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
+	client := NewNativeAppClient(testServer.Server.URL)
 
 	// Do browser OAuth flow
-	err := cli.BrowserAuthFlow(ctx)
+	err := client.BrowserAuthFlow(ctx)
 	require.NoError(t, err)
 
 	// Get session info
-	resp, err := cli.RequestWithCookie(ctx, "GET", "/api/me", "session")
+	resp, err := client.RequestWithCookie(ctx, "GET", "/api/me", "session")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -398,23 +398,23 @@ func TestE2E_CookieSession_Config(t *testing.T) {
 		"Browser sessions should have idle deadline before absolute deadline")
 }
 
-// TestE2E_HeaderSession_NoIdleTimeout tests that CLI sessions don't have idle timeout.
+// TestE2E_HeaderSession_NoIdleTimeout tests that native app sessions don't have idle timeout.
 func TestE2E_HeaderSession_NoIdleTimeout(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
-	err := cli.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
+	client := NewNativeAppClient(testServer.Server.URL)
+	err := client.AuthenticateViaDeviceCode(ctx, func(userCode string) error {
 		return SimulateUserAuthorization(testServer.Server.URL, userCode)
 	})
 	require.NoError(t, err)
 
-	me, err := cli.GetMe(ctx)
+	me, err := client.GetMe(ctx)
 	require.NoError(t, err)
 
-	// For CLI sessions with no idle timeout, idle deadline == absolute deadline
+	// For native app sessions with no idle timeout, idle deadline == absolute deadline
 	assert.Equal(t, me.AbsoluteDeadline, me.IdleDeadline,
-		"CLI sessions should have idle deadline equal to absolute deadline (no idle timeout)")
+		"Native app sessions should have idle deadline equal to absolute deadline (no idle timeout)")
 }
 
 // TestE2E_CookieSession_IdleTimeout tests browser session idle timeout.
@@ -422,14 +422,14 @@ func TestE2E_CookieSession_IdleTimeout(t *testing.T) {
 	testServer.Reset()
 	ctx := t.Context()
 
-	cli := NewCLIClient(testServer.Server.URL)
+	client := NewNativeAppClient(testServer.Server.URL)
 
 	// Do browser OAuth flow
-	err := cli.BrowserAuthFlow(ctx)
+	err := client.BrowserAuthFlow(ctx)
 	require.NoError(t, err)
 
 	// Get session info to find the actual session ID
-	resp1, err := cli.RequestWithCookie(ctx, "GET", "/api/me", "session")
+	resp1, err := client.RequestWithCookie(ctx, "GET", "/api/me", "session")
 	require.NoError(t, err)
 	defer resp1.Body.Close()
 
@@ -446,7 +446,7 @@ func TestE2E_CookieSession_IdleTimeout(t *testing.T) {
 	memSession.SetIdleDeadline(pastTime)
 
 	// Try to use session - should fail due to idle timeout
-	resp, err := cli.RequestWithCookie(ctx, "GET", "/api/me", "session")
+	resp, err := client.RequestWithCookie(ctx, "GET", "/api/me", "session")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
