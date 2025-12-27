@@ -19,11 +19,13 @@ go get github.com/rlebel12/gosesh
 
 `gosesh` is a Go library that simplifies OAuth2 authentication by handling the OAuth2 flow and session management. It provides:
 
-- OAuth2 authentication flow handling
-- Session management
+- OAuth2 authentication flow handling (browser and native apps)
+- Session management with configurable timeouts
 - Protected route middleware
 - Automatic session refresh
 - Multiple OAuth2 provider support
+- Device code flow for headless environments
+- Token exchange for native apps handling OAuth directly
 
 ## Usage
 
@@ -173,6 +175,105 @@ http.HandleFunc("/auth/custom/callback", gs.OAuth2Callback(
     unmarshalUser,
     nil, // Optional: custom done handler
 ))
+```
+
+### Native App Authentication
+
+For native applications (desktop, mobile, CLI), `gosesh` provides two authentication methods that don't rely on browser cookies:
+
+#### Device Code Flow
+
+The device code flow is ideal for headless environments or when you want users to authorize on a separate device:
+
+```go
+// Implement DeviceCodeStore interface for your storage
+type DeviceCodeStore interface {
+    CreateDeviceCode(ctx context.Context, userCode string, expiresAt time.Time) (deviceCode string, err error)
+    GetDeviceCode(ctx context.Context, deviceCode string) (*DeviceCodeEntry, error)
+    GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*DeviceCodeEntry, error)
+    CompleteDeviceCode(ctx context.Context, deviceCode string, sessionID string) error
+    DeleteDeviceCode(ctx context.Context, deviceCode string) error
+}
+
+// Set up device code routes
+http.HandleFunc("/auth/device/begin", gs.DeviceCodeBegin(deviceStore))
+http.HandleFunc("/auth/device/poll", gs.DeviceCodePoll(deviceStore))
+http.HandleFunc("/auth/device", gs.DeviceCodeAuthorize(deviceStore, oauthConfig))
+http.HandleFunc("/auth/device/callback", gs.DeviceCodeAuthorizeCallback(
+    deviceStore, oauthConfig, requestUser, unmarshalUser,
+))
+```
+
+The flow works as follows:
+1. Native app calls `/auth/device/begin` to get a user code
+2. User enters the code at the verification URL in their browser
+3. Native app polls `/auth/device/poll` until authorization completes
+4. Native app receives a session token to use in subsequent requests
+
+#### Token Exchange
+
+For native apps that handle OAuth2/PKCE directly with the identity provider:
+
+```go
+// Native app completes OAuth with provider, then exchanges access token for session
+http.HandleFunc("/api/token/exchange", gs.ExchangeExternalToken(
+    requestUser,    // Same RequestFunc as browser flow
+    unmarshalUser,  // Same UnmarshalFunc as browser flow
+    nil,            // Optional: custom done handler
+))
+```
+
+Request:
+```json
+POST /api/token/exchange
+{"access_token": "token-from-oauth-provider"}
+```
+
+Response:
+```json
+{"session_id": "...", "expires_at": "2025-02-26T..."}
+```
+
+#### Using Session Tokens
+
+Native apps send the session token via the Authorization header:
+
+```go
+// Configure header-based authentication
+headerSource := gosesh.NewHeaderCredentialSource(
+    gosesh.WithHeaderSessionConfig(gosesh.DefaultNativeAppSessionConfig()),
+)
+
+gs := gosesh.New(store,
+    gosesh.WithCredentialSource(headerSource),
+)
+```
+
+Client requests include:
+```
+Authorization: Bearer <session_id>
+```
+
+#### Supporting Both Browser and Native Apps
+
+Use a composite credential source to support both authentication methods:
+
+```go
+cookieSource := gosesh.NewCookieCredentialSource(
+    gosesh.WithCookieSourceName("session"),
+    gosesh.WithCookieSourceSessionConfig(gosesh.DefaultBrowserSessionConfig()),
+)
+
+headerSource := gosesh.NewHeaderCredentialSource(
+    gosesh.WithHeaderSessionConfig(gosesh.DefaultNativeAppSessionConfig()),
+)
+
+// Cookie takes precedence (listed first)
+credentialSource := gosesh.NewCompositeCredentialSource(cookieSource, headerSource)
+
+gs := gosesh.New(store,
+    gosesh.WithCredentialSource(credentialSource),
+)
 ```
 
 ### Session Management
