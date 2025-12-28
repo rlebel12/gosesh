@@ -132,7 +132,7 @@ func (l *testLogger) assertExpectedLogs(t *testing.T, expectedLogs []string) {
 
 func withTestLogger() (func(*Gosesh), *testLogger) {
 	logger := &testLogger{}
-	handler := slog.NewTextHandler(logger, nil)
+	handler := slog.NewTextHandler(logger, &slog.HandlerOptions{Level: slog.LevelDebug})
 	return func(g *Gosesh) {
 		g.logger = slog.New(handler)
 	}, logger

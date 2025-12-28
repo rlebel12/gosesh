@@ -134,14 +134,14 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	// Check idle deadline (sliding window)
 	if session.IdleDeadline().Before(now) {
-		gs.logger.Error("session idle expired", "error", ErrSessionExpired)
+		gs.logger.Debug("session idle expired")
 		gs.credentialSource.ClearSession(w)
 		return r
 	}
 
 	// Check absolute deadline (hard limit)
 	if session.AbsoluteDeadline().Before(now) {
-		gs.logger.Error("session absolute expired", "error", ErrSessionExpired)
+		gs.logger.Warn("session absolute expired")
 		gs.credentialSource.ClearSession(w)
 		return r
 	}
