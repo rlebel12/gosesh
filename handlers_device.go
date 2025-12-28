@@ -55,7 +55,7 @@ func (gs *Gosesh) DeviceCodeBegin(store DeviceCodeStore) http.HandlerFunc {
 		// Generate user code with collision detection
 		userCode, err := generateUserCode(store, ctx)
 		if err != nil {
-			gs.logError("failed to generate user code", err)
+			gs.logger.Error("generate user code", "error", err)
 			http.Error(w, "failed to generate user code", http.StatusInternalServerError)
 			return
 		}
@@ -66,7 +66,7 @@ func (gs *Gosesh) DeviceCodeBegin(store DeviceCodeStore) http.HandlerFunc {
 		// Create device code entry
 		deviceCode, err := store.CreateDeviceCode(ctx, userCode, expiresAt)
 		if err != nil {
-			gs.logError("failed to create device code", err)
+			gs.logger.Error("create device code", "error", err)
 			http.Error(w, "failed to create device code", http.StatusInternalServerError)
 			return
 		}
@@ -85,7 +85,7 @@ func (gs *Gosesh) DeviceCodeBegin(store DeviceCodeStore) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
-			gs.logError("failed to encode response", err)
+			gs.logger.Error("encode response", "error", err)
 		}
 	}
 }
@@ -142,7 +142,7 @@ func (gs *Gosesh) DeviceCodePoll(store DeviceCodeStore) http.HandlerFunc {
 
 		// Update last poll time
 		if err := store.UpdateLastPoll(ctx, request.DeviceCode, gs.now()); err != nil {
-			gs.logError("failed to update last poll", err)
+			gs.logger.Error("update last poll", "error", err)
 			// Don't fail the request, just log
 		}
 
@@ -162,7 +162,7 @@ func (gs *Gosesh) DeviceCodePoll(store DeviceCodeStore) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
-			gs.logError("failed to encode response", err)
+			gs.logger.Error("encode response", "error", err)
 		}
 	}
 }
@@ -306,7 +306,7 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 		// Exchange OAuth code for token
 		token, err := oauthCfg.Exchange(ctx, r.FormValue("code"))
 		if err != nil {
-			gs.logError("failed to exchange token", err)
+			gs.logger.Error("exchange token", "error", err)
 			http.Error(w, "failed to exchange token", http.StatusInternalServerError)
 			return
 		}
@@ -314,7 +314,7 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 		// Fetch user data
 		user, err := unmarshalUserData(ctx, request, unmarshal, token.AccessToken)
 		if err != nil {
-			gs.logError("failed to get user data", err)
+			gs.logger.Error("get user data", "error", err)
 			http.Error(w, "failed to get user data", http.StatusInternalServerError)
 			return
 		}
@@ -322,7 +322,7 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 		// Upsert user
 		userID, err := gs.store.UpsertUser(ctx, user)
 		if err != nil {
-			gs.logError("failed to upsert user", err)
+			gs.logger.Error("upsert user", "error", err)
 			http.Error(w, "failed to upsert user", http.StatusInternalServerError)
 			return
 		}
@@ -341,7 +341,7 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 
 		session, err := gs.store.CreateSession(ctx, userID, idleDeadline, absoluteDeadline)
 		if err != nil {
-			gs.logError("failed to create session", err)
+			gs.logger.Error("create session", "error", err)
 			http.Error(w, "failed to create session", http.StatusInternalServerError)
 			return
 		}
@@ -352,7 +352,7 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 
 		// Complete the device code
 		if err := store.CompleteDeviceCode(ctx, deviceCode, session.ID()); err != nil {
-			gs.logError("failed to complete device code", err)
+			gs.logger.Error("complete device code", "error", err)
 			http.Error(w, "failed to complete device code", http.StatusInternalServerError)
 			return
 		}

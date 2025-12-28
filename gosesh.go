@@ -3,6 +3,7 @@ package gosesh
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -56,6 +57,7 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 	url, _ := url.Parse("http://localhost")
 	gs := &Gosesh{
 		store:                   store,
+		logger:                  slog.New(slog.NewTextHandler(io.Discard, nil)),
 		sessionCookieName:       "session",
 		oAuth2StateCookieName:   "oauthstate",
 		redirectCookieName:      "redirect",
@@ -296,21 +298,6 @@ func DefaultNativeAppSessionConfig() SessionConfig {
 
 // NewOpts is a function type for configuring a new Gosesh instance.
 type NewOpts func(*Gosesh)
-
-func (gs *Gosesh) logError(msg string, err error, args ...any) {
-	if gs.logger == nil {
-		return
-	}
-	args = append([]any{"error", err}, args...)
-	gs.logger.Error(msg, args...)
-}
-
-func (gs *Gosesh) logWarn(msg string, args ...any) {
-	if gs.logger == nil {
-		return
-	}
-	gs.logger.Warn(msg, args...)
-}
 
 // Do not use: this is exported for testing-purposes only.
 func WithNow(fn func() time.Time) func(*Gosesh) {

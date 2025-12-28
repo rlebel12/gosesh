@@ -50,14 +50,14 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 		}
 
 		if err := gs.store.ExtendSession(r.Context(), session.ID().String(), newIdleDeadline); err != nil {
-			gs.logError("extend session", err)
+			gs.logger.Error("extend session", "error", err)
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// Write session to credential source
 		if err := gs.credentialSource.WriteSession(w, session); err != nil {
-			gs.logError("write session", err)
+			gs.logger.Error("write session", "error", err)
 		}
 
 		next.ServeHTTP(w, r)
@@ -125,7 +125,7 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	session, err := gs.store.GetSession(ctx, sessionID)
 	if err != nil {
-		gs.logError("get session", err)
+		gs.logger.Error("get session", "error", err)
 		gs.credentialSource.ClearSession(w)
 		return r
 	}
@@ -134,14 +134,14 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	// Check idle deadline (sliding window)
 	if session.IdleDeadline().Before(now) {
-		gs.logError("session idle expired", ErrSessionExpired)
+		gs.logger.Error("session idle expired", "error", ErrSessionExpired)
 		gs.credentialSource.ClearSession(w)
 		return r
 	}
 
 	// Check absolute deadline (hard limit)
 	if session.AbsoluteDeadline().Before(now) {
-		gs.logError("session absolute expired", ErrSessionExpired)
+		gs.logger.Error("session absolute expired", "error", ErrSessionExpired)
 		gs.credentialSource.ClearSession(w)
 		return r
 	}

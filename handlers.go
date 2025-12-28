@@ -25,7 +25,7 @@ func (gs *Gosesh) OAuth2Begin(oauthCfg *oauth2.Config) http.HandlerFunc {
 
 		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
-			gs.logError("failed to create OAuth2 state", err)
+			gs.logger.Error("create OAuth2 state", "error", err)
 			http.Error(w, "failed to create OAuth2 state", http.StatusInternalServerError)
 			return
 		}
@@ -64,7 +64,7 @@ type (
 // and creates a session. When complete, it calls the provided done handler.
 func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unmarshal UnmarshalFunc, done HandlerDoneFunc) http.HandlerFunc {
 	if done == nil {
-		gs.logWarn("no done handler provided for OAuth2Callback, using default")
+		gs.logger.Warn("no done handler provided for OAuth2Callback, using default")
 		done = defaultDoneHandler(gs, "OAuth2Callback")
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +163,7 @@ func (gs *Gosesh) ExchangeExternalToken(
 	done HandlerDoneFunc,
 ) http.HandlerFunc {
 	if done == nil {
-		gs.logWarn("no done handler provided for ExchangeExternalToken, using default")
+		gs.logger.Warn("no done handler provided for ExchangeExternalToken, using default")
 		done = defaultExchangeTokenDoneHandler(gs)
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +256,7 @@ func defaultExchangeTokenDoneHandler(gs *Gosesh) HandlerDoneFunc {
 				strings.HasPrefix(errMsg, "validate token:") {
 				code = http.StatusBadRequest
 			}
-			gs.logError("exchange token", err)
+			gs.logger.Error("exchange token", "error", err)
 			http.Error(w, http.StatusText(code), code)
 			return
 		}
@@ -272,7 +272,7 @@ var (
 // If the "all" query parameter is present, it terminates all sessions for the user.
 func (gs *Gosesh) Logout(done HandlerDoneFunc) http.HandlerFunc {
 	if done == nil {
-		gs.logWarn("no done handler provided for Logout, using default")
+		gs.logger.Warn("no done handler provided for Logout, using default")
 		done = defaultDoneHandler(gs, "Logout")
 	}
 	return gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -320,18 +320,18 @@ func (gs *Gosesh) CallbackRedirect(defaultTarget string) http.HandlerFunc {
 		redirectCookie = gs.redirectCookie("", gs.now())
 		http.SetCookie(w, redirectCookie)
 		if err != nil {
-			gs.logError("failed to decode redirect path", err)
+			gs.logger.Error("decode redirect path", "error", err)
 			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
 			return
 		}
 
 		url, err := url.Parse(string(path))
 		if err != nil {
-			gs.logError("failed to parse redirect path", err)
+			gs.logger.Error("parse redirect path", "error", err)
 			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
 			return
 		} else if url.Hostname() != "" && !slices.Contains(gs.allowedHosts, url.Hostname()) {
-			gs.logWarn("disallowed host in redirect path", "host", url.Host)
+			gs.logger.Warn("disallowed host in redirect path", "host", url.Host)
 			http.Redirect(w, r, defaultTarget, http.StatusTemporaryRedirect)
 			return
 		}
@@ -353,7 +353,7 @@ func defaultDoneHandler(gs *Gosesh, handlerName string) HandlerDoneFunc {
 			case errors.Is(err, ErrSessionExpired):
 				code = http.StatusUnauthorized
 			default:
-				gs.logError("callback", err, "name", handlerName)
+				gs.logger.Error("callback", "error", err, "name", handlerName)
 			}
 			http.Error(w, http.StatusText(code), code)
 			return
