@@ -36,3 +36,26 @@ type AudienceValidationError struct {
 func (e *AudienceValidationError) Error() string {
 	return fmt.Sprintf("validate audience: want=%v got=%q", e.Expected, e.Actual)
 }
+
+// WithAudienceValidator sets a validator for checking token audience claims.
+// The validator is called during token exchange to verify the access token's
+// audience matches expected values. Pass nil to explicitly disable validation.
+func WithAudienceValidator(v AudienceValidator) ExchangeOption {
+	return func(cfg *exchangeConfig) {
+		cfg.audienceValidator = v
+	}
+}
+
+// WithExpectedAudiences sets the allowed audience values for token validation.
+// During token exchange, if an audience validator is configured, the actual
+// audience claim will be checked against this list. Empty list allows any audience.
+func WithExpectedAudiences(audiences ...string) ExchangeOption {
+	return func(cfg *exchangeConfig) {
+		// Create defensive copy to prevent external mutation of the slice.
+		// If we stored audiences directly, the caller could modify the slice
+		// after passing it, causing unexpected behavior in the handler.
+		// Use make to ensure we always get a non-nil slice, even when empty.
+		cfg.expectedAudiences = make([]string, len(audiences))
+		copy(cfg.expectedAudiences, audiences)
+	}
+}

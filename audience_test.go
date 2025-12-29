@@ -1,6 +1,7 @@
 package gosesh
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -74,4 +75,177 @@ func TestErrFailedValidatingAudience_Unwrap(t *testing.T) {
 	assert.True(t, errors.As(wrappedErr, &audErr))
 	assert.Equal(t, []string{"client-a"}, audErr.Expected)
 	assert.Equal(t, "client-b", audErr.Actual)
+}
+
+// fakeAudienceValidator is a test double for the AudienceValidator interface.
+type fakeAudienceValidator struct {
+	audience string
+	err      error
+}
+
+func (f *fakeAudienceValidator) ValidateAudience(ctx context.Context, token string) (string, error) {
+	return f.audience, f.err
+}
+
+// applyOptions is a helper to inspect config after applying options.
+func applyOptions(opts ...ExchangeOption) *exchangeConfig {
+	t := &testing.T{} // Dummy for helper
+	t.Helper()
+	cfg := &exchangeConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	return cfg
+}
+
+// TestFunctionalOptions_Parameterized tests WithAudienceValidator and
+// WithExpectedAudiences functional options with various configurations.
+func TestFunctionalOptions_Parameterized(t *testing.T) {
+	fakeValidator := &fakeAudienceValidator{audience: "test-aud", err: nil}
+
+	tests := []struct {
+		name             string
+		options          []ExchangeOption
+		checkValidator   bool
+		expectedValidator AudienceValidator
+		checkAudiences   bool
+		expectedAudiences []string
+	}{
+		{
+			name:             "with_validator_sets_validator",
+			options:          []ExchangeOption{WithAudienceValidator(fakeValidator)},
+			checkValidator:   true,
+			expectedValidator: fakeValidator,
+			checkAudiences:   false,
+		},
+		{
+			name:             "with_single_audience",
+			options:          []ExchangeOption{WithExpectedAudiences("client-a")},
+			checkValidator:   false,
+			checkAudiences:   true,
+			expectedAudiences: []string{"client-a"},
+		},
+		{
+			name:             "with_multiple_audiences",
+			options:          []ExchangeOption{WithExpectedAudiences("client-a", "client-b")},
+			checkValidator:   false,
+			checkAudiences:   true,
+			expectedAudiences: []string{"client-a", "client-b"},
+		},
+		{
+			name:             "with_empty_audiences",
+			options:          []ExchangeOption{WithExpectedAudiences()},
+			checkValidator:   false,
+			checkAudiences:   true,
+			expectedAudiences: []string{},
+		},
+		{
+			name: "with_both_options",
+			options: []ExchangeOption{
+				WithAudienceValidator(fakeValidator),
+				WithExpectedAudiences("a"),
+			},
+			checkValidator:   true,
+			expectedValidator: fakeValidator,
+			checkAudiences:   true,
+			expectedAudiences: []string{"a"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := applyOptions(tt.options...)
+
+			if tt.checkValidator {
+				assert.Equal(t, tt.expectedValidator, cfg.audienceValidator)
+			}
+			if tt.checkAudiences {
+				assert.Equal(t, tt.expectedAudiences, cfg.expectedAudiences)
+			}
+		})
+	}
+}
+
+// TestFunctionalOptions_OrderingIndependence verifies that options can be
+// applied in any order with the same result.
+func TestFunctionalOptions_OrderingIndependence(t *testing.T) {
+	validator := &fakeAudienceValidator{audience: "test", err: nil}
+
+	// Apply options in different orders
+	cfg1 := applyOptions(
+		WithAudienceValidator(validator),
+		WithExpectedAudiences("client-a", "client-b"),
+	)
+
+	cfg2 := applyOptions(
+		WithExpectedAudiences("client-a", "client-b"),
+		WithAudienceValidator(validator),
+	)
+
+	assert.Equal(t, cfg1.audienceValidator, cfg2.audienceValidator)
+	assert.Equal(t, cfg1.expectedAudiences, cfg2.expectedAudiences)
+}
+
+// TestFunctionalOptions_EdgeCases tests edge cases for functional options.
+func TestFunctionalOptions_EdgeCases(t *testing.T) {
+	t.Run("nil_validator_sets_nil", func(t *testing.T) {
+		cfg := applyOptions(WithAudienceValidator(nil))
+		assert.Nil(t, cfg.audienceValidator)
+	})
+
+	t.Run("empty_variadic_audiences", func(t *testing.T) {
+		cfg := applyOptions(WithExpectedAudiences())
+		assert.NotNil(t, cfg.expectedAudiences)
+		assert.Empty(t, cfg.expectedAudiences)
+	})
+
+	t.Run("calling_same_option_twice_last_wins", func(t *testing.T) {
+		validator1 := &fakeAudienceValidator{audience: "first", err: nil}
+		validator2 := &fakeAudienceValidator{audience: "second", err: nil}
+
+		cfg := applyOptions(
+			WithAudienceValidator(validator1),
+			WithAudienceValidator(validator2),
+		)
+
+		assert.Equal(t, validator2, cfg.audienceValidator)
+	})
+
+	t.Run("calling_audiences_twice_last_wins", func(t *testing.T) {
+		cfg := applyOptions(
+			WithExpectedAudiences("first"),
+			WithExpectedAudiences("second", "third"),
+		)
+
+		assert.Equal(t, []string{"second", "third"}, cfg.expectedAudiences)
+	})
+}
+
+// TestFunctionalOptions_NoSideEffects ensures options don't affect unrelated
+// config fields.
+func TestFunctionalOptions_NoSideEffects(t *testing.T) {
+	validator := &fakeAudienceValidator{audience: "test", err: nil}
+
+	// Set validator, ensure audiences remain nil
+	cfg1 := applyOptions(WithAudienceValidator(validator))
+	assert.NotNil(t, cfg1.audienceValidator)
+	assert.Nil(t, cfg1.expectedAudiences)
+
+	// Set audiences, ensure validator remains nil
+	cfg2 := applyOptions(WithExpectedAudiences("client-a"))
+	assert.Nil(t, cfg2.audienceValidator)
+	assert.NotNil(t, cfg2.expectedAudiences)
+}
+
+// TestWithExpectedAudiences_DefensiveCopy verifies that the audiences slice
+// is copied to prevent external mutation.
+func TestWithExpectedAudiences_DefensiveCopy(t *testing.T) {
+	audiences := []string{"client-a", "client-b"}
+	cfg := applyOptions(WithExpectedAudiences(audiences...))
+
+	// Mutate the original slice
+	audiences[0] = "mutated"
+
+	// Config should still have the original values
+	assert.Equal(t, []string{"client-a", "client-b"}, cfg.expectedAudiences)
 }
