@@ -161,11 +161,19 @@ func (gs *Gosesh) ExchangeExternalToken(
 	request RequestFunc,
 	unmarshal UnmarshalFunc,
 	done HandlerDoneFunc,
+	opts ...ExchangeOption,
 ) http.HandlerFunc {
 	if done == nil {
 		gs.logger.Warn("no done handler provided for ExchangeExternalToken, using default")
 		done = defaultExchangeTokenDoneHandler(gs)
 	}
+
+	// Apply options to config at construction time
+	cfg := &exchangeConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -178,6 +186,37 @@ func (gs *Gosesh) ExchangeExternalToken(
 		if req.AccessToken == "" {
 			done(w, r, errors.New("validate token: empty access_token"))
 			return
+		}
+
+		// Audience validation block
+		if cfg.audienceValidator != nil {
+			// Call validator with request context.
+			// The validator implementation is responsible for timeout handling.
+			// Context cancellation/deadline from r.Context() propagates to validator.
+			audience, err := cfg.audienceValidator.ValidateAudience(ctx, req.AccessToken)
+			if err != nil {
+				// Wrap validator error with sentinel.
+				// This enables: errors.Is(err, ErrFailedValidatingAudience) == true
+				// The underlying error (network, timeout, etc.) is preserved in the chain.
+				done(w, r, fmt.Errorf("%w: %w", ErrFailedValidatingAudience, err))
+				return
+			}
+
+			// Check against expected audiences (only if non-empty - permissive behavior per Decision 5)
+			if len(cfg.expectedAudiences) > 0 {
+				if !slices.Contains(cfg.expectedAudiences, audience) {
+					// Create structured error with context, wrapped with sentinel.
+					// This enables both:
+					//   errors.Is(err, ErrFailedValidatingAudience) == true
+					//   errors.As(err, &audErr) == true (extracts AudienceValidationError)
+					err := &AudienceValidationError{
+						Expected: cfg.expectedAudiences,
+						Actual:   audience,
+					}
+					done(w, r, fmt.Errorf("%w: %w", ErrFailedValidatingAudience, err))
+					return
+				}
+			}
 		}
 
 		user, err := fetchAndUnmarshalUserData(ctx, request, unmarshal, req.AccessToken)

@@ -841,13 +841,17 @@ func TestExchangeExternalToken(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		giveRequestBody   string
-		giveRequestFunc   RequestFunc
-		giveUnmarshalFunc UnmarshalFunc
-		giveStoreSetup    func(t *testing.T, store *erroringStore)
-		wantStatusCode    int
-		wantErrContains   string
-		wantSessionID     bool
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator // Direct reference for call verification
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string // Expected token passed to validator
 	}{
 		"valid_token_creates_session": {
 			giveRequestBody:   `{"access_token":"valid-token"}`,
@@ -855,16 +859,19 @@ func TestExchangeExternalToken(t *testing.T) {
 			giveUnmarshalFunc: successUnmarshalFunc,
 			wantStatusCode:    http.StatusOK,
 			wantSessionID:     true,
+			wantValidatorCall: false,
 		},
 		"invalid_json_body": {
 			giveRequestBody: `{invalid json`,
 			wantStatusCode:  http.StatusBadRequest,
 			wantErrContains: "parse request body",
+			wantValidatorCall: false,
 		},
 		"missing_access_token": {
 			giveRequestBody: `{"access_token":""}`,
 			wantStatusCode:  http.StatusBadRequest,
 			wantErrContains: "empty access_token",
+			wantValidatorCall: false,
 		},
 		"request_func_error": {
 			giveRequestBody: `{"access_token":"valid-token"}`,
@@ -874,6 +881,7 @@ func TestExchangeExternalToken(t *testing.T) {
 			giveUnmarshalFunc: successUnmarshalFunc,
 			wantStatusCode:    http.StatusInternalServerError,
 			wantErrContains:   "failed exchanging token",
+			wantValidatorCall: false,
 		},
 		"unmarshal_error": {
 			giveRequestBody: `{"access_token":"valid-token"}`,
@@ -883,6 +891,7 @@ func TestExchangeExternalToken(t *testing.T) {
 			},
 			wantStatusCode:  http.StatusInternalServerError,
 			wantErrContains: "failed unmarshalling data",
+			wantValidatorCall: false,
 		},
 		"upsert_user_error": {
 			giveRequestBody:   `{"access_token":"valid-token"}`,
@@ -894,6 +903,7 @@ func TestExchangeExternalToken(t *testing.T) {
 			},
 			wantStatusCode:  http.StatusInternalServerError,
 			wantErrContains: "failed upserting user",
+			wantValidatorCall: false,
 		},
 		"create_session_error": {
 			giveRequestBody:   `{"access_token":"valid-token"}`,
@@ -905,7 +915,193 @@ func TestExchangeExternalToken(t *testing.T) {
 			},
 			wantStatusCode:  http.StatusInternalServerError,
 			wantErrContains: "failed creating session",
+			wantValidatorCall: false,
 		},
+		// Audience validation test cases
+		"no_options_backward_compat": {
+			giveRequestBody:    `{"access_token":"valid-token"}`,
+			giveRequestFunc:    successRequestFunc,
+			giveUnmarshalFunc:  successUnmarshalFunc,
+			giveOptions:        nil,
+			wantStatusCode:     http.StatusOK,
+			wantSessionID:      true,
+			wantValidatorCall:  false,
+			wantValidatorToken: "",
+		},
+	}
+
+	// Add audience validation test cases with validator references
+	validator1 := &fakeAudienceValidator{audience: "client-a"}
+	tests["validator_audience_matches"] = struct {
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string
+	}{
+		giveRequestBody:    `{"access_token":"valid-token"}`,
+		giveRequestFunc:    successRequestFunc,
+		giveUnmarshalFunc:  successUnmarshalFunc,
+		giveValidator:      validator1,
+		giveOptions:        []ExchangeOption{WithAudienceValidator(validator1), WithExpectedAudiences("client-a")},
+		wantStatusCode:     http.StatusOK,
+		wantSessionID:      true,
+		wantValidatorCall:  true,
+		wantValidatorToken: "valid-token",
+	}
+
+	validator2 := &fakeAudienceValidator{audience: "client-b"}
+	tests["validator_audience_mismatch"] = struct {
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string
+	}{
+		giveRequestBody:    `{"access_token":"valid-token"}`,
+		giveRequestFunc:    successRequestFunc,
+		giveUnmarshalFunc:  successUnmarshalFunc,
+		giveValidator:      validator2,
+		giveOptions:        []ExchangeOption{WithAudienceValidator(validator2), WithExpectedAudiences("client-a")},
+		wantStatusCode:     http.StatusInternalServerError,
+		wantErrContains:    "failed validating audience",
+		wantValidatorCall:  true,
+		wantValidatorToken: "valid-token",
+	}
+
+	validator3 := &fakeAudienceValidator{audience: "b"}
+	tests["validator_multiple_audiences_match"] = struct {
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string
+	}{
+		giveRequestBody:    `{"access_token":"valid-token"}`,
+		giveRequestFunc:    successRequestFunc,
+		giveUnmarshalFunc:  successUnmarshalFunc,
+		giveValidator:      validator3,
+		giveOptions:        []ExchangeOption{WithAudienceValidator(validator3), WithExpectedAudiences("a", "b", "c")},
+		wantStatusCode:     http.StatusOK,
+		wantSessionID:      true,
+		wantValidatorCall:  true,
+		wantValidatorToken: "valid-token",
+	}
+
+	validator4 := &fakeAudienceValidator{err: errors.New("validator network error")}
+	tests["validator_error"] = struct {
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string
+	}{
+		giveRequestBody:    `{"access_token":"valid-token"}`,
+		giveRequestFunc:    successRequestFunc,
+		giveUnmarshalFunc:  successUnmarshalFunc,
+		giveValidator:      validator4,
+		giveOptions:        []ExchangeOption{WithAudienceValidator(validator4), WithExpectedAudiences("a")},
+		wantStatusCode:     http.StatusInternalServerError,
+		wantErrContains:    "failed validating audience",
+		wantValidatorCall:  true,
+		wantValidatorToken: "valid-token",
+	}
+
+	validator5 := &fakeAudienceValidator{audience: "any"}
+	tests["validator_no_expected_audiences"] = struct {
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string
+	}{
+		giveRequestBody:    `{"access_token":"valid-token"}`,
+		giveRequestFunc:    successRequestFunc,
+		giveUnmarshalFunc:  successUnmarshalFunc,
+		giveValidator:      validator5,
+		giveOptions:        []ExchangeOption{WithAudienceValidator(validator5)},
+		wantStatusCode:     http.StatusOK,
+		wantSessionID:      true,
+		wantValidatorCall:  true,
+		wantValidatorToken: "valid-token",
+	}
+
+	tests["expected_audiences_no_validator"] = struct {
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string
+	}{
+		giveRequestBody:    `{"access_token":"valid-token"}`,
+		giveRequestFunc:    successRequestFunc,
+		giveUnmarshalFunc:  successUnmarshalFunc,
+		giveOptions:        []ExchangeOption{WithExpectedAudiences("a")},
+		wantStatusCode:     http.StatusOK,
+		wantSessionID:      true,
+		wantValidatorCall:  false,
+		wantValidatorToken: "",
+	}
+
+	validator6 := &fakeAudienceValidator{audience: ""}
+	tests["validator_empty_audience_with_expected"] = struct {
+		giveRequestBody    string
+		giveRequestFunc    RequestFunc
+		giveUnmarshalFunc  UnmarshalFunc
+		giveOptions        []ExchangeOption
+		giveValidator      *fakeAudienceValidator
+		giveStoreSetup     func(t *testing.T, store *erroringStore)
+		wantStatusCode     int
+		wantErrContains    string
+		wantSessionID      bool
+		wantValidatorCall  bool
+		wantValidatorToken string
+	}{
+		giveRequestBody:    `{"access_token":"valid-token"}`,
+		giveRequestFunc:    successRequestFunc,
+		giveUnmarshalFunc:  successUnmarshalFunc,
+		giveValidator:      validator6,
+		giveOptions:        []ExchangeOption{WithAudienceValidator(validator6), WithExpectedAudiences("client-a")},
+		wantStatusCode:     http.StatusInternalServerError,
+		wantErrContains:    "failed validating audience",
+		wantValidatorCall:  true,
+		wantValidatorToken: "valid-token",
 	}
 
 	for name, tc := range tests {
@@ -934,7 +1130,7 @@ func TestExchangeExternalToken(t *testing.T) {
 				}
 			}
 
-			handler := gs.ExchangeExternalToken(tc.giveRequestFunc, tc.giveUnmarshalFunc, doneHandler)
+			handler := gs.ExchangeExternalToken(tc.giveRequestFunc, tc.giveUnmarshalFunc, doneHandler, tc.giveOptions...)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(tc.giveRequestBody))
 			req.Header.Set("Content-Type", "application/json")
@@ -958,6 +1154,14 @@ func TestExchangeExternalToken(t *testing.T) {
 				require.NoError(err)
 				assert.NotEmpty(response.SessionID)
 				assert.False(response.ExpiresAt.IsZero())
+			}
+
+			// Verify validator was/wasn't called as expected
+			if tc.giveValidator != nil {
+				assert.Equal(tc.wantValidatorCall, tc.giveValidator.called, "validator call expectation mismatch")
+				if tc.wantValidatorCall && tc.wantValidatorToken != "" {
+					assert.Equal(tc.wantValidatorToken, tc.giveValidator.gotToken)
+				}
 			}
 		})
 	}
@@ -1008,6 +1212,186 @@ func TestExchangeExternalToken_NativeAppSessionConfig(t *testing.T) {
 
 	assert.Equal(t, expectedAbsoluteDeadline, capturedSession.AbsoluteDeadline())
 	assert.Equal(t, expectedIdleDeadline, capturedSession.IdleDeadline())
+}
+
+func TestExchangeExternalToken_AudienceErrorWrapping(t *testing.T) {
+	// Test that AudienceValidationError is wrapped with ErrFailedValidatingAudience
+	// and both errors.Is() and errors.As() work correctly
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	withNow := func() time.Time { return fixedTime }
+
+	store := NewMemoryStore()
+	gs := New(store, WithNow(withNow))
+
+	validator := &fakeAudienceValidator{audience: "client-b"}
+
+	requestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	unmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	var capturedErr error
+	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+	}
+
+	handler := gs.ExchangeExternalToken(
+		requestFunc,
+		unmarshalFunc,
+		doneHandler,
+		WithAudienceValidator(validator),
+		WithExpectedAudiences("client-a"),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(`{"access_token":"valid-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	// Verify sentinel check works
+	assert.True(t, errors.Is(capturedErr, ErrFailedValidatingAudience))
+
+	// Verify structured error extraction works
+	var audErr *AudienceValidationError
+	assert.True(t, errors.As(capturedErr, &audErr))
+	assert.Equal(t, []string{"client-a"}, audErr.Expected)
+	assert.Equal(t, "client-b", audErr.Actual)
+}
+
+func TestExchangeExternalToken_DoneHandlerReceivesValidationError(t *testing.T) {
+	// Test that when validation fails, done handler receives the error
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	withNow := func() time.Time { return fixedTime }
+
+	store := NewMemoryStore()
+	gs := New(store, WithNow(withNow))
+
+	validator := &fakeAudienceValidator{err: errors.New("network timeout")}
+
+	requestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	unmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	var doneHandlerCalled bool
+	var capturedErr error
+	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		doneHandlerCalled = true
+		capturedErr = err
+	}
+
+	handler := gs.ExchangeExternalToken(
+		requestFunc,
+		unmarshalFunc,
+		doneHandler,
+		WithAudienceValidator(validator),
+		WithExpectedAudiences("client-a"),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(`{"access_token":"valid-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.True(t, doneHandlerCalled, "done handler should be called")
+	assert.Error(t, capturedErr, "done handler should receive error")
+	assert.True(t, errors.Is(capturedErr, ErrFailedValidatingAudience))
+}
+
+func TestExchangeExternalToken_ValidationBeforeRequestFunc(t *testing.T) {
+	// Test that if validation fails, RequestFunc is not called
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	withNow := func() time.Time { return fixedTime }
+
+	store := NewMemoryStore()
+	gs := New(store, WithNow(withNow))
+
+	validator := &fakeAudienceValidator{audience: "wrong-audience"}
+
+	requestFuncCalled := false
+	requestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		requestFuncCalled = true
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	unmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		// no-op
+	}
+
+	handler := gs.ExchangeExternalToken(
+		requestFunc,
+		unmarshalFunc,
+		doneHandler,
+		WithAudienceValidator(validator),
+		WithExpectedAudiences("client-a"),
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(`{"access_token":"valid-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.False(t, requestFuncCalled, "RequestFunc should not be called when validation fails")
+}
+
+func TestExchangeExternalToken_ContextCancellation(t *testing.T) {
+	// Test that context cancellation during validation is propagated correctly
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	withNow := func() time.Time { return fixedTime }
+
+	store := NewMemoryStore()
+	gs := New(store, WithNow(withNow))
+
+	// Validator that checks context cancellation
+	validator := &fakeAudienceValidator{err: context.Canceled}
+
+	requestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	unmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	var capturedErr error
+	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
+		capturedErr = err
+	}
+
+	handler := gs.ExchangeExternalToken(
+		requestFunc,
+		unmarshalFunc,
+		doneHandler,
+		WithAudienceValidator(validator),
+		WithExpectedAudiences("client-a"),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	req := httptest.NewRequest(http.MethodPost, "/api/token/exchange", strings.NewReader(`{"access_token":"valid-token"}`))
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Error(t, capturedErr)
+	assert.True(t, errors.Is(capturedErr, ErrFailedValidatingAudience))
+	assert.True(t, errors.Is(capturedErr, context.Canceled))
 }
 
 func TestExchangeExternalToken_ResponseFormat(t *testing.T) {

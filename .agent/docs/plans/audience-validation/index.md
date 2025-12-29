@@ -8,7 +8,7 @@
 |-------|-------------|------------|--------|
 | [01-types-and-errors](phases/01-types-and-errors.md) | Define ExchangeOption, exchangeConfig, AudienceValidator interface, and error types | None | Complete |
 | [02-functional-options](phases/02-functional-options.md) | Implement WithAudienceValidator and WithExpectedAudiences options | Phase 01 | Complete |
-| [03-handler-integration](phases/03-handler-integration.md) | Update ExchangeExternalToken to accept and apply options with audience validation logic | Phase 02 | Pending |
+| [03-handler-integration](phases/03-handler-integration.md) | Update ExchangeExternalToken to accept and apply options with audience validation logic | Phase 02 | Complete |
 | [04-google-validator](phases/04-google-validator.md) | Implement GoogleTokenInfoValidator in providers package | Phase 03 | Pending |
 
 ## Dependencies
@@ -30,8 +30,8 @@
 
 ## Status
 
-**Progress:** 2/4 phases complete
-**Current Phase:** Phase 03 - Handler Integration
+**Progress:** 3/4 phases complete
+**Current Phase:** Phase 04 - Google Validator
 **Blocked:** None
 
 ---

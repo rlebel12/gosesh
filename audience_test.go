@@ -81,9 +81,13 @@ func TestErrFailedValidatingAudience_Unwrap(t *testing.T) {
 type fakeAudienceValidator struct {
 	audience string
 	err      error
+	called   bool
+	gotToken string
 }
 
 func (f *fakeAudienceValidator) ValidateAudience(ctx context.Context, token string) (string, error) {
+	f.called = true
+	f.gotToken = token
 	return f.audience, f.err
 }
 
