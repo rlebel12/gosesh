@@ -234,6 +234,42 @@ Response:
 {"session_id": "...", "expires_at": "2025-02-26T..."}
 ```
 
+##### Audience Validation
+
+When accepting external tokens, you can validate that the token was issued for your application by checking its audience claim. This prevents token confusion attacks where a token issued for a different application is used.
+
+```go
+import "github.com/rlebel12/gosesh/providers"
+
+// Create a validator for Google access tokens
+validator := providers.NewGoogleTokenInfoValidator(http.DefaultClient)
+
+// Configure token exchange with audience validation
+http.HandleFunc("/api/token/exchange", gs.ExchangeExternalToken(
+    requestUser,
+    unmarshalUser,
+    nil,
+    gosesh.WithAudienceValidator(validator),
+    gosesh.WithExpectedAudiences("your-google-client-id.apps.googleusercontent.com"),
+))
+```
+
+The `AudienceValidator` interface allows custom implementations for other providers:
+
+```go
+type AudienceValidator interface {
+    ValidateAudience(ctx context.Context, accessToken string) (audience string, err error)
+}
+```
+
+When validation fails, the error wraps `gosesh.ErrFailedValidatingAudience` for sentinel checking:
+
+```go
+if errors.Is(err, gosesh.ErrFailedValidatingAudience) {
+    // Token audience didn't match expected values
+}
+```
+
 #### Using Session Tokens
 
 Native apps send the session token via the Authorization header:
@@ -291,9 +327,10 @@ gs := gosesh.New(store,
 
 ```go
 var (
-    ErrUnauthorized          = errors.New("unauthorized")
-    ErrFailedDeletingSession = errors.New("failed deleting session(s)")
-    ErrSessionExpired        = errors.New("session expired")
+    ErrUnauthorized              = errors.New("unauthorized")
+    ErrFailedDeletingSession     = errors.New("failed deleting session(s)")
+    ErrSessionExpired            = errors.New("session expired")
+    ErrFailedValidatingAudience  = errors.New("failed validating audience")
     // ... more error types
 )
 ```
