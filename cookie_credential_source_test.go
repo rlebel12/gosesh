@@ -90,6 +90,7 @@ func TestCookieCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
+			now,
 		)
 
 		w := httptest.NewRecorder()
@@ -129,6 +130,7 @@ func TestCookieCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
+			now,
 		)
 
 		w := httptest.NewRecorder()
@@ -158,6 +160,7 @@ func TestCookieCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			absoluteDeadline,
+			now,
 		)
 
 		w := httptest.NewRecorder()
@@ -237,6 +240,7 @@ func TestCookieCredentialSource(t *testing.T) {
 					userID,
 					now.Add(30*time.Minute),
 					now.Add(24*time.Hour),
+					now,
 				)
 
 				w := httptest.NewRecorder()
@@ -272,6 +276,7 @@ func TestCookieCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
+			now,
 		)
 
 		w := httptest.NewRecorder()
@@ -287,7 +292,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		sessionID := StringIdentifier("test-id")
 		userID := StringIdentifier("test-user")
 		now := time.Now()
-		session := NewFakeSession(sessionID, userID, now.Add(time.Minute), now.Add(time.Hour))
+		session := NewFakeSession(sessionID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
 
 		w := httptest.NewRecorder()
 		err := source.WriteSession(w, session)
@@ -303,7 +308,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		sessionID := StringIdentifier("test-id")
 		userID := StringIdentifier("test-user")
 		now := time.Now()
-		session := NewFakeSession(sessionID, userID, now.Add(time.Minute), now.Add(time.Hour))
+		session := NewFakeSession(sessionID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
 
 		w := httptest.NewRecorder()
 		err := source.WriteSession(w, session)

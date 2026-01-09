@@ -26,7 +26,7 @@ func (c IdentifierContract) Test(t *testing.T) {
 }
 
 type SessionContract struct {
-	NewSession    func(id, userID Identifier, idleDeadline, absoluteDeadline time.Time) Session
+	NewSession    func(id, userID Identifier, idleDeadline, absoluteDeadline, lastActivityAt time.Time) Session
 	NewIdentifier func(giveID string) Identifier
 }
 
@@ -34,15 +34,31 @@ func (c SessionContract) Test(t *testing.T) {
 	t.Run("returns correct values", func(t *testing.T) {
 		id := c.NewIdentifier("session-id")
 		userID := c.NewIdentifier("user-id")
-		idleDeadline := time.Now()
-		absoluteDeadline := time.Now().Add(time.Hour)
+		now := time.Now().UTC()
+		idleDeadline := now.Add(time.Hour)
+		absoluteDeadline := now.Add(24 * time.Hour)
+		lastActivityAt := now
 
-		session := c.NewSession(id, userID, idleDeadline, absoluteDeadline)
+		session := c.NewSession(id, userID, idleDeadline, absoluteDeadline, lastActivityAt)
 
 		assert.Equal(t, id, session.ID())
 		assert.Equal(t, userID, session.UserID())
 		assert.Equal(t, idleDeadline, session.IdleDeadline())
 		assert.Equal(t, absoluteDeadline, session.AbsoluteDeadline())
+		assert.Equal(t, lastActivityAt.Unix(), session.LastActivityAt().Unix())
+	})
+
+	t.Run("returns last activity timestamp", func(t *testing.T) {
+		id := c.NewIdentifier("session-id")
+		userID := c.NewIdentifier("user-id")
+		now := time.Now().UTC()
+		idleDeadline := now.Add(time.Hour)
+		absoluteDeadline := now.Add(24 * time.Hour)
+		lastActivityAt := now.Add(-5 * time.Minute) // Activity 5 minutes ago
+
+		session := c.NewSession(id, userID, idleDeadline, absoluteDeadline, lastActivityAt)
+
+		assert.Equal(t, lastActivityAt.Unix(), session.LastActivityAt().Unix())
 	})
 }
 
@@ -194,5 +210,101 @@ func (c StorerContract) Test(t *testing.T) {
 		retrievedSession, err := store.GetSession(t.Context(), gotSession.ID().String())
 		require.NoError(t, err)
 		assert.Equal(t, newIdleDeadline, retrievedSession.IdleDeadline())
+	})
+
+	t.Run("extend session updates last activity timestamp", func(t *testing.T) {
+		userID := StringIdentifier("user-id")
+		now := time.Now().UTC()
+		idleDeadline := now.Add(10 * time.Minute)
+		absoluteDeadline := now.Add(time.Hour)
+		store := c.NewStorer()
+
+		session, err := store.CreateSession(t.Context(), userID, idleDeadline, absoluteDeadline)
+		require.NoError(t, err)
+
+		originalActivity := session.LastActivityAt()
+
+		// Wait a moment to ensure timestamp difference
+		time.Sleep(10 * time.Millisecond)
+
+		// Extend the session
+		newIdleDeadline := now.Add(20 * time.Minute)
+		err = store.ExtendSession(t.Context(), session.ID().String(), newIdleDeadline)
+		require.NoError(t, err)
+
+		// Verify last activity was updated
+		updatedSession, err := store.GetSession(t.Context(), session.ID().String())
+		require.NoError(t, err)
+		assert.True(t, updatedSession.LastActivityAt().After(originalActivity),
+			"LastActivityAt should be updated during ExtendSession")
+	})
+}
+
+type ActivityRecorderContract struct {
+	NewStorer func() Storer // Must also implement ActivityRecorder
+}
+
+func (c ActivityRecorderContract) Test(t *testing.T) {
+	t.Run("batch record activity updates multiple sessions", func(t *testing.T) {
+		store := c.NewStorer()
+		recorder := store.(ActivityRecorder) // Type assertion
+
+		userID := StringIdentifier("user-id")
+		now := time.Now().UTC()
+
+		// Create 3 sessions
+		session1, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
+		session2, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
+		session3, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
+
+		time.Sleep(10 * time.Millisecond)
+
+		// Batch update
+		activityTime := time.Now().UTC()
+		updates := map[string]time.Time{
+			session1.ID().String(): activityTime,
+			session2.ID().String(): activityTime,
+		}
+
+		count, err := recorder.BatchRecordActivity(t.Context(), updates)
+		require.NoError(t, err)
+		assert.Equal(t, 2, count)
+
+		// Verify session1 updated
+		updated1, _ := store.GetSession(t.Context(), session1.ID().String())
+		assert.Equal(t, activityTime.Unix(), updated1.LastActivityAt().Unix())
+
+		// Verify session2 updated
+		updated2, _ := store.GetSession(t.Context(), session2.ID().String())
+		assert.Equal(t, activityTime.Unix(), updated2.LastActivityAt().Unix())
+
+		// Verify session3 NOT updated
+		updated3, _ := store.GetSession(t.Context(), session3.ID().String())
+		assert.True(t, updated3.LastActivityAt().Before(activityTime))
+	})
+
+	t.Run("batch record activity handles non-existent sessions gracefully", func(t *testing.T) {
+		store := c.NewStorer()
+		recorder := store.(ActivityRecorder)
+		now := time.Now().UTC()
+
+		updates := map[string]time.Time{
+			"non-existent-1": now,
+			"non-existent-2": now,
+		}
+
+		count, err := recorder.BatchRecordActivity(t.Context(), updates)
+		require.NoError(t, err)
+		assert.Equal(t, 0, count) // No sessions updated
+	})
+
+	t.Run("batch record activity handles empty map", func(t *testing.T) {
+		store := c.NewStorer()
+		recorder := store.(ActivityRecorder)
+		updates := map[string]time.Time{}
+
+		count, err := recorder.BatchRecordActivity(t.Context(), updates)
+		require.NoError(t, err)
+		assert.Equal(t, 0, count)
 	})
 }

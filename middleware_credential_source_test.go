@@ -151,6 +151,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 					StringIdentifier("user-123"),
 					now.Add(30*time.Minute),
 					now.Add(24*time.Hour),
+					now,
 				)
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()

@@ -146,6 +146,11 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 		return r
 	}
 
+	// Record activity if tracker is enabled
+	if gs.activityTracker != nil {
+		gs.activityTracker.RecordActivity(sessionID, now)
+	}
+
 	return gs.newRequestWithSession(r, session)
 }
 
