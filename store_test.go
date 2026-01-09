@@ -11,3 +11,11 @@ func TestMemoryStore(t *testing.T) {
 		},
 	}.Test(t)
 }
+
+func TestMemoryStoreActivityRecorder(t *testing.T) {
+	ActivityRecorderContract{
+		NewStorer: func() Storer {
+			return NewMemoryStore()
+		},
+	}.Test(t)
+}

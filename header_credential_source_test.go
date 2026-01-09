@@ -121,6 +121,7 @@ func TestHeaderCredentialSource_WriteSession_NoOp(t *testing.T) {
 		userID,
 		now.Add(config.IdleDuration),
 		now.Add(config.AbsoluteDuration),
+		now,
 	)
 
 	w := httptest.NewRecorder()

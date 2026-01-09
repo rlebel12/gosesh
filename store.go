@@ -30,6 +30,7 @@ type (
 		userID           Identifier
 		idleDeadline     time.Time
 		absoluteDeadline time.Time
+		lastActivityAt   time.Time
 	}
 )
 
@@ -48,12 +49,14 @@ func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idl
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
+	now := time.Now().UTC()
 	ms.sequenceID++
 	s := &MemoryStoreSession{
 		id:               ms.sequenceID,
 		userID:           userID,
 		idleDeadline:     idleDeadline,
 		absoluteDeadline: absoluteDeadline,
+		lastActivityAt:   now, // Set to creation time
 	}
 	ms.sessions[s.ID().String()] = s
 	return s, nil
@@ -105,7 +108,27 @@ func (ms *MemoryStore) ExtendSession(ctx context.Context, sessionID string, newI
 		return errors.New("session not found")
 	}
 	s.idleDeadline = newIdleDeadline
+	s.lastActivityAt = time.Now().UTC() // Update activity timestamp
 	return nil
+}
+
+func (ms *MemoryStore) BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error) {
+	if len(updates) == 0 {
+		return 0, nil
+	}
+
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	count := 0
+	for sessionID, timestamp := range updates {
+		s, ok := ms.sessions[sessionID]
+		if ok {
+			s.lastActivityAt = timestamp
+			count++
+		}
+	}
+	return count, nil
 }
 
 // Reset clears all sessions and resets the sequence ID.
@@ -134,10 +157,20 @@ func (s MemoryStoreSession) AbsoluteDeadline() time.Time {
 	return s.absoluteDeadline
 }
 
+func (s MemoryStoreSession) LastActivityAt() time.Time {
+	return s.lastActivityAt
+}
+
 // SetIdleDeadline updates the idle deadline for testing purposes.
 // This should only be used in tests to simulate expired sessions.
 func (s *MemoryStoreSession) SetIdleDeadline(deadline time.Time) {
 	s.idleDeadline = deadline
+}
+
+// SetLastActivityAt updates the last activity timestamp for testing purposes.
+// This should only be used in tests to simulate session activity.
+func (s *MemoryStoreSession) SetLastActivityAt(timestamp time.Time) {
+	s.lastActivityAt = timestamp
 }
 
 // SetAbsoluteDeadline updates the absolute deadline for testing purposes.
@@ -148,5 +181,6 @@ func (s *MemoryStoreSession) SetAbsoluteDeadline(deadline time.Time) {
 
 // Ensure interfaces are implemented
 var _ Storer = (*MemoryStore)(nil)
+var _ ActivityRecorder = (*MemoryStore)(nil)
 var _ Identifier = (*MemoryStoreIdentifier)(nil)
 var _ Session = (*MemoryStoreSession)(nil)

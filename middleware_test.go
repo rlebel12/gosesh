@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -301,6 +302,7 @@ func TestRequireAuthentication(t *testing.T) {
 			StringIdentifier("user-id"),
 			now,
 			now.Add(time.Hour),
+			now,
 		)
 		r = r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 
@@ -339,11 +341,13 @@ func TestRedirectUnauthenticated(t *testing.T) {
 	}{
 		"authenticated": {
 			giveSession: func(t *testing.T, r *http.Request) *http.Request {
+				now := time.Now()
 				session := NewFakeSession(
 					StringIdentifier("session-id"),
 					StringIdentifier("user-id"),
-					time.Now(),
-					time.Now().Add(time.Hour),
+					now,
+					now.Add(time.Hour),
+					now,
 				)
 				return r.WithContext(context.WithValue(r.Context(), sessionKey, session))
 			},
@@ -427,4 +431,84 @@ func TestRedirectUnauthenticated(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAuthenticateWithActivityTracking(t *testing.T) {
+	t.Run("records activity when tracker enabled", func(t *testing.T) {
+		store := NewMemoryStore()
+		now := time.Now().UTC()
+
+		// Use a fixed "now" that advances during the test
+		currentTime := now
+
+		gs := New(store,
+			WithSessionCookieName("customName"),
+			WithOrigin(&url.URL{Scheme: "http", Host: "localhost"}),
+			WithNow(func() time.Time { return currentTime }),
+			WithActivityTracking(1*time.Hour), // Won't auto-flush during test
+		)
+		defer gs.Close()
+
+		// Create session at time T0
+		userID := StringIdentifier("identifier")
+		session, _ := store.CreateSession(context.Background(), userID,
+			now.Add(15*time.Minute), now.Add(85*time.Minute))
+
+		originalActivity := session.LastActivityAt()
+
+		// Advance time for the middleware request
+		currentTime = now.Add(5 * time.Second)
+
+		// Make request
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "customName",
+			Value: base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+		})
+
+		w := httptest.NewRecorder()
+		handler := gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		handler.ServeHTTP(w, req)
+
+		// Manually flush to check pending activities
+		gs.activityTracker.flush()
+
+		// Verify activity was recorded
+		updated, _ := store.GetSession(context.Background(), session.ID().String())
+		assert.True(t, updated.LastActivityAt().After(originalActivity),
+			"Expected LastActivityAt %v to be after %v", updated.LastActivityAt(), originalActivity)
+	})
+
+	t.Run("does not panic when tracker disabled", func(t *testing.T) {
+		store := NewMemoryStore()
+		now := time.Now().UTC()
+
+		gs := New(store,
+			WithSessionCookieName("customName"),
+			WithOrigin(&url.URL{Scheme: "http", Host: "localhost"}),
+			WithNow(func() time.Time { return now }),
+			// No activity tracking
+		)
+
+		userID := StringIdentifier("identifier")
+		session, _ := store.CreateSession(context.Background(), userID,
+			now.Add(15*time.Minute), now.Add(85*time.Minute))
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "customName",
+			Value: base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+		})
+
+		w := httptest.NewRecorder()
+		handler := gs.Authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		assert.NotPanics(t, func() {
+			handler.ServeHTTP(w, req)
+		})
+	})
 }

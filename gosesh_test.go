@@ -1,10 +1,12 @@
 package gosesh
 
 import (
+	"context"
 	"log/slog"
 	"net/url"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -35,4 +37,56 @@ func TestWithLogger(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	sesh := New(nil, WithLogger(logger))
 	assert.Equal(t, logger, sesh.logger)
+}
+
+func TestWithActivityTracking(t *testing.T) {
+	t.Run("creates activity tracker with specified interval", func(t *testing.T) {
+		store := NewMemoryStore()
+		gs := New(store, WithActivityTracking(100*time.Millisecond))
+		defer gs.Close()
+
+		assert.NotNil(t, gs.activityTracker)
+	})
+
+	t.Run("nil when activity tracking not enabled", func(t *testing.T) {
+		store := NewMemoryStore()
+		gs := New(store)
+
+		assert.Nil(t, gs.activityTracker)
+	})
+}
+
+func TestGoseshClose(t *testing.T) {
+	t.Run("flushes activity tracker on close", func(t *testing.T) {
+		store := NewMemoryStore()
+		gs := New(store, WithActivityTracking(1*time.Hour)) // Won't auto-flush
+
+		// Create session
+		userID := StringIdentifier("user-1")
+		session, _ := store.CreateSession(context.Background(), userID,
+			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
+
+		originalActivity := session.LastActivityAt()
+		time.Sleep(10 * time.Millisecond)
+
+		// Record activity
+		newActivity := time.Now().UTC()
+		gs.activityTracker.RecordActivity(session.ID().String(), newActivity)
+
+		// Close should flush
+		gs.Close()
+
+		// Verify flushed
+		updated, _ := store.GetSession(context.Background(), session.ID().String())
+		assert.True(t, updated.LastActivityAt().After(originalActivity))
+	})
+
+	t.Run("Close is safe to call when no activity tracker", func(t *testing.T) {
+		store := NewMemoryStore()
+		gs := New(store)
+
+		assert.NotPanics(t, func() {
+			gs.Close()
+		})
+	})
 }

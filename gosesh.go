@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// activityTrackingConfig stores configuration for activity tracking.
+type activityTrackingConfig struct {
+	flushInterval time.Duration
+}
+
 // Gosesh is the main type that provides OAuth2 authentication and session management.
 // It handles the OAuth2 flow, session creation and validation, and provides middleware
 // for protecting routes.
@@ -28,6 +33,8 @@ type Gosesh struct {
 	now                     func() time.Time
 	cookieDomain            func() string
 	credentialSource        CredentialSource
+	activityTracker         *ActivityTracker
+	activityTrackingConfig  *activityTrackingConfig
 }
 
 // Identifier is an interface that represents a unique identifier for users and sessions.
@@ -70,8 +77,24 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		now:                     time.Now,
 	}
 	gs.cookieDomain = func() string { return gs.origin.Hostname() }
+
+	// Apply all options first
 	for _, opt := range opts {
 		opt(gs)
+	}
+
+	// After all options applied, create activity tracker if enabled
+	// This ensures logger is finalized before tracker creation (fixes race condition)
+	if gs.activityTrackingConfig != nil {
+		recorder, ok := store.(ActivityRecorder)
+		if !ok {
+			panic("activity tracking enabled but store does not implement ActivityRecorder interface")
+		}
+		gs.activityTracker = NewActivityTracker(
+			recorder,
+			gs.activityTrackingConfig.flushInterval,
+			gs.logger, // Logger is now finalized
+		)
 	}
 
 	// Backward compatibility: if no credential source specified, create a cookie source
@@ -194,6 +217,28 @@ func WithCredentialSources(sources ...CredentialSource) func(*Gosesh) {
 	}
 }
 
+// WithActivityTracking enables batched activity timestamp tracking.
+// Activity timestamps are recorded in memory and flushed to the store at the specified interval.
+// This reduces database write load while providing session activity auditability.
+// If not specified, activity timestamps are only updated during session extension (ExtendSession).
+//
+// The store must implement the ActivityRecorder interface. If it doesn't, New() will panic.
+func WithActivityTracking(flushInterval time.Duration) func(*Gosesh) {
+	return func(gs *Gosesh) {
+		gs.activityTrackingConfig = &activityTrackingConfig{
+			flushInterval: flushInterval,
+		}
+	}
+}
+
+// Close gracefully shuts down the Gosesh instance.
+// If activity tracking is enabled, this flushes any pending activity updates to the store.
+func (gs *Gosesh) Close() {
+	if gs.activityTracker != nil {
+		gs.activityTracker.Close()
+	}
+}
+
 // Storer is the interface that must be implemented by storage backends.
 // It defines the methods required for managing users and sessions.
 type Storer interface {
@@ -224,6 +269,20 @@ type Session interface {
 	IdleDeadline() time.Time
 	// AbsoluteDeadline returns the time at which the session expires regardless of activity.
 	AbsoluteDeadline() time.Time
+	// LastActivityAt returns the timestamp of the most recent session activity.
+	// This is updated when the session is created, extended, or when activity is recorded.
+	LastActivityAt() time.Time
+}
+
+// ActivityRecorder is an optional interface that stores can implement to support
+// batched activity tracking. Stores that don't implement this interface can still
+// use gosesh, but cannot enable activity tracking via WithActivityTracking().
+type ActivityRecorder interface {
+	// BatchRecordActivity updates the LastActivityAt timestamp for multiple sessions.
+	// Returns the number of sessions successfully updated.
+	// Non-existent session IDs are silently ignored.
+	// This method must be safe to call concurrently with other store operations.
+	BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error)
 }
 
 // SessionConfig configures session timeouts for a credential source.
