@@ -1,4 +1,6 @@
-# Activity Tracking Implementation Plan
+# Activity Tracking Implementation Plan (v2)
+
+**Updated:** 2026-01-09 (Addresses PR #11 feedback)
 
 ## Overview
 
@@ -11,6 +13,7 @@ Introduce `LastActivityAt` timestamps with batched background updates to track s
 1. **Default Behavior**: Update `LastActivityAt` during `ExtendSession` (zero additional writes)
 2. **Optional Enhancement**: `ActivityTracker` for periodic batched updates (configurable)
 3. **Accuracy Trade-off**: Default = within refresh threshold (~10min), batched = configurable interval
+4. **Interface Design**: Optional `ActivityRecorder` interface (not part of base `Storer`)
 
 ### Why This Approach?
 
@@ -18,6 +21,14 @@ Introduce `LastActivityAt` timestamps with batched background updates to track s
 - ✅ Zero performance impact by default
 - ✅ Opt-in batching for apps needing precise tracking
 - ✅ Follows existing patterns (functional options, interfaces)
+- ✅ Interface Segregation: Only stores using activity tracking need `ActivityRecorder`
+
+## Changes from v1 (PR #11 Feedback)
+
+1. **Optional Interface Pattern**: `BatchRecordActivity` moved to separate `ActivityRecorder` interface
+2. **Channel Direction**: Specified `done chan<- struct{}` for clarity
+3. **Non-blocking Documentation**: Documented mutex hold time (<1μs) and blocking analysis
+4. **Race Condition Fix**: Deferred tracker creation to after all options applied
 
 ---
 
@@ -239,111 +250,120 @@ func (ms *MemoryStore) ExtendSession(ctx context.Context, sessionID string, newI
 
 ---
 
-## Phase 3: Add BatchRecordActivity Interface (TDD)
+## Phase 3: Add ActivityRecorder Interface (TDD)
 
 ### Files to Create/Modify
 
-- `contract_test.go` (modify StorerContract)
-- `gosesh.go` (modify Storer interface)
+- `contract_test.go` (create ActivityRecorderContract)
+- `gosesh.go` (create ActivityRecorder interface)
 - `store.go` (implement in MemoryStore)
+
+### Design Note
+
+We use a **separate optional interface** instead of adding `BatchRecordActivity` to the base `Storer` interface. This follows the Interface Segregation Principle - stores that don't use activity tracking don't need to implement this method.
 
 ### Step 3.1: Write Contract Test
 
 **File: `contract_test.go`**
 
-Add to `StorerContract.Test()`:
+Add new contract struct and tests:
 
 ```go
-t.Run("batch record activity updates multiple sessions", func(t *testing.T) {
-    store := c.NewStorer()
-    userID := StringIdentifier("user-id")
-    now := time.Now().UTC()
+type ActivityRecorderContract struct {
+    NewStorer func() Storer  // Must also implement ActivityRecorder
+}
 
-    // Create 3 sessions
-    session1, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
-    session2, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
-    session3, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
+func (c ActivityRecorderContract) Test(t *testing.T) {
+    t.Run("batch record activity updates multiple sessions", func(t *testing.T) {
+        store := c.NewStorer()
+        recorder := store.(ActivityRecorder)  // Type assertion
 
-    time.Sleep(10 * time.Millisecond)
+        userID := StringIdentifier("user-id")
+        now := time.Now().UTC()
 
-    // Batch update
-    activityTime := time.Now().UTC()
-    updates := map[string]time.Time{
-        session1.ID().String(): activityTime,
-        session2.ID().String(): activityTime,
-    }
+        // Create 3 sessions
+        session1, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
+        session2, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
+        session3, _ := store.CreateSession(t.Context(), userID, now.Add(1*time.Hour), now.Add(24*time.Hour))
 
-    count, err := store.BatchRecordActivity(t.Context(), updates)
-    require.NoError(t, err)
-    assert.Equal(t, 2, count)
+        time.Sleep(10 * time.Millisecond)
 
-    // Verify session1 updated
-    updated1, _ := store.GetSession(t.Context(), session1.ID().String())
-    assert.Equal(t, activityTime.Unix(), updated1.LastActivityAt().Unix())
+        // Batch update
+        activityTime := time.Now().UTC()
+        updates := map[string]time.Time{
+            session1.ID().String(): activityTime,
+            session2.ID().String(): activityTime,
+        }
 
-    // Verify session2 updated
-    updated2, _ := store.GetSession(t.Context(), session2.ID().String())
-    assert.Equal(t, activityTime.Unix(), updated2.LastActivityAt().Unix())
+        count, err := recorder.BatchRecordActivity(t.Context(), updates)
+        require.NoError(t, err)
+        assert.Equal(t, 2, count)
 
-    // Verify session3 NOT updated
-    updated3, _ := store.GetSession(t.Context(), session3.ID().String())
-    assert.True(t, updated3.LastActivityAt().Before(activityTime))
-})
+        // Verify session1 updated
+        updated1, _ := store.GetSession(t.Context(), session1.ID().String())
+        assert.Equal(t, activityTime.Unix(), updated1.LastActivityAt().Unix())
 
-t.Run("batch record activity handles non-existent sessions gracefully", func(t *testing.T) {
-    store := c.NewStorer()
-    now := time.Now().UTC()
+        // Verify session2 updated
+        updated2, _ := store.GetSession(t.Context(), session2.ID().String())
+        assert.Equal(t, activityTime.Unix(), updated2.LastActivityAt().Unix())
 
-    updates := map[string]time.Time{
-        "non-existent-1": now,
-        "non-existent-2": now,
-    }
+        // Verify session3 NOT updated
+        updated3, _ := store.GetSession(t.Context(), session3.ID().String())
+        assert.True(t, updated3.LastActivityAt().Before(activityTime))
+    })
 
-    count, err := store.BatchRecordActivity(t.Context(), updates)
-    require.NoError(t, err)
-    assert.Equal(t, 0, count) // No sessions updated
-})
+    t.Run("batch record activity handles non-existent sessions gracefully", func(t *testing.T) {
+        store := c.NewStorer()
+        recorder := store.(ActivityRecorder)
+        now := time.Now().UTC()
 
-t.Run("batch record activity handles empty map", func(t *testing.T) {
-    store := c.NewStorer()
-    updates := map[string]time.Time{}
+        updates := map[string]time.Time{
+            "non-existent-1": now,
+            "non-existent-2": now,
+        }
 
-    count, err := store.BatchRecordActivity(t.Context(), updates)
-    require.NoError(t, err)
-    assert.Equal(t, 0, count)
-})
+        count, err := recorder.BatchRecordActivity(t.Context(), updates)
+        require.NoError(t, err)
+        assert.Equal(t, 0, count) // No sessions updated
+    })
+
+    t.Run("batch record activity handles empty map", func(t *testing.T) {
+        store := c.NewStorer()
+        recorder := store.(ActivityRecorder)
+        updates := map[string]time.Time{}
+
+        count, err := recorder.BatchRecordActivity(t.Context(), updates)
+        require.NoError(t, err)
+        assert.Equal(t, 0, count)
+    })
+}
 ```
 
-**Expected Result**: ❌ Tests fail (method doesn't exist)
+**Expected Result**: ❌ Tests fail (ActivityRecorder interface doesn't exist)
 
-### Step 3.2: Add to Storer Interface
+### Step 3.2: Create ActivityRecorder Interface
 
 **File: `gosesh.go`**
 
+Add **separate optional interface** (do NOT modify base Storer):
+
 ```go
-type Storer interface {
-    // UpsertUser creates or updates a user based on their OAuth2 provider ID.
-    UpsertUser(ctx context.Context, authProviderID Identifier) (userID Identifier, err error)
-    // CreateSession creates a new session for a user with the specified deadlines.
-    // idleDeadline is when the session expires from inactivity.
-    // absoluteDeadline is when the session expires regardless of activity.
-    CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error)
-    // ExtendSession extends the idle deadline of an existing session.
-    // This is used to refresh a session's TTL without creating a new session.
-    // Also updates the LastActivityAt timestamp.
-    ExtendSession(ctx context.Context, sessionID string, newIdleDeadline time.Time) error
-    // GetSession retrieves a session by its ID.
-    GetSession(ctx context.Context, sessionID string) (Session, error)
-    // DeleteSession deletes a session by its ID.
-    DeleteSession(ctx context.Context, sessionID string) error
-    // DeleteUserSessions deletes all sessions for a user, returning the number of sessions deleted.
-    DeleteUserSessions(ctx context.Context, userID Identifier) (int, error)
+// ActivityRecorder is an optional interface that stores can implement to support
+// batched activity tracking. Stores that don't implement this interface can still
+// use gosesh, but cannot enable activity tracking via WithActivityTracking().
+type ActivityRecorder interface {
     // BatchRecordActivity updates the LastActivityAt timestamp for multiple sessions.
     // Returns the number of sessions successfully updated.
     // Non-existent session IDs are silently ignored.
+    // This method must be safe to call concurrently with other store operations.
     BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error)
 }
 ```
+
+**Note**: The base `Storer` interface remains **unchanged**. This is intentional:
+- Stores without activity tracking don't need to implement `BatchRecordActivity`
+- Type-safe: `WithActivityTracking` validates the store implements `ActivityRecorder`
+- Follows Go patterns: similar to `io.Reader` vs `io.ReadWriter`
 
 **Expected Result**: ❌ Tests still fail (MemoryStore doesn't implement it)
 
@@ -370,6 +390,16 @@ func (ms *MemoryStore) BatchRecordActivity(ctx context.Context, updates map[stri
     }
     return count, nil
 }
+```
+
+Add interface assertion at end of `store.go`:
+
+```go
+// Ensure interfaces are implemented
+var _ Storer = (*MemoryStore)(nil)
+var _ ActivityRecorder = (*MemoryStore)(nil)  // NEW
+var _ Identifier = (*MemoryStoreIdentifier)(nil)
+var _ Session = (*MemoryStoreSession)(nil)
 ```
 
 **Expected Result**: ✅ Tests pass
@@ -591,9 +621,9 @@ import (
 type ActivityTracker struct {
     pending map[string]time.Time
     mu      sync.Mutex
-    store   Storer
+    store   ActivityRecorder  // Uses ActivityRecorder interface, not base Storer
     ticker  *time.Ticker
-    done    chan struct{}
+    done    chan<- struct{}  // Send-only: ActivityTracker only closes this channel
     logger  Logger
 }
 
@@ -605,13 +635,15 @@ type Logger interface {
 }
 
 // NewActivityTracker creates a new activity tracker that flushes at the specified interval.
-func NewActivityTracker(store Storer, flushInterval time.Duration) *ActivityTracker {
+// The logger parameter is required to avoid race conditions during initialization.
+func NewActivityTracker(store ActivityRecorder, flushInterval time.Duration, logger *slog.Logger) *ActivityTracker {
+    done := make(chan struct{})  // Create as bidirectional
     at := &ActivityTracker{
         pending: make(map[string]time.Time),
         store:   store,
         ticker:  time.NewTicker(flushInterval),
-        done:    make(chan struct{}),
-        logger:  slog.Default(),
+        done:    done,  // Store as send-only (type conversion)
+        logger:  logger,
     }
     go at.flushLoop()
     return at
@@ -620,6 +652,11 @@ func NewActivityTracker(store Storer, flushInterval time.Duration) *ActivityTrac
 // RecordActivity records that a session was active at the given timestamp.
 // The activity is queued in memory and will be flushed on the next interval.
 // If the same session ID is recorded multiple times, only the latest timestamp is kept.
+//
+// Performance: This method is non-blocking and extremely fast (<1μs).
+// The mutex is held only for a map write operation (~50-100ns).
+// At typical loads (1K-10K req/sec), contention probability is <1%.
+// See PR #11 feedback for detailed blocking analysis.
 func (at *ActivityTracker) RecordActivity(sessionID string, timestamp time.Time) {
     at.mu.Lock()
     at.pending[sessionID] = timestamp
@@ -667,14 +704,9 @@ func (at *ActivityTracker) Close() {
     at.ticker.Stop()
     close(at.done)
 }
-
-// SetLogger sets a custom logger for the activity tracker.
-func (at *ActivityTracker) SetLogger(logger Logger) {
-    at.mu.Lock()
-    at.logger = logger
-    at.mu.Unlock()
-}
 ```
+
+**Note**: SetLogger() method removed - logger is now set during construction to avoid race conditions.
 
 **Expected Result**: ✅ Tests pass (except logger test - need to add test logger)
 
@@ -805,9 +837,13 @@ func TestGoseshClose(t *testing.T) {
 
 **File: `gosesh.go`**
 
-Add field to Gosesh:
+Add fields to Gosesh:
 
 ```go
+type activityTrackingConfig struct {
+    flushInterval time.Duration
+}
+
 type Gosesh struct {
     store                   Storer
     logger                  *slog.Logger
@@ -821,23 +857,84 @@ type Gosesh struct {
     now                     func() time.Time
     cookieDomain            func() string
     credentialSource        CredentialSource
-    activityTracker         *ActivityTracker // NEW
+    activityTracker         *ActivityTracker            // NEW
+    activityTrackingConfig  *activityTrackingConfig     // NEW: stores config, tracker created later
 }
 ```
 
-Add functional option:
+Add functional option (stores config only, doesn't create tracker):
 
 ```go
 // WithActivityTracking enables batched activity timestamp tracking.
 // Activity timestamps are recorded in memory and flushed to the store at the specified interval.
 // This reduces database write load while providing session activity auditability.
 // If not specified, activity timestamps are only updated during session extension (ExtendSession).
+//
+// The store must implement the ActivityRecorder interface. If it doesn't, New() will panic.
 func WithActivityTracking(flushInterval time.Duration) func(*Gosesh) {
     return func(gs *Gosesh) {
-        tracker := NewActivityTracker(gs.store, flushInterval)
-        tracker.SetLogger(gs.logger)
-        gs.activityTracker = tracker
+        gs.activityTrackingConfig = &activityTrackingConfig{
+            flushInterval: flushInterval,
+        }
     }
+}
+```
+
+Modify New() function to create tracker AFTER all options applied:
+
+```go
+func New(store Storer, opts ...NewOpts) *Gosesh {
+    url, _ := url.Parse("http://localhost")
+    gs := &Gosesh{
+        store:                   store,
+        logger:                  slog.New(slog.NewTextHandler(io.Discard, nil)),
+        sessionCookieName:       "session",
+        oAuth2StateCookieName:   "oauthstate",
+        redirectCookieName:      "redirect",
+        redirectParamName:       "next",
+        sessionIdleTimeout:      1 * time.Hour,
+        sessionMaxLifetime:      24 * time.Hour,
+        sessionRefreshThreshold: 10 * time.Minute,
+        origin:                  url,
+        allowedHosts:            []string{url.Hostname()},
+        now:                     time.Now,
+    }
+    gs.cookieDomain = func() string { return gs.origin.Hostname() }
+
+    // Apply all options first
+    for _, opt := range opts {
+        opt(gs)
+    }
+
+    // After all options applied, create activity tracker if enabled
+    // This ensures logger is finalized before tracker creation (fixes race condition)
+    if gs.activityTrackingConfig != nil {
+        recorder, ok := store.(ActivityRecorder)
+        if !ok {
+            panic("activity tracking enabled but store does not implement ActivityRecorder interface")
+        }
+        gs.activityTracker = NewActivityTracker(
+            recorder,
+            gs.activityTrackingConfig.flushInterval,
+            gs.logger,  // Logger is now finalized
+        )
+    }
+
+    // Backward compatibility: if no credential source specified, create a cookie source
+    if gs.credentialSource == nil {
+        gs.credentialSource = NewCookieCredentialSource(
+            WithCookieSourceName(gs.sessionCookieName),
+            WithCookieSourceDomain(gs.cookieDomain()),
+            WithCookieSourceSecure(gs.Scheme() == "https"),
+            WithCookieSourceSessionConfig(SessionConfig{
+                IdleDuration:     gs.sessionIdleTimeout,
+                AbsoluteDuration: gs.sessionMaxLifetime,
+                RefreshEnabled:   true,
+            }),
+        )
+    }
+
+    return gs
 }
 ```
 
@@ -852,6 +949,11 @@ func (gs *Gosesh) Close() {
     }
 }
 ```
+
+**Key Fix**: Tracker creation deferred until after all options applied. This ensures:
+- ✅ Logger is finalized before tracker uses it
+- ✅ No race condition regardless of option order
+- ✅ Type-safe: panics early if store doesn't implement ActivityRecorder
 
 **Expected Result**: ✅ Tests pass
 
