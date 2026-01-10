@@ -321,6 +321,46 @@ gs := gosesh.New(store,
 - Deleted during logout
 - Automatically refreshed when active
 
+#### Activity Tracking
+
+By default, session activity timestamps are only updated when a session is extended (during refresh). For applications that need precise activity tracking, `gosesh` provides an optional activity tracker that records session activity with minimal performance impact:
+
+```go
+gs := gosesh.New(store,
+    gosesh.WithActivityTracking(5 * time.Minute), // Flush activity updates every 5 minutes
+)
+defer gs.Close() // Ensures final flush on shutdown
+```
+
+**How it works:**
+- Activity is recorded in-memory during authentication (non-blocking, <1μs overhead)
+- Updates are batched and flushed to the store at the specified interval
+- The `LastActivityAt()` method on sessions returns the timestamp of last activity
+- Graceful shutdown via `Close()` ensures all pending updates are flushed
+
+**Store Requirements:**
+Your store must implement the `ActivityRecorder` interface to support activity tracking:
+
+```go
+type ActivityRecorder interface {
+    BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error)
+}
+```
+
+The built-in `MemoryStore` already implements this interface. For custom stores, implement `BatchRecordActivity` to update session activity timestamps in batch.
+
+**Use Cases:**
+- Session timeout detection based on last activity
+- Activity-based analytics and monitoring
+- Audit trails for security compliance
+- User engagement tracking
+
+**Performance:**
+- Zero performance impact by default (piggybacks on existing session extension)
+- Optional batching with configurable flush intervals reduces database write load
+- Non-blocking RecordActivity operation (<1μs)
+- Thread-safe with minimal lock contention
+
 ### Error Handling
 
 `gosesh` provides several error types:
