@@ -3,6 +3,7 @@ package gosesh
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"sync"
 	"time"
 
@@ -20,7 +21,6 @@ type ActivityTracker struct {
 	flushInterval time.Duration
 	eg            *errgroup.Group
 	cancel        context.CancelFunc
-	running       bool
 }
 
 // NewActivityTracker creates a new activity tracker that flushes at the specified interval.
@@ -37,16 +37,11 @@ func NewActivityTracker(store ActivityRecorder, flushInterval time.Duration, log
 
 // Start begins the background flush loop using the provided context.
 // The flush loop will run until the context is cancelled or Close is called.
-// If a panic occurs in the flush loop, it will be recovered and logged.
+// Start must only be called once. Calling Start multiple times will panic.
 func (at *ActivityTracker) Start(ctx context.Context) {
-	at.mu.Lock()
-	if at.running {
-		at.mu.Unlock()
-		at.logger.Warn("activity tracker already running, ignoring Start call")
-		return
+	if at.eg != nil {
+		panic("ActivityTracker.Start called multiple times")
 	}
-	at.running = true
-	at.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(ctx)
 	at.cancel = cancel
@@ -56,14 +51,6 @@ func (at *ActivityTracker) Start(ctx context.Context) {
 	at.eg = eg
 
 	eg.Go(func() error {
-		defer func() {
-			if r := recover(); r != nil {
-				at.logger.Error("activity tracker panic", "panic", r)
-				at.mu.Lock()
-				at.running = false
-				at.mu.Unlock()
-			}
-		}()
 		at.flushLoop(ctx)
 		return nil
 	})
@@ -86,11 +73,6 @@ func (at *ActivityTracker) RecordActivity(sessionID string, timestamp time.Time)
 // flushLoop runs in a goroutine and periodically flushes pending activities.
 func (at *ActivityTracker) flushLoop(ctx context.Context) {
 	defer at.ticker.Stop()
-	defer func() {
-		at.mu.Lock()
-		at.running = false
-		at.mu.Unlock()
-	}()
 
 	for {
 		select {
@@ -103,7 +85,9 @@ func (at *ActivityTracker) flushLoop(ctx context.Context) {
 	}
 }
 
-// flush writes all pending activities to the store and clears the pending map.
+// flush writes all pending activities to the store.
+// On success, flushed items are removed from pending. On failure, items remain
+// in pending for retry on the next flush interval.
 func (at *ActivityTracker) flush(ctx context.Context) {
 	at.mu.Lock()
 	if len(at.pending) == 0 {
@@ -111,8 +95,8 @@ func (at *ActivityTracker) flush(ctx context.Context) {
 		return
 	}
 
-	batch := at.pending
-	at.pending = make(map[string]time.Time)
+	// Clone the pending map so we can release the lock quickly
+	batch := maps.Clone(at.pending)
 	at.mu.Unlock()
 
 	flushCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -120,21 +104,25 @@ func (at *ActivityTracker) flush(ctx context.Context) {
 
 	count, err := at.store.BatchRecordActivity(flushCtx, batch)
 	if err != nil {
-		at.logger.Error("flush activity batch", "error", err, "batch_size", len(batch))
-	} else {
-		at.logger.Debug("flushed activity batch", "updated_count", count, "batch_size", len(batch))
+		at.logger.Error("flush activity batch", "error", err, "batch_size", len(batch), "pending_size", len(at.pending))
+		return
 	}
-}
 
-// IsRunning returns true if the activity tracker is currently running.
-func (at *ActivityTracker) IsRunning() bool {
+	at.logger.Debug("flushed activity batch", "updated_count", count, "batch_size", len(batch))
+
+	// Only remove successfully flushed items from pending
 	at.mu.Lock()
-	defer at.mu.Unlock()
-	return at.running
+	for sessionID, timestamp := range batch {
+		// Only delete if the timestamp hasn't been updated since we cloned
+		if at.pending[sessionID] == timestamp {
+			delete(at.pending, sessionID)
+		}
+	}
+	at.mu.Unlock()
 }
 
 // Close stops the activity tracker and performs a final flush.
-// After Close returns, the tracker can be restarted by calling Start again.
+// After Close returns, the tracker cannot be restarted.
 func (at *ActivityTracker) Close() {
 	if at.cancel != nil {
 		at.cancel()
@@ -142,11 +130,4 @@ func (at *ActivityTracker) Close() {
 	if at.eg != nil {
 		at.eg.Wait() // Wait for final flush to complete
 	}
-
-	// Reset state to allow restart
-	at.mu.Lock()
-	at.eg = nil
-	at.cancel = nil
-	at.ticker = nil
-	at.mu.Unlock()
 }
