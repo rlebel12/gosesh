@@ -14,12 +14,13 @@ import (
 type ActivityTracker struct {
 	pending       map[string]time.Time
 	mu            sync.Mutex
-	store         ActivityRecorder  // Uses ActivityRecorder interface, not base Storer
+	store         ActivityRecorder // Uses ActivityRecorder interface, not base Storer
 	ticker        *time.Ticker
 	logger        *slog.Logger
 	flushInterval time.Duration
 	eg            *errgroup.Group
 	cancel        context.CancelFunc
+	running       bool
 }
 
 // NewActivityTracker creates a new activity tracker that flushes at the specified interval.
@@ -36,11 +37,16 @@ func NewActivityTracker(store ActivityRecorder, flushInterval time.Duration, log
 
 // Start begins the background flush loop using the provided context.
 // The flush loop will run until the context is cancelled or Close is called.
+// If a panic occurs in the flush loop, it will be recovered and logged.
 func (at *ActivityTracker) Start(ctx context.Context) {
-	if at.eg != nil {
+	at.mu.Lock()
+	if at.running {
+		at.mu.Unlock()
 		at.logger.Warn("activity tracker already running, ignoring Start call")
 		return
 	}
+	at.running = true
+	at.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(ctx)
 	at.cancel = cancel
@@ -50,6 +56,14 @@ func (at *ActivityTracker) Start(ctx context.Context) {
 	at.eg = eg
 
 	eg.Go(func() error {
+		defer func() {
+			if r := recover(); r != nil {
+				at.logger.Error("activity tracker panic", "panic", r)
+				at.mu.Lock()
+				at.running = false
+				at.mu.Unlock()
+			}
+		}()
 		at.flushLoop(ctx)
 		return nil
 	})
@@ -72,6 +86,12 @@ func (at *ActivityTracker) RecordActivity(sessionID string, timestamp time.Time)
 // flushLoop runs in a goroutine and periodically flushes pending activities.
 func (at *ActivityTracker) flushLoop(ctx context.Context) {
 	defer at.ticker.Stop()
+	defer func() {
+		at.mu.Lock()
+		at.running = false
+		at.mu.Unlock()
+	}()
+
 	for {
 		select {
 		case <-at.ticker.C:
@@ -106,7 +126,15 @@ func (at *ActivityTracker) flush(ctx context.Context) {
 	}
 }
 
+// IsRunning returns true if the activity tracker is currently running.
+func (at *ActivityTracker) IsRunning() bool {
+	at.mu.Lock()
+	defer at.mu.Unlock()
+	return at.running
+}
+
 // Close stops the activity tracker and performs a final flush.
+// After Close returns, the tracker can be restarted by calling Start again.
 func (at *ActivityTracker) Close() {
 	if at.cancel != nil {
 		at.cancel()
@@ -114,4 +142,11 @@ func (at *ActivityTracker) Close() {
 	if at.eg != nil {
 		at.eg.Wait() // Wait for final flush to complete
 	}
+
+	// Reset state to allow restart
+	at.mu.Lock()
+	at.eg = nil
+	at.cancel = nil
+	at.ticker = nil
+	at.mu.Unlock()
 }

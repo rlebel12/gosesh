@@ -1,6 +1,7 @@
 package gosesh
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"sync"
@@ -194,6 +195,89 @@ func TestActivityTracker(t *testing.T) {
 		assert.Len(t, logs.logs, 1)
 		assert.Contains(t, logs.logs[0], "activity tracker already running")
 	})
+
+	t.Run("IsRunning returns correct status", func(t *testing.T) {
+		store := NewMemoryStore()
+		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
+
+		// Not running initially
+		assert.False(t, tracker.IsRunning())
+
+		// Running after Start
+		tracker.Start(t.Context())
+		assert.True(t, tracker.IsRunning())
+
+		// Not running after Close
+		tracker.Close()
+		// Give it a moment to clean up
+		time.Sleep(10 * time.Millisecond)
+		assert.False(t, tracker.IsRunning())
+	})
+
+	t.Run("can restart after Close", func(t *testing.T) {
+		store := NewMemoryStore()
+		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
+
+		// Start, close, and restart
+		tracker.Start(t.Context())
+		assert.True(t, tracker.IsRunning())
+
+		tracker.Close()
+		time.Sleep(10 * time.Millisecond)
+		assert.False(t, tracker.IsRunning())
+
+		// Should be able to start again
+		tracker.Start(t.Context())
+		assert.True(t, tracker.IsRunning())
+
+		tracker.Close()
+	})
+
+	t.Run("recovers from panic in store", func(t *testing.T) {
+		// Create a store that panics on BatchRecordActivity
+		panicStore := &panicingStore{
+			Storer: NewMemoryStore(),
+		}
+
+		logs := &testLogger{logs: []string{}}
+		// Use a short interval to trigger automatic flush
+		tracker := NewActivityTracker(panicStore, 50*time.Millisecond, slog.New(slog.NewTextHandler(&testLogWriter{logger: logs}, nil)))
+		tracker.Start(t.Context())
+
+		// Record activity - this will trigger a panic during automatic flush
+		tracker.RecordActivity("session-1", time.Now().UTC())
+
+		// Wait for automatic flush to trigger and panic handler to execute
+		time.Sleep(200 * time.Millisecond)
+
+		// Should have logged panic
+		var found bool
+		for _, log := range logs.logs {
+			if contains(log, "activity tracker panic") {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Expected panic log, got: %v", logs.logs)
+
+		// Tracker should no longer be running after panic
+		assert.False(t, tracker.IsRunning())
+
+		tracker.Close()
+	})
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
+}
+
+func containsMiddle(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // testLogWriter bridges between testLogger and slog
@@ -203,4 +287,13 @@ type testLogWriter struct {
 
 func (w *testLogWriter) Write(p []byte) (n int, err error) {
 	return w.logger.Write(p)
+}
+
+// panicingStore panics when BatchRecordActivity is called
+type panicingStore struct {
+	Storer
+}
+
+func (s *panicingStore) BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error) {
+	panic("simulated panic in BatchRecordActivity")
 }
