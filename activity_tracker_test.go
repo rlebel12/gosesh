@@ -170,12 +170,29 @@ func TestActivityTracker(t *testing.T) {
 		tracker.flush(t.Context())
 
 		// Should log error
-		assert.Contains(t, logs.logs[0], "failed to flush activity batch")
+		assert.Contains(t, logs.logs[0], "flush activity batch")
 
 		// Pending should be cleared even on error (to prevent memory buildup)
 		tracker.mu.Lock()
 		assert.Empty(t, tracker.pending)
 		tracker.mu.Unlock()
+	})
+
+	t.Run("warns if Start called while already running", func(t *testing.T) {
+		store := NewMemoryStore()
+		logs := &testLogger{logs: []string{}}
+		tracker := NewActivityTracker(store, 1*time.Hour, slog.New(slog.NewTextHandler(&testLogWriter{logger: logs}, nil)))
+
+		// Start once
+		tracker.Start(t.Context())
+		defer tracker.Close()
+
+		// Try to start again
+		tracker.Start(t.Context())
+
+		// Should have logged a warning
+		assert.Len(t, logs.logs, 1)
+		assert.Contains(t, logs.logs[0], "activity tracker already running")
 	})
 }
 

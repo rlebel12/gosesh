@@ -37,6 +37,11 @@ func NewActivityTracker(store ActivityRecorder, flushInterval time.Duration, log
 // Start begins the background flush loop using the provided context.
 // The flush loop will run until the context is cancelled or Close is called.
 func (at *ActivityTracker) Start(ctx context.Context) {
+	if at.eg != nil {
+		at.logger.Warn("activity tracker already running, ignoring Start call")
+		return
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	at.cancel = cancel
 	at.ticker = time.NewTicker(at.flushInterval)
@@ -95,7 +100,7 @@ func (at *ActivityTracker) flush(ctx context.Context) {
 
 	count, err := at.store.BatchRecordActivity(flushCtx, batch)
 	if err != nil {
-		at.logger.Error("failed to flush activity batch", "error", err, "batch_size", len(batch))
+		at.logger.Error("flush activity batch", "error", err, "batch_size", len(batch))
 	} else {
 		at.logger.Debug("flushed activity batch", "updated_count", count, "batch_size", len(batch))
 	}
