@@ -1,7 +1,6 @@
 package gosesh
 
 import (
-	"context"
 	"log/slog"
 	"net/url"
 	"os"
@@ -43,6 +42,7 @@ func TestWithActivityTracking(t *testing.T) {
 	t.Run("creates activity tracker with specified interval", func(t *testing.T) {
 		store := NewMemoryStore()
 		gs := New(store, WithActivityTracking(100*time.Millisecond))
+		gs.Start(t.Context())
 		defer gs.Close()
 
 		assert.NotNil(t, gs.activityTracker)
@@ -60,10 +60,11 @@ func TestGoseshClose(t *testing.T) {
 	t.Run("flushes activity tracker on close", func(t *testing.T) {
 		store := NewMemoryStore()
 		gs := New(store, WithActivityTracking(1*time.Hour)) // Won't auto-flush
+		gs.Start(t.Context())
 
 		// Create session
 		userID := StringIdentifier("user-1")
-		session, _ := store.CreateSession(context.Background(), userID,
+		session, _ := store.CreateSession(t.Context(), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
 		originalActivity := session.LastActivityAt()
@@ -77,7 +78,7 @@ func TestGoseshClose(t *testing.T) {
 		gs.Close()
 
 		// Verify flushed
-		updated, _ := store.GetSession(context.Background(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID().String())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 

@@ -1,7 +1,6 @@
 package gosesh
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"sync"
@@ -16,6 +15,7 @@ func TestActivityTracker(t *testing.T) {
 	t.Run("records activity in pending map", func(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default()) // Long interval, won't flush
+		tracker.Start(t.Context())
 		defer tracker.Close()
 
 		now := time.Now().UTC()
@@ -32,6 +32,7 @@ func TestActivityTracker(t *testing.T) {
 	t.Run("keeps latest timestamp for duplicate session IDs", func(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
+		tracker.Start(t.Context())
 		defer tracker.Close()
 
 		time1 := time.Now().UTC()
@@ -50,11 +51,12 @@ func TestActivityTracker(t *testing.T) {
 	t.Run("flush writes pending activities to store", func(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
+		tracker.Start(t.Context())
 		defer tracker.Close()
 
 		// Create a session
 		userID := StringIdentifier("user-1")
-		session, err := store.CreateSession(context.Background(), userID,
+		session, err := store.CreateSession(t.Context(), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 		require.NoError(t, err)
 
@@ -66,7 +68,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.RecordActivity(session.ID().String(), newActivity)
 
 		// Manual flush
-		tracker.flush()
+		tracker.flush(t.Context())
 
 		// Verify pending is cleared
 		tracker.mu.Lock()
@@ -74,18 +76,19 @@ func TestActivityTracker(t *testing.T) {
 		tracker.mu.Unlock()
 
 		// Verify store was updated
-		updated, _ := store.GetSession(context.Background(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID().String())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 
 	t.Run("automatic flush on interval", func(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 50*time.Millisecond, slog.Default()) // Fast flush
+		tracker.Start(t.Context())
 		defer tracker.Close()
 
 		// Create session
 		userID := StringIdentifier("user-1")
-		session, _ := store.CreateSession(context.Background(), userID,
+		session, _ := store.CreateSession(t.Context(), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
 		originalActivity := session.LastActivityAt()
@@ -98,17 +101,18 @@ func TestActivityTracker(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Verify was flushed
-		updated, _ := store.GetSession(context.Background(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID().String())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 
 	t.Run("flush on close", func(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default()) // Won't auto-flush
+		tracker.Start(t.Context())
 
 		// Create session
 		userID := StringIdentifier("user-1")
-		session, _ := store.CreateSession(context.Background(), userID,
+		session, _ := store.CreateSession(t.Context(), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
 		originalActivity := session.LastActivityAt()
@@ -121,13 +125,14 @@ func TestActivityTracker(t *testing.T) {
 		tracker.Close()
 
 		// Verify was flushed
-		updated, _ := store.GetSession(context.Background(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID().String())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 
 	t.Run("handles concurrent recording safely", func(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
+		tracker.Start(t.Context())
 		defer tracker.Close()
 
 		var wg sync.WaitGroup
@@ -158,10 +163,11 @@ func TestActivityTracker(t *testing.T) {
 
 		logs := &testLogger{logs: []string{}}
 		tracker := NewActivityTracker(errorStore, 1*time.Hour, slog.New(slog.NewTextHandler(&testLogWriter{logger: logs}, nil)))
+		tracker.Start(t.Context())
 		defer tracker.Close()
 
 		tracker.RecordActivity("session-1", time.Now().UTC())
-		tracker.flush()
+		tracker.flush(t.Context())
 
 		// Should log error
 		assert.Contains(t, logs.logs[0], "failed to flush activity batch")

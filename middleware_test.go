@@ -447,11 +447,12 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 			WithNow(func() time.Time { return currentTime }),
 			WithActivityTracking(1*time.Hour), // Won't auto-flush during test
 		)
+		gs.Start(t.Context())
 		defer gs.Close()
 
 		// Create session at time T0
 		userID := StringIdentifier("identifier")
-		session, _ := store.CreateSession(context.Background(), userID,
+		session, _ := store.CreateSession(t.Context(), userID,
 			now.Add(15*time.Minute), now.Add(85*time.Minute))
 
 		originalActivity := session.LastActivityAt()
@@ -473,10 +474,10 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 		handler.ServeHTTP(w, req)
 
 		// Manually flush to check pending activities
-		gs.activityTracker.flush()
+		gs.activityTracker.flush(t.Context())
 
 		// Verify activity was recorded
-		updated, _ := store.GetSession(context.Background(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID().String())
 		assert.True(t, updated.LastActivityAt().After(originalActivity),
 			"Expected LastActivityAt %v to be after %v", updated.LastActivityAt(), originalActivity)
 	})

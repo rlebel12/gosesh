@@ -85,6 +85,7 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 
 	// After all options applied, create activity tracker if enabled
 	// This ensures logger is finalized before tracker creation (fixes race condition)
+	// The tracker must be started by calling Start(ctx) before use.
 	if gs.activityTrackingConfig != nil {
 		recorder, ok := store.(ActivityRecorder)
 		if !ok {
@@ -113,6 +114,15 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 	}
 
 	return gs
+}
+
+// Start begins background processing for the Gosesh instance.
+// If activity tracking is enabled, this starts the background flush loop.
+// The provided context controls the lifetime of background goroutines.
+func (gs *Gosesh) Start(ctx context.Context) {
+	if gs.activityTracker != nil {
+		gs.activityTracker.Start(ctx)
+	}
 }
 
 // WithLogger sets a custom logger for the Gosesh instance.

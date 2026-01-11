@@ -5,34 +5,49 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // ActivityTracker periodically flushes session activity timestamps to the store in batches.
 // This reduces database write load by batching multiple activity updates together.
 type ActivityTracker struct {
-	pending map[string]time.Time
-	mu      sync.Mutex
-	store   ActivityRecorder  // Uses ActivityRecorder interface, not base Storer
-	ticker  *time.Ticker
-	done    chan struct{}
-	logger  *slog.Logger
-	wg      sync.WaitGroup // To wait for flush loop to finish
+	pending       map[string]time.Time
+	mu            sync.Mutex
+	store         ActivityRecorder  // Uses ActivityRecorder interface, not base Storer
+	ticker        *time.Ticker
+	logger        *slog.Logger
+	flushInterval time.Duration
+	eg            *errgroup.Group
+	cancel        context.CancelFunc
 }
 
 // NewActivityTracker creates a new activity tracker that flushes at the specified interval.
 // The logger parameter is required to avoid race conditions during initialization.
+// Call Start(ctx) to begin background flushing.
 func NewActivityTracker(store ActivityRecorder, flushInterval time.Duration, logger *slog.Logger) *ActivityTracker {
-	done := make(chan struct{})  // Create as bidirectional
-	at := &ActivityTracker{
-		pending: make(map[string]time.Time),
-		store:   store,
-		ticker:  time.NewTicker(flushInterval),
-		done:    done,
-		logger:  logger,
+	return &ActivityTracker{
+		pending:       make(map[string]time.Time),
+		store:         store,
+		flushInterval: flushInterval,
+		logger:        logger,
 	}
-	at.wg.Add(1)
-	go at.flushLoop()
-	return at
+}
+
+// Start begins the background flush loop using the provided context.
+// The flush loop will run until the context is cancelled or Close is called.
+func (at *ActivityTracker) Start(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	at.cancel = cancel
+	at.ticker = time.NewTicker(at.flushInterval)
+
+	eg, ctx := errgroup.WithContext(ctx)
+	at.eg = eg
+
+	eg.Go(func() error {
+		at.flushLoop(ctx)
+		return nil
+	})
 }
 
 // RecordActivity records that a session was active at the given timestamp.
@@ -50,21 +65,21 @@ func (at *ActivityTracker) RecordActivity(sessionID string, timestamp time.Time)
 }
 
 // flushLoop runs in a goroutine and periodically flushes pending activities.
-func (at *ActivityTracker) flushLoop() {
-	defer at.wg.Done()
+func (at *ActivityTracker) flushLoop(ctx context.Context) {
+	defer at.ticker.Stop()
 	for {
 		select {
 		case <-at.ticker.C:
-			at.flush()
-		case <-at.done:
-			at.flush() // Final flush before shutdown
+			at.flush(ctx)
+		case <-ctx.Done():
+			at.flush(ctx) // Final flush before shutdown
 			return
 		}
 	}
 }
 
 // flush writes all pending activities to the store and clears the pending map.
-func (at *ActivityTracker) flush() {
+func (at *ActivityTracker) flush(ctx context.Context) {
 	at.mu.Lock()
 	if len(at.pending) == 0 {
 		at.mu.Unlock()
@@ -75,10 +90,10 @@ func (at *ActivityTracker) flush() {
 	at.pending = make(map[string]time.Time)
 	at.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	flushCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	count, err := at.store.BatchRecordActivity(ctx, batch)
+	count, err := at.store.BatchRecordActivity(flushCtx, batch)
 	if err != nil {
 		at.logger.Error("failed to flush activity batch", "error", err, "batch_size", len(batch))
 	} else {
@@ -88,7 +103,10 @@ func (at *ActivityTracker) flush() {
 
 // Close stops the activity tracker and performs a final flush.
 func (at *ActivityTracker) Close() {
-	at.ticker.Stop()
-	close(at.done)
-	at.wg.Wait() // Wait for final flush to complete
+	if at.cancel != nil {
+		at.cancel()
+	}
+	if at.eg != nil {
+		at.eg.Wait() // Wait for final flush to complete
+	}
 }

@@ -326,17 +326,20 @@ gs := gosesh.New(store,
 By default, session activity timestamps are only updated when a session is extended (during refresh). For applications that need precise activity tracking, `gosesh` provides an optional activity tracker that records session activity with minimal performance impact:
 
 ```go
+ctx := context.Background() // Or your application's context
 gs := gosesh.New(store,
     gosesh.WithActivityTracking(5 * time.Minute), // Flush activity updates every 5 minutes
 )
+gs.Start(ctx) // Start background flushing
 defer gs.Close() // Ensures final flush on shutdown
 ```
 
 **How it works:**
+- Call `Start(ctx)` to begin the background flush loop with your application's context
 - Activity is recorded in-memory during authentication (non-blocking, <1μs overhead)
 - Updates are batched and flushed to the store at the specified interval
 - The `LastActivityAt()` method on sessions returns the timestamp of last activity
-- Graceful shutdown via `Close()` ensures all pending updates are flushed
+- Context cancellation or `Close()` stops the flush loop and ensures all pending updates are flushed
 
 **Store Requirements:**
 Your store must implement the `ActivityRecorder` interface to support activity tracking:
