@@ -133,6 +133,24 @@ func (s *erroringStore) BatchRecordActivity(ctx context.Context, updates map[str
 	return 0, errors.New("BatchRecordActivity not implemented")
 }
 
+// contextAwareStore wraps a MemoryStore and adds context cancellation checking
+// to BatchRecordActivity, simulating a real database that respects context.
+type contextAwareStore struct {
+	*MemoryStore
+}
+
+func newContextAwareStore() *contextAwareStore {
+	return &contextAwareStore{MemoryStore: NewMemoryStore()}
+}
+
+func (s *contextAwareStore) BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error) {
+	// Check context before processing - this is what real database drivers do
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	return s.MemoryStore.BatchRecordActivity(ctx, updates)
+}
+
 type testLogger struct {
 	logs []string
 	mu   sync.Mutex

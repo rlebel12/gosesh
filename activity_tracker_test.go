@@ -1,9 +1,11 @@
 package gosesh
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"maps"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -141,7 +143,7 @@ func TestActivityTracker(t *testing.T) {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
-				sessionID := "session-" + string(rune(id))
+				sessionID := "session-" + strconv.Itoa(id)
 				tracker.RecordActivity(sessionID, time.Now().UTC())
 			}(i)
 		}
@@ -179,6 +181,57 @@ func TestActivityTracker(t *testing.T) {
 		assert.Len(t, tracker.pending, 1)
 		assert.Equal(t, now.Unix(), tracker.pending["session-1"].Unix())
 		tracker.mu.Unlock()
+	})
+
+	t.Run("final flush succeeds after context cancel", func(t *testing.T) {
+		// This test verifies that the final flush on shutdown succeeds even when
+		// the parent context is already cancelled.
+		//
+		// Why this bug occurs without the fix:
+		// When ctx.Done() fires in flushLoop, ctx is already cancelled. Calling flush(ctx)
+		// passes this cancelled context. Inside flush(), line 102 creates:
+		//   context.WithTimeout(ctx, 5*time.Second)
+		// But deriving from a cancelled parent produces an immediately-cancelled
+		// child context, causing BatchRecordActivity to fail before the 5s timeout.
+		//
+		// The fix: Pass context.Background() to flush(). This breaks the cancelled
+		// parent chain. flush() then creates:
+		//   context.WithTimeout(context.Background(), 5*time.Second)
+		// which gives the store 5 seconds to persist, even during shutdown.
+
+		// Use contextAwareStore which checks for context cancellation,
+		// simulating a real database driver that respects context.
+		store := newContextAwareStore()
+		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default()) // Won't auto-flush
+
+		// Create a cancellable context (not t.Context() since we need to cancel it)
+		ctx, cancel := context.WithCancel(context.Background())
+
+		tracker.Start(ctx)
+
+		// Create session in store
+		userID := StringIdentifier("user-1")
+		session, err := store.CreateSession(t.Context(), userID,
+			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
+		require.NoError(t, err)
+
+		originalActivity := session.LastActivityAt()
+		time.Sleep(10 * time.Millisecond)
+
+		// Record activity
+		tracker.RecordActivity(session.ID().String(), time.Now().UTC())
+
+		// Cancel the context (simulating shutdown signal)
+		cancel()
+
+		// Close should trigger final flush - this is where the bug manifests
+		tracker.Close()
+
+		// Verify activity was flushed to store despite cancelled context
+		updated, err := store.GetSession(t.Context(), session.ID().String())
+		require.NoError(t, err)
+		assert.True(t, updated.LastActivityAt().After(originalActivity),
+			"final flush should succeed even after context cancellation")
 	})
 
 	t.Run("panics if Start called twice", func(t *testing.T) {

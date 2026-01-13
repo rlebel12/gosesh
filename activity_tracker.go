@@ -79,7 +79,11 @@ func (at *ActivityTracker) flushLoop(ctx context.Context) {
 		case <-at.ticker.C:
 			at.flush(ctx)
 		case <-ctx.Done():
-			at.flush(ctx) // Final flush before shutdown
+			// Final flush uses context.Background() - parent ctx is already cancelled.
+			// Deriving from a cancelled context would produce an immediately-cancelled
+			// child, causing flush() to fail. Using Background() allows the 5-second
+			// timeout in flush() to function properly during graceful shutdown.
+			at.flush(context.Background())
 			return
 		}
 	}
