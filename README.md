@@ -321,6 +321,68 @@ gs := gosesh.New(store,
 - Deleted during logout
 - Automatically refreshed when active
 
+#### Activity Tracking
+
+By default, session activity timestamps are only updated when a session is extended (during refresh). For applications that need precise activity tracking, `gosesh` provides an optional activity tracker that records session activity with minimal performance impact:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+gs := gosesh.New(store,
+    gosesh.WithActivityTracking(gosesh.ActivityTrackingConfig{
+        FlushInterval: 5 * time.Minute, // Flush activity updates every 5 minutes
+    }),
+)
+errors := gs.StartBackgroundTasks(ctx) // Start background flushing, returns error channel
+
+// Handle background task errors (channel closes after final flush on shutdown)
+go func() {
+    for err := range errors {
+        // Type-assert for specific error types
+        if flushErr, ok := err.(*gosesh.FlushError); ok {
+            log.Printf("activity flush error: %v (batch size: %d)", flushErr, flushErr.BatchSize)
+        } else {
+            log.Printf("background task error: %v", err)
+        }
+    }
+}()
+
+// On shutdown: cancel context to trigger final flush
+// cancel()
+// Ranging over errors will block until final flush completes and channel closes
+```
+
+**How it works:**
+- Call `StartBackgroundTasks(ctx)` to begin the background flush loop with your application's context
+- Activity is recorded in-memory during authentication (non-blocking, <1μs overhead)
+- Updates are batched and flushed to the store at the specified interval
+- The `LastActivityAt()` method on sessions returns the timestamp of last activity
+- Flush errors are sent to the returned channel for client handling
+- Context cancellation triggers a final flush; the error channel closes when complete
+- To wait for graceful shutdown, range over the error channel until it closes
+
+**Store Requirements:**
+Your store must implement the `ActivityRecorder` interface to support activity tracking:
+
+```go
+type ActivityRecorder interface {
+    BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error)
+}
+```
+
+The built-in `MemoryStore` already implements this interface. For custom stores, implement `BatchRecordActivity` to update session activity timestamps in batch.
+
+**Use Cases:**
+- Session timeout detection based on last activity
+- Activity-based analytics and monitoring
+- Audit trails for security compliance
+- User engagement tracking
+
+**Performance:**
+- Zero performance impact by default (piggybacks on existing session extension)
+- Optional batching with configurable flush intervals reduces database write load
+- Non-blocking RecordActivity operation (<1μs)
+- Thread-safe with minimal lock contention
+
 ### Error Handling
 
 `gosesh` provides several error types:

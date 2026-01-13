@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ type FakeSession struct {
 	UserIDValue           Identifier
 	IdleDeadlineValue     time.Time
 	AbsoluteDeadlineValue time.Time
+	LastActivityAtValue   time.Time
 }
 
 func (f *FakeSession) ID() Identifier {
@@ -34,12 +36,17 @@ func (f *FakeSession) AbsoluteDeadline() time.Time {
 	return f.AbsoluteDeadlineValue
 }
 
-func NewFakeSession(id, userID Identifier, idleDeadline, absoluteDeadline time.Time) *FakeSession {
+func (f *FakeSession) LastActivityAt() time.Time {
+	return f.LastActivityAtValue
+}
+
+func NewFakeSession(id, userID Identifier, idleDeadline, absoluteDeadline, lastActivityAt time.Time) *FakeSession {
 	return &FakeSession{
 		IDValue:               id,
 		UserIDValue:           userID,
 		IdleDeadlineValue:     idleDeadline,
 		AbsoluteDeadlineValue: absoluteDeadline,
+		LastActivityAtValue:   lastActivityAt,
 	}
 }
 
@@ -53,8 +60,8 @@ func TestStringIdentifierContract(t *testing.T) {
 
 func TestFakeSessionContract(t *testing.T) {
 	SessionContract{
-		NewSession: func(id, userID Identifier, idleDeadline, absoluteDeadline time.Time) Session {
-			return NewFakeSession(id, userID, idleDeadline, absoluteDeadline)
+		NewSession: func(id, userID Identifier, idleDeadline, absoluteDeadline, lastActivityAt time.Time) Session {
+			return NewFakeSession(id, userID, idleDeadline, absoluteDeadline, lastActivityAt)
 		},
 		NewIdentifier: func(id string) Identifier {
 			return StringIdentifier(id)
@@ -64,12 +71,13 @@ func TestFakeSessionContract(t *testing.T) {
 
 type erroringStore struct {
 	Storer
-	createSessionError      bool
-	deleteSessionError      bool
-	deleteUserSessionsError bool
-	upsertUserError         bool
-	getSessionError         bool
-	extendSessionError      bool
+	createSessionError       bool
+	deleteSessionError       bool
+	deleteUserSessionsError  bool
+	upsertUserError          bool
+	getSessionError          bool
+	extendSessionError       bool
+	BatchRecordActivityErr   error
 }
 
 func (s *erroringStore) CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
@@ -114,8 +122,56 @@ func (s *erroringStore) ExtendSession(ctx context.Context, sessionID string, new
 	return s.Storer.ExtendSession(ctx, sessionID, newIdleDeadline)
 }
 
+func (s *erroringStore) BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error) {
+	if s.BatchRecordActivityErr != nil {
+		return 0, s.BatchRecordActivityErr
+	}
+	// If the underlying Storer implements ActivityRecorder, use it
+	if recorder, ok := s.Storer.(ActivityRecorder); ok {
+		return recorder.BatchRecordActivity(ctx, updates)
+	}
+	return 0, errors.New("BatchRecordActivity not implemented")
+}
+
+// contextAwareStore wraps a MemoryStore and adds context cancellation checking
+// to BatchRecordActivity, simulating a real database that respects context.
+type contextAwareStore struct {
+	*MemoryStore
+}
+
+func newContextAwareStore() *contextAwareStore {
+	return &contextAwareStore{MemoryStore: NewMemoryStore()}
+}
+
+func (s *contextAwareStore) BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error) {
+	// Check context before processing - this is what real database drivers do
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	return s.MemoryStore.BatchRecordActivity(ctx, updates)
+}
+
 type testLogger struct {
 	logs []string
+	mu   sync.Mutex
+}
+
+func (l *testLogger) Error(msg string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.logs = append(l.logs, msg)
+}
+
+func (l *testLogger) Info(msg string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.logs = append(l.logs, msg)
+}
+
+func (l *testLogger) Debug(msg string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.logs = append(l.logs, msg)
 }
 
 func (l *testLogger) Write(p []byte) (n int, err error) {

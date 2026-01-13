@@ -132,6 +132,11 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	now := gs.now().UTC()
 
+	// Record activity if tracker is enabled (record after session validated, before expiry checks)
+	if gs.activityTracker != nil {
+		gs.activityTracker.RecordActivity(sessionID, now)
+	}
+
 	// Check idle deadline (sliding window)
 	if session.IdleDeadline().Before(now) {
 		gs.logger.Debug("session idle expired")

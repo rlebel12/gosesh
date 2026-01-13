@@ -162,6 +162,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
+			now,
 		)
 
 		w := httptest.NewRecorder()
@@ -190,6 +191,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
+			now,
 		)
 
 		w := httptest.NewRecorder()
@@ -251,6 +253,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
+			now,
 		)
 		w := httptest.NewRecorder()
 		err := source.WriteSession(w, session)
@@ -293,6 +296,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
+			now,
 		)
 		w := httptest.NewRecorder()
 		err := source.WriteSession(w, session)

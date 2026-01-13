@@ -65,6 +65,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 				userID,
 				now.Add(config.IdleDuration),
 				now.Add(config.AbsoluteDuration),
+				now,
 			)
 
 			// Write session to response
@@ -117,6 +118,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 			userID,
 			now.Add(config.IdleDuration),
 			now.Add(config.AbsoluteDuration),
+			now,
 		)
 
 		// WriteSession should be no-op, no error
