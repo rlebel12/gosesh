@@ -17,7 +17,7 @@ Code review identified several issues in the activity tracking implementation th
 |-------|-------------|------------|--------|
 | [01-merge-main](phases/01-merge-main.md) | Merge origin/main to fix go.mod | None | Pending |
 | [02-final-flush-context](phases/02-final-flush-context.md) | Fix cancelled context in final flush | Phase 01 | Complete |
-| [03-test-string-fix](phases/03-test-string-fix.md) | Fix rune-to-string conversion in test | Phase 01 | Pending |
+| [03-test-string-fix](phases/03-test-string-fix.md) | Fix rune-to-string conversion in test | Phase 01 | Complete |
 
 ## Dependencies
 
@@ -33,8 +33,8 @@ Code review identified several issues in the activity tracking implementation th
 
 ## Status
 
-**Progress:** 1/3 phases complete
-**Current Phase:** Phase 02 complete
+**Progress:** 2/3 phases complete
+**Current Phase:** Phase 02, 03 complete
 **Blocked:** None
 
 ---
