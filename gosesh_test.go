@@ -1,6 +1,7 @@
 package gosesh
 
 import (
+	"context"
 	"log/slog"
 	"net/url"
 	"os"
@@ -43,7 +44,6 @@ func TestWithActivityTracking(t *testing.T) {
 		store := NewMemoryStore()
 		gs := New(store, WithActivityTracking(ActivityTrackingConfig{FlushInterval: 100 * time.Millisecond}))
 		gs.StartBackgroundTasks(t.Context())
-		defer gs.Close()
 
 		assert.NotNil(t, gs.activityTracker)
 	})
@@ -54,13 +54,13 @@ func TestWithActivityTracking(t *testing.T) {
 
 		assert.Nil(t, gs.activityTracker)
 	})
-}
 
-func TestGoseshClose(t *testing.T) {
-	t.Run("flushes activity tracker on close", func(t *testing.T) {
+	t.Run("flushes on context cancellation", func(t *testing.T) {
 		store := NewMemoryStore()
 		gs := New(store, WithActivityTracking(ActivityTrackingConfig{FlushInterval: 1 * time.Hour})) // Won't auto-flush
-		gs.StartBackgroundTasks(t.Context())
+
+		ctx, cancel := context.WithCancel(t.Context())
+		errors := gs.StartBackgroundTasks(ctx)
 
 		// Create session
 		userID := StringIdentifier("user-1")
@@ -74,20 +74,14 @@ func TestGoseshClose(t *testing.T) {
 		newActivity := time.Now().UTC()
 		gs.activityTracker.RecordActivity(session.ID().String(), newActivity)
 
-		// Close should flush
-		gs.Close()
+		// Cancel context to trigger flush
+		cancel()
+		// Wait for shutdown
+		for range errors {
+		}
 
 		// Verify flushed
 		updated, _ := store.GetSession(t.Context(), session.ID().String())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
-	})
-
-	t.Run("Close is safe to call when no activity tracker", func(t *testing.T) {
-		store := NewMemoryStore()
-		gs := New(store)
-
-		assert.NotPanics(t, func() {
-			gs.Close()
-		})
 	})
 }

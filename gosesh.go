@@ -238,14 +238,6 @@ func WithActivityTracking(config ActivityTrackingConfig) func(*Gosesh) {
 	}
 }
 
-// Close gracefully shuts down the Gosesh instance.
-// If activity tracking is enabled, this flushes any pending activity updates to the store.
-func (gs *Gosesh) Close() {
-	if gs.activityTracker != nil {
-		gs.activityTracker.Stop()
-	}
-}
-
 // Storer is the interface that must be implemented by storage backends.
 // It defines the methods required for managing users and sessions.
 type Storer interface {

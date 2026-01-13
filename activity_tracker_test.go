@@ -19,7 +19,6 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default()) // Long interval, won't flush
 		tracker.Start(t.Context())
-		defer tracker.Stop()
 
 		now := time.Now().UTC()
 		tracker.RecordActivity("session-1", now)
@@ -36,7 +35,6 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Stop()
 
 		time1 := time.Now().UTC()
 		time2 := time1.Add(5 * time.Second)
@@ -55,7 +53,6 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Stop()
 
 		// Create a session
 		userID := StringIdentifier("user-1")
@@ -87,8 +84,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 50*time.Millisecond, slog.Default()) // Fast flush
 		tracker.Start(t.Context())
-		defer tracker.Stop()
-
+		
 		// Create session
 		userID := StringIdentifier("user-1")
 		session, _ := store.CreateSession(t.Context(), userID,
@@ -108,10 +104,12 @@ func TestActivityTracker(t *testing.T) {
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 
-	t.Run("flush on close", func(t *testing.T) {
+	t.Run("flush on context cancellation", func(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default()) // Won't auto-flush
-		tracker.Start(t.Context())
+
+		ctx, cancel := context.WithCancel(t.Context())
+		tracker.Start(ctx)
 
 		// Create session
 		userID := StringIdentifier("user-1")
@@ -124,8 +122,11 @@ func TestActivityTracker(t *testing.T) {
 		// Record activity
 		tracker.RecordActivity(session.ID().String(), time.Now().UTC())
 
-		// Close should trigger flush
-		tracker.Stop()
+		// Cancel context to trigger final flush
+		cancel()
+		// Wait for shutdown by draining error channel
+		for range tracker.Errors() {
+		}
 
 		// Verify was flushed
 		updated, _ := store.GetSession(t.Context(), session.ID().String())
@@ -136,8 +137,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Stop()
-
+		
 		var wg sync.WaitGroup
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
@@ -166,8 +166,7 @@ func TestActivityTracker(t *testing.T) {
 
 		tracker := NewActivityTracker(errorStore, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Stop()
-
+		
 		now := time.Now().UTC()
 		tracker.RecordActivity("session-1", now)
 		tracker.flush(t.Context())
@@ -232,8 +231,9 @@ func TestActivityTracker(t *testing.T) {
 		// Cancel the context (simulating shutdown signal)
 		cancel()
 
-		// Close should trigger final flush - this is where the bug manifests
-		tracker.Stop()
+		// Wait for final flush by draining error channel
+		for range tracker.Errors() {
+		}
 
 		// Verify activity was flushed to store despite cancelled context
 		updated, err := store.GetSession(t.Context(), session.ID().String())
@@ -247,8 +247,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 
 		tracker.Start(t.Context())
-		defer tracker.Stop()
-
+		
 		// Try to start again - should panic
 		assert.Panics(t, func() {
 			tracker.Start(t.Context())
@@ -259,8 +258,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Stop()
-
+		
 		// Record initial activity
 		time1 := time.Now().UTC()
 		tracker.RecordActivity("session-1", time1)

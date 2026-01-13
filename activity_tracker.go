@@ -6,8 +6,6 @@ import (
 	"maps"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // ActivityTrackingConfig stores configuration for activity tracking.
@@ -39,8 +37,7 @@ type ActivityTracker struct {
 	ticker        *time.Ticker
 	logger        *slog.Logger
 	flushInterval time.Duration
-	eg            *errgroup.Group
-	cancel        context.CancelFunc
+	started       bool
 	errors        chan error
 }
 
@@ -74,24 +71,21 @@ func (at *ActivityTracker) Errors() <-chan error {
 }
 
 // Start begins the background flush loop using the provided context.
-// The flush loop will run until the context is cancelled or Stop is called.
+// The flush loop runs until the context is cancelled. When cancelled, a final
+// flush is performed and then the error channel is closed.
+// Callers can range over Errors() to wait for graceful shutdown.
 // Start must only be called once. Calling Start multiple times will panic.
 func (at *ActivityTracker) Start(ctx context.Context) {
-	if at.eg != nil {
+	if at.started {
 		panic("ActivityTracker.Start called multiple times")
 	}
-
-	ctx, cancel := context.WithCancel(ctx)
-	at.cancel = cancel
+	at.started = true
 	at.ticker = time.NewTicker(at.flushInterval)
 
-	eg, ctx := errgroup.WithContext(ctx)
-	at.eg = eg
-
-	eg.Go(func() error {
+	go func() {
 		at.flushLoop(ctx)
-		return nil
-	})
+		close(at.errors)
+	}()
 }
 
 // RecordActivity records that a session was active at the given timestamp.
@@ -169,14 +163,3 @@ func (at *ActivityTracker) flush(ctx context.Context) {
 	at.mu.Unlock()
 }
 
-// Stop stops the activity tracker and performs a final flush.
-// After Stop returns, the tracker cannot be restarted.
-func (at *ActivityTracker) Stop() {
-	if at.cancel != nil {
-		at.cancel()
-	}
-	if at.eg != nil {
-		at.eg.Wait() // Wait for final flush to complete
-	}
-	close(at.errors)
-}

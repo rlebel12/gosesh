@@ -448,7 +448,6 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 			WithActivityTracking(ActivityTrackingConfig{FlushInterval: 1 * time.Hour}), // Won't auto-flush during test
 		)
 		gs.StartBackgroundTasks(t.Context())
-		defer gs.Close()
 
 		// Create session at time T0
 		userID := StringIdentifier("identifier")

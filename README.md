@@ -326,16 +326,15 @@ gs := gosesh.New(store,
 By default, session activity timestamps are only updated when a session is extended (during refresh). For applications that need precise activity tracking, `gosesh` provides an optional activity tracker that records session activity with minimal performance impact:
 
 ```go
-ctx := context.Background() // Or your application's context
+ctx, cancel := context.WithCancel(context.Background())
 gs := gosesh.New(store,
     gosesh.WithActivityTracking(gosesh.ActivityTrackingConfig{
         FlushInterval: 5 * time.Minute, // Flush activity updates every 5 minutes
     }),
 )
 errors := gs.StartBackgroundTasks(ctx) // Start background flushing, returns error channel
-defer gs.Close() // Ensures final flush on shutdown
 
-// Optionally handle background task errors
+// Handle background task errors (channel closes after final flush on shutdown)
 go func() {
     for err := range errors {
         // Type-assert for specific error types
@@ -346,6 +345,10 @@ go func() {
         }
     }
 }()
+
+// On shutdown: cancel context to trigger final flush
+// cancel()
+// Ranging over errors will block until final flush completes and channel closes
 ```
 
 **How it works:**
@@ -354,7 +357,8 @@ go func() {
 - Updates are batched and flushed to the store at the specified interval
 - The `LastActivityAt()` method on sessions returns the timestamp of last activity
 - Flush errors are sent to the returned channel for client handling
-- Context cancellation or `Close()` stops the flush loop and ensures all pending updates are flushed
+- Context cancellation triggers a final flush; the error channel closes when complete
+- To wait for graceful shutdown, range over the error channel until it closes
 
 **Store Requirements:**
 Your store must implement the `ActivityRecorder` interface to support activity tracking:
