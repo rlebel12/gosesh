@@ -328,17 +328,32 @@ By default, session activity timestamps are only updated when a session is exten
 ```go
 ctx := context.Background() // Or your application's context
 gs := gosesh.New(store,
-    gosesh.WithActivityTracking(5 * time.Minute), // Flush activity updates every 5 minutes
+    gosesh.WithActivityTracking(gosesh.ActivityTrackingConfig{
+        FlushInterval: 5 * time.Minute, // Flush activity updates every 5 minutes
+    }),
 )
-gs.Start(ctx) // Start background flushing
+errors := gs.StartBackgroundTasks(ctx) // Start background flushing, returns error channel
 defer gs.Close() // Ensures final flush on shutdown
+
+// Optionally handle background task errors
+go func() {
+    for err := range errors {
+        // Type-assert for specific error types
+        if flushErr, ok := err.(*gosesh.FlushError); ok {
+            log.Printf("activity flush error: %v (batch size: %d)", flushErr, flushErr.BatchSize)
+        } else {
+            log.Printf("background task error: %v", err)
+        }
+    }
+}()
 ```
 
 **How it works:**
-- Call `Start(ctx)` to begin the background flush loop with your application's context
+- Call `StartBackgroundTasks(ctx)` to begin the background flush loop with your application's context
 - Activity is recorded in-memory during authentication (non-blocking, <1μs overhead)
 - Updates are batched and flushed to the store at the specified interval
 - The `LastActivityAt()` method on sessions returns the timestamp of last activity
+- Flush errors are sent to the returned channel for client handling
 - Context cancellation or `Close()` stops the flush loop and ensures all pending updates are flushed
 
 **Store Requirements:**

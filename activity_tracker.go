@@ -10,33 +10,71 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// ActivityTrackingConfig stores configuration for activity tracking.
+type ActivityTrackingConfig struct {
+	// FlushInterval is how often pending activity timestamps are flushed to the store.
+	FlushInterval time.Duration
+}
+
+// FlushError represents an error that occurred during activity flush.
+type FlushError struct {
+	Err       error
+	BatchSize int
+}
+
+func (e *FlushError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *FlushError) Unwrap() error {
+	return e.Err
+}
+
 // ActivityTracker periodically flushes session activity timestamps to the store in batches.
 // This reduces database write load by batching multiple activity updates together.
 type ActivityTracker struct {
 	pending       map[string]time.Time
-	mu            sync.Mutex
-	store         ActivityRecorder // Uses ActivityRecorder interface, not base Storer
+	mu            sync.Mutex // See RWMutex note below
+	store         ActivityRecorder
 	ticker        *time.Ticker
 	logger        *slog.Logger
 	flushInterval time.Duration
 	eg            *errgroup.Group
 	cancel        context.CancelFunc
+	errors        chan error
 }
 
+// Note on sync.Mutex vs sync.RWMutex:
+// RWMutex would not provide benefit here because the hot path (RecordActivity)
+// always writes to the pending map. RWMutex is beneficial when you have many
+// concurrent readers and few writers. In this case, every request writes via
+// RecordActivity, and flush() also requires write access to clone and delete.
+// Using Mutex avoids the overhead of RWMutex's more complex locking semantics.
+
 // NewActivityTracker creates a new activity tracker that flushes at the specified interval.
-// The logger parameter is required to avoid race conditions during initialization.
 // Call Start(ctx) to begin background flushing.
+// Flush errors are sent to the Errors() channel for client handling.
 func NewActivityTracker(store ActivityRecorder, flushInterval time.Duration, logger *slog.Logger) *ActivityTracker {
 	return &ActivityTracker{
 		pending:       make(map[string]time.Time),
 		store:         store,
 		flushInterval: flushInterval,
 		logger:        logger,
+		errors:        make(chan error, 16), // Buffered to avoid blocking flush
 	}
 }
 
+// Errors returns a channel that receives flush errors.
+// Clients should read from this channel to handle errors (e.g., logging, alerting).
+// The channel is buffered (16) to avoid blocking the flush loop.
+// If the buffer fills, errors are logged and dropped.
+// Errors are of type *FlushError which can be type-asserted for additional context.
+func (at *ActivityTracker) Errors() <-chan error {
+	return at.errors
+}
+
 // Start begins the background flush loop using the provided context.
-// The flush loop will run until the context is cancelled or Close is called.
+// The flush loop will run until the context is cancelled or Stop is called.
 // Start must only be called once. Calling Start multiple times will panic.
 func (at *ActivityTracker) Start(ctx context.Context) {
 	if at.eg != nil {
@@ -108,7 +146,13 @@ func (at *ActivityTracker) flush(ctx context.Context) {
 
 	count, err := at.store.BatchRecordActivity(flushCtx, batch)
 	if err != nil {
-		at.logger.Error("flush activity batch", "error", err, "batch_size", len(batch), "pending_size", len(at.pending))
+		// Send error to channel (non-blocking to avoid stalling flush loop)
+		flushErr := &FlushError{Err: err, BatchSize: len(batch)}
+		select {
+		case at.errors <- flushErr:
+		default:
+			at.logger.Warn("flush error channel full, dropping error", "error", err, "batch_size", len(batch))
+		}
 		return
 	}
 
@@ -125,13 +169,14 @@ func (at *ActivityTracker) flush(ctx context.Context) {
 	at.mu.Unlock()
 }
 
-// Close stops the activity tracker and performs a final flush.
-// After Close returns, the tracker cannot be restarted.
-func (at *ActivityTracker) Close() {
+// Stop stops the activity tracker and performs a final flush.
+// After Stop returns, the tracker cannot be restarted.
+func (at *ActivityTracker) Stop() {
 	if at.cancel != nil {
 		at.cancel()
 	}
 	if at.eg != nil {
 		at.eg.Wait() // Wait for final flush to complete
 	}
+	close(at.errors)
 }

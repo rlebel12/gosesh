@@ -10,11 +10,6 @@ import (
 	"time"
 )
 
-// activityTrackingConfig stores configuration for activity tracking.
-type activityTrackingConfig struct {
-	flushInterval time.Duration
-}
-
 // Gosesh is the main type that provides OAuth2 authentication and session management.
 // It handles the OAuth2 flow, session creation and validation, and provides middleware
 // for protecting routes.
@@ -33,8 +28,8 @@ type Gosesh struct {
 	now                     func() time.Time
 	cookieDomain            func() string
 	credentialSource        CredentialSource
-	activityTracker         *ActivityTracker
-	activityTrackingConfig  *activityTrackingConfig
+	activityTracker        *ActivityTracker
+	activityTrackingConfig *ActivityTrackingConfig
 }
 
 // Identifier is an interface that represents a unique identifier for users and sessions.
@@ -83,9 +78,9 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		opt(gs)
 	}
 
-	// After all options applied, create activity tracker if enabled
-	// This ensures logger is finalized before tracker creation (fixes race condition)
-	// The tracker must be started by calling Start(ctx) before use.
+	// After all options applied, create activity tracker if enabled.
+	// This ensures logger is finalized before tracker creation.
+	// The tracker must be started by calling StartBackgroundTasks(ctx) before use.
 	if gs.activityTrackingConfig != nil {
 		recorder, ok := store.(ActivityRecorder)
 		if !ok {
@@ -93,8 +88,8 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		}
 		gs.activityTracker = NewActivityTracker(
 			recorder,
-			gs.activityTrackingConfig.flushInterval,
-			gs.logger, // Logger is now finalized
+			gs.activityTrackingConfig.FlushInterval,
+			gs.logger,
 		)
 	}
 
@@ -116,13 +111,17 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 	return gs
 }
 
-// Start begins background processing for the Gosesh instance.
+// StartBackgroundTasks begins background processing for the Gosesh instance.
 // If activity tracking is enabled, this starts the background flush loop.
 // The provided context controls the lifetime of background goroutines.
-func (gs *Gosesh) Start(ctx context.Context) {
+// Returns an error channel for background task errors (nil if no background tasks).
+// Callers can type-assert errors to specific types (e.g., *FlushError) for context.
+func (gs *Gosesh) StartBackgroundTasks(ctx context.Context) <-chan error {
 	if gs.activityTracker != nil {
 		gs.activityTracker.Start(ctx)
+		return gs.activityTracker.Errors()
 	}
+	return nil
 }
 
 // WithLogger sets a custom logger for the Gosesh instance.
@@ -233,11 +232,9 @@ func WithCredentialSources(sources ...CredentialSource) func(*Gosesh) {
 // If not specified, activity timestamps are only updated during session extension (ExtendSession).
 //
 // The store must implement the ActivityRecorder interface. If it doesn't, New() will panic.
-func WithActivityTracking(flushInterval time.Duration) func(*Gosesh) {
+func WithActivityTracking(config ActivityTrackingConfig) func(*Gosesh) {
 	return func(gs *Gosesh) {
-		gs.activityTrackingConfig = &activityTrackingConfig{
-			flushInterval: flushInterval,
-		}
+		gs.activityTrackingConfig = &config
 	}
 }
 
@@ -245,7 +242,7 @@ func WithActivityTracking(flushInterval time.Duration) func(*Gosesh) {
 // If activity tracking is enabled, this flushes any pending activity updates to the store.
 func (gs *Gosesh) Close() {
 	if gs.activityTracker != nil {
-		gs.activityTracker.Close()
+		gs.activityTracker.Stop()
 	}
 }
 

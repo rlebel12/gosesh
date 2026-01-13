@@ -41,8 +41,8 @@ func TestWithLogger(t *testing.T) {
 func TestWithActivityTracking(t *testing.T) {
 	t.Run("creates activity tracker with specified interval", func(t *testing.T) {
 		store := NewMemoryStore()
-		gs := New(store, WithActivityTracking(100*time.Millisecond))
-		gs.Start(t.Context())
+		gs := New(store, WithActivityTracking(ActivityTrackingConfig{FlushInterval: 100 * time.Millisecond}))
+		gs.StartBackgroundTasks(t.Context())
 		defer gs.Close()
 
 		assert.NotNil(t, gs.activityTracker)
@@ -59,8 +59,8 @@ func TestWithActivityTracking(t *testing.T) {
 func TestGoseshClose(t *testing.T) {
 	t.Run("flushes activity tracker on close", func(t *testing.T) {
 		store := NewMemoryStore()
-		gs := New(store, WithActivityTracking(1*time.Hour)) // Won't auto-flush
-		gs.Start(t.Context())
+		gs := New(store, WithActivityTracking(ActivityTrackingConfig{FlushInterval: 1 * time.Hour})) // Won't auto-flush
+		gs.StartBackgroundTasks(t.Context())
 
 		// Create session
 		userID := StringIdentifier("user-1")

@@ -445,9 +445,9 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 			WithSessionCookieName("customName"),
 			WithOrigin(&url.URL{Scheme: "http", Host: "localhost"}),
 			WithNow(func() time.Time { return currentTime }),
-			WithActivityTracking(1*time.Hour), // Won't auto-flush during test
+			WithActivityTracking(ActivityTrackingConfig{FlushInterval: 1 * time.Hour}), // Won't auto-flush during test
 		)
-		gs.Start(t.Context())
+		gs.StartBackgroundTasks(t.Context())
 		defer gs.Close()
 
 		// Create session at time T0

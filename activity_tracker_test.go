@@ -19,7 +19,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default()) // Long interval, won't flush
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		now := time.Now().UTC()
 		tracker.RecordActivity("session-1", now)
@@ -36,7 +36,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		time1 := time.Now().UTC()
 		time2 := time1.Add(5 * time.Second)
@@ -55,7 +55,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		// Create a session
 		userID := StringIdentifier("user-1")
@@ -87,7 +87,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 50*time.Millisecond, slog.Default()) // Fast flush
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		// Create session
 		userID := StringIdentifier("user-1")
@@ -125,7 +125,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.RecordActivity(session.ID().String(), time.Now().UTC())
 
 		// Close should trigger flush
-		tracker.Close()
+		tracker.Stop()
 
 		// Verify was flushed
 		updated, _ := store.GetSession(t.Context(), session.ID().String())
@@ -136,7 +136,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		var wg sync.WaitGroup
 		for i := 0; i < 100; i++ {
@@ -164,17 +164,25 @@ func TestActivityTracker(t *testing.T) {
 			BatchRecordActivityErr: errors.New("database connection failed"),
 		}
 
-		logs := &testLogger{logs: []string{}}
-		tracker := NewActivityTracker(errorStore, 1*time.Hour, slog.New(slog.NewTextHandler(&testLogWriter{logger: logs}, nil)))
+		tracker := NewActivityTracker(errorStore, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		now := time.Now().UTC()
 		tracker.RecordActivity("session-1", now)
 		tracker.flush(t.Context())
 
-		// Should log error
-		assert.Contains(t, logs.logs[0], "flush activity batch")
+		// Should send error to channel
+		select {
+		case err := <-tracker.Errors():
+			assert.ErrorContains(t, err, "database connection failed")
+			// Type-assert to FlushError for additional context
+			var flushErr *FlushError
+			require.ErrorAs(t, err, &flushErr)
+			assert.Equal(t, 1, flushErr.BatchSize)
+		default:
+			t.Fatal("expected error on channel")
+		}
 
 		// Pending should NOT be cleared on error (retained for retry)
 		tracker.mu.Lock()
@@ -225,7 +233,7 @@ func TestActivityTracker(t *testing.T) {
 		cancel()
 
 		// Close should trigger final flush - this is where the bug manifests
-		tracker.Close()
+		tracker.Stop()
 
 		// Verify activity was flushed to store despite cancelled context
 		updated, err := store.GetSession(t.Context(), session.ID().String())
@@ -239,7 +247,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		// Try to start again - should panic
 		assert.Panics(t, func() {
@@ -251,7 +259,7 @@ func TestActivityTracker(t *testing.T) {
 		store := NewMemoryStore()
 		tracker := NewActivityTracker(store, 1*time.Hour, slog.Default())
 		tracker.Start(t.Context())
-		defer tracker.Close()
+		defer tracker.Stop()
 
 		// Record initial activity
 		time1 := time.Now().UTC()
@@ -281,13 +289,4 @@ func TestActivityTracker(t *testing.T) {
 		assert.Equal(t, time2.Unix(), tracker.pending["session-1"].Unix())
 		tracker.mu.Unlock()
 	})
-}
-
-// testLogWriter bridges between testLogger and slog
-type testLogWriter struct {
-	logger *testLogger
-}
-
-func (w *testLogWriter) Write(p []byte) (n int, err error) {
-	return w.logger.Write(p)
 }
