@@ -22,14 +22,14 @@ func TestCompositeCredentialSource(t *testing.T) {
 			WithCookieSourceSessionConfig(SessionConfig{
 				IdleDuration:     10 * time.Minute,
 				AbsoluteDuration: 1 * time.Hour,
-				RefreshEnabled:   false,
+				RefreshThreshold: nil,
 			}),
 		)
 		headerSource := NewHeaderCredentialSource(
 			WithHeaderSessionConfig(SessionConfig{
 				IdleDuration:     0,
 				AbsoluteDuration: 30 * 24 * time.Hour,
-				RefreshEnabled:   false,
+				RefreshThreshold: nil,
 			}),
 		)
 
@@ -39,7 +39,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 		// Should get config from first source (cookie)
 		assert.Equal(t, 10*time.Minute, config.IdleDuration)
 		assert.Equal(t, 1*time.Hour, config.AbsoluteDuration)
-		assert.False(t, config.RefreshEnabled)
+		assert.Nil(t, config.RefreshThreshold)
 	})
 
 	t.Run("read_session_id_priority", func(t *testing.T) {

@@ -28,8 +28,10 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			return
 		}
 
+		sessionCfg := gs.credentialSource.SessionConfig()
+
 		// Check if refresh is enabled for this credential source
-		if !gs.credentialSource.SessionConfig().RefreshEnabled {
+		if sessionCfg.RefreshThreshold == nil {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -37,14 +39,14 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 		now := gs.now().UTC()
 		timeUntilIdle := session.IdleDeadline().Sub(now)
 
-		// Only extend if within refresh threshold
-		if timeUntilIdle > gs.sessionRefreshThreshold {
+		// Only extend if within refresh threshold (0 = always refresh)
+		if *sessionCfg.RefreshThreshold > 0 && timeUntilIdle > *sessionCfg.RefreshThreshold {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// Calculate new idle deadline, capped at absolute deadline
-		newIdleDeadline := now.Add(gs.sessionIdleTimeout)
+		newIdleDeadline := now.Add(sessionCfg.IdleDuration)
 		if newIdleDeadline.After(session.AbsoluteDeadline()) {
 			newIdleDeadline = session.AbsoluteDeadline()
 		}

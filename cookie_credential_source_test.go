@@ -27,7 +27,8 @@ func TestCookieCredentialSource(t *testing.T) {
 		config := source.SessionConfig()
 		assert.Equal(t, 30*time.Minute, config.IdleDuration, "Default idle duration should be 30 minutes")
 		assert.Equal(t, 24*time.Hour, config.AbsoluteDuration, "Default absolute duration should be 24 hours")
-		assert.True(t, config.RefreshEnabled, "Default should have refresh enabled")
+		require.NotNil(t, config.RefreshThreshold, "Default should have refresh threshold set")
+		assert.Equal(t, 10*time.Minute, *config.RefreshThreshold, "Default refresh threshold should be 10 minutes")
 	})
 
 	t.Run("read_session_id", func(t *testing.T) {
@@ -256,14 +257,14 @@ func TestCookieCredentialSource(t *testing.T) {
 		customConfig := SessionConfig{
 			IdleDuration:     1 * time.Hour,
 			AbsoluteDuration: 48 * time.Hour,
-			RefreshEnabled:   false,
+			RefreshThreshold: nil,
 		}
 		source := NewCookieCredentialSource(WithCookieSourceSessionConfig(customConfig))
 
 		config := source.SessionConfig()
 		assert.Equal(t, customConfig.IdleDuration, config.IdleDuration)
 		assert.Equal(t, customConfig.AbsoluteDuration, config.AbsoluteDuration)
-		assert.Equal(t, customConfig.RefreshEnabled, config.RefreshEnabled)
+		assert.Equal(t, customConfig.RefreshThreshold, config.RefreshThreshold)
 	})
 
 	t.Run("empty_session_id_edge_case", func(t *testing.T) {

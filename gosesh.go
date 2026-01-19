@@ -14,20 +14,17 @@ import (
 // It handles the OAuth2 flow, session creation and validation, and provides middleware
 // for protecting routes.
 type Gosesh struct {
-	store                   Storer
-	logger                  *slog.Logger
-	origin                  *url.URL
-	allowedHosts            []string
-	sessionCookieName       string
-	oAuth2StateCookieName   string
-	redirectCookieName      string
-	redirectParamName       string
-	sessionIdleTimeout      time.Duration
-	sessionMaxLifetime      time.Duration
-	sessionRefreshThreshold time.Duration
-	now                     func() time.Time
-	cookieDomain            func() string
-	credentialSource        CredentialSource
+	store                  Storer
+	logger                 *slog.Logger
+	origin                 *url.URL
+	allowedHosts           []string
+	sessionCookieName      string
+	oAuth2StateCookieName  string
+	redirectCookieName     string
+	redirectParamName      string
+	now                    func() time.Time
+	cookieDomain           func() string
+	credentialSource       CredentialSource
 	activityTracker        *ActivityTracker
 	activityTrackingConfig *ActivityTrackingConfig
 }
@@ -58,18 +55,15 @@ func (gs *Gosesh) CookieDomain() string {
 func New(store Storer, opts ...NewOpts) *Gosesh {
 	url, _ := url.Parse("http://localhost")
 	gs := &Gosesh{
-		store:                   store,
-		logger:                  slog.New(slog.NewTextHandler(io.Discard, nil)),
-		sessionCookieName:       "session",
-		oAuth2StateCookieName:   "oauthstate",
-		redirectCookieName:      "redirect",
-		redirectParamName:       "next",
-		sessionIdleTimeout:      1 * time.Hour,
-		sessionMaxLifetime:      24 * time.Hour,
-		sessionRefreshThreshold: 10 * time.Minute,
-		origin:                  url,
-		allowedHosts:            []string{url.Hostname()},
-		now:                     time.Now,
+		store:                 store,
+		logger:                slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessionCookieName:     "session",
+		oAuth2StateCookieName: "oauthstate",
+		redirectCookieName:    "redirect",
+		redirectParamName:     "next",
+		origin:                url,
+		allowedHosts:          []string{url.Hostname()},
+		now:                   time.Now,
 	}
 	gs.cookieDomain = func() string { return gs.origin.Hostname() }
 
@@ -93,18 +87,12 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		)
 	}
 
-	// Backward compatibility: if no credential source specified, create a cookie source
-	// with the existing configuration options
+	// If no credential source specified, create a default cookie source
 	if gs.credentialSource == nil {
 		gs.credentialSource = NewCookieCredentialSource(
 			WithCookieSourceName(gs.sessionCookieName),
 			WithCookieSourceDomain(gs.cookieDomain()),
 			WithCookieSourceSecure(gs.Scheme() == "https"),
-			WithCookieSourceSessionConfig(SessionConfig{
-				IdleDuration:     gs.sessionIdleTimeout,
-				AbsoluteDuration: gs.sessionMaxLifetime,
-				RefreshEnabled:   true,
-			}),
 		)
 	}
 
@@ -156,32 +144,6 @@ func WithRedirectCookieName(name string) func(*Gosesh) {
 func WithRedirectParamName(name string) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.redirectParamName = name
-	}
-}
-
-// WithSessionIdleTimeout sets the duration of inactivity after which a session expires.
-// This represents the idle expiry window - the session will expire if there is no activity
-// within this duration.
-func WithSessionIdleTimeout(d time.Duration) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.sessionIdleTimeout = d
-	}
-}
-
-// WithSessionMaxLifetime sets the absolute maximum lifetime of a session.
-// The session will expire after this duration regardless of activity.
-func WithSessionMaxLifetime(d time.Duration) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.sessionMaxLifetime = d
-	}
-}
-
-// WithSessionRefreshThreshold sets the time window before idle expiry that triggers a refresh.
-// When a session is accessed and its idle deadline is within this threshold, the session
-// will be extended to prevent expiry.
-func WithSessionRefreshThreshold(d time.Duration) func(*Gosesh) {
-	return func(c *Gosesh) {
-		c.sessionRefreshThreshold = d
 	}
 }
 
@@ -293,9 +255,11 @@ type SessionConfig struct {
 	// AbsoluteDuration is the maximum session lifetime (required, must be > 0).
 	// The session expires after this duration regardless of activity.
 	AbsoluteDuration time.Duration
-	// RefreshEnabled indicates whether AuthenticateAndRefresh extends the idle deadline.
-	// When true, session activity will extend the idle timeout up to the absolute deadline.
-	RefreshEnabled bool
+	// RefreshThreshold controls when AuthenticateAndRefresh extends the idle deadline.
+	// - nil: refresh disabled (session never extended)
+	// - 0: refresh on every request
+	// - >0: refresh when idle deadline is within this threshold
+	RefreshThreshold *time.Duration
 }
 
 // CredentialSource abstracts how session IDs are read from requests
@@ -332,12 +296,13 @@ type CredentialSource interface {
 // cookie-based browser sessions. These sessions have:
 // - 30 minute idle timeout (session expires after 30 minutes of inactivity)
 // - 24 hour absolute timeout (session expires after 24 hours regardless of activity)
-// - Refresh enabled (activity extends the idle timeout)
+// - 10 minute refresh threshold (activity extends idle timeout when within 10 min of expiry)
 func DefaultBrowserSessionConfig() SessionConfig {
+	threshold := 10 * time.Minute
 	return SessionConfig{
 		IdleDuration:     30 * time.Minute,
 		AbsoluteDuration: 24 * time.Hour,
-		RefreshEnabled:   true,
+		RefreshThreshold: &threshold,
 	}
 }
 
@@ -350,7 +315,7 @@ func DefaultNativeAppSessionConfig() SessionConfig {
 	return SessionConfig{
 		IdleDuration:     0, // No idle timeout
 		AbsoluteDuration: 30 * 24 * time.Hour,
-		RefreshEnabled:   false,
+		RefreshThreshold: nil, // Refresh disabled
 	}
 }
 

@@ -265,13 +265,13 @@ func TestAuthenticationFailureCases(t *testing.T) {
 	}
 }
 
-// TestRefreshBehaviorByConfig tests that AuthenticateAndRefresh respects the source's RefreshEnabled config.
+// TestRefreshBehaviorByConfig tests that AuthenticateAndRefresh respects the source's RefreshThreshold config.
 func TestRefreshBehaviorByConfig(t *testing.T) {
+	threshold := 10 * time.Minute
 	testCases := []struct {
 		name             string
 		sourceType       string
 		credentialSource CredentialSource
-		refreshEnabled   bool
 		wantRefresh      bool
 	}{
 		{
@@ -281,11 +281,10 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 				WithHeaderSessionConfig(SessionConfig{
 					IdleDuration:     0, // No idle timeout
 					AbsoluteDuration: 30 * 24 * time.Hour,
-					RefreshEnabled:   false,
+					RefreshThreshold: nil, // Disabled
 				}),
 			),
-			refreshEnabled: false,
-			wantRefresh:    false,
+			wantRefresh: false,
 		},
 		{
 			name:       "refresh_cookie_enabled",
@@ -296,11 +295,10 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 				WithCookieSourceSessionConfig(SessionConfig{
 					IdleDuration:     30 * time.Minute,
 					AbsoluteDuration: 24 * time.Hour,
-					RefreshEnabled:   true,
+					RefreshThreshold: &threshold,
 				}),
 			),
-			refreshEnabled: true,
-			wantRefresh:    true,
+			wantRefresh: true,
 		},
 		{
 			name:       "refresh_cookie_disabled",
@@ -311,11 +309,10 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 				WithCookieSourceSessionConfig(SessionConfig{
 					IdleDuration:     30 * time.Minute,
 					AbsoluteDuration: 24 * time.Hour,
-					RefreshEnabled:   false,
+					RefreshThreshold: nil, // Disabled
 				}),
 			),
-			refreshEnabled: false,
-			wantRefresh:    false,
+			wantRefresh: false,
 		},
 	}
 
@@ -328,7 +325,6 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 				store,
 				WithNow(func() time.Time { return now }),
 				WithCredentialSource(tc.credentialSource),
-				WithSessionRefreshThreshold(10*time.Minute),
 			)
 
 			// Create session with 5 minutes until idle (within refresh threshold)
@@ -525,18 +521,22 @@ func TestBackwardCompatNoSource(t *testing.T) {
 	assert.True(t, handlerCalled)
 }
 
-// TestBackwardCompatOldOptions tests that old cookie options are honored by the default cookie source.
-func TestBackwardCompatOldOptions(t *testing.T) {
+// TestCustomCookieNameWithCredentialSource tests that a custom cookie name works with credential source.
+func TestCustomCookieNameWithCredentialSource(t *testing.T) {
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	store := NewMemoryStore()
 
-	// Create Gosesh with old-style cookie options
+	// Create credential source with custom cookie name
+	source := NewCookieCredentialSource(
+		WithCookieSourceName("custom-session"),
+		WithCookieSourceSecure(false),
+	)
+
+	// Create Gosesh with the credential source
 	sesh := New(
 		store,
 		WithNow(func() time.Time { return now }),
-		WithSessionCookieName("custom-session"),
-		WithSessionIdleTimeout(17*time.Minute),
-		WithSessionMaxLifetime(85*time.Minute),
+		WithCredentialSource(source),
 	)
 
 	// Create a session
@@ -553,7 +553,6 @@ func TestBackwardCompatOldOptions(t *testing.T) {
 	r, err := http.NewRequest(http.MethodGet, "/", nil)
 	require.NoError(t, err)
 
-	source := NewCookieCredentialSource(WithCookieSourceName("custom-session"), WithCookieSourceSecure(false))
 	w := httptest.NewRecorder()
 	err = source.WriteSession(w, session)
 	require.NoError(t, err)

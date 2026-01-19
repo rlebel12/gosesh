@@ -48,13 +48,21 @@ gs := gosesh.New(store)
 `gosesh` can be configured with various options:
 
 ```go
+// Create a credential source with session configuration
+refreshThreshold := 10 * time.Minute
+credSource := gosesh.NewCookieCredentialSource(
+    gosesh.WithCookieSourceName("my_session"),       // Custom session cookie name
+    gosesh.WithCookieSourceSessionConfig(gosesh.SessionConfig{
+        IdleDuration:     1 * time.Hour,   // Session idle timeout (sliding window)
+        AbsoluteDuration: 24 * time.Hour,  // Maximum session lifetime (hard limit)
+        RefreshThreshold: &refreshThreshold, // Refresh when within 10min of idle expiry
+    }),
+)
+
 gs := gosesh.New(store,
-    gosesh.WithLogger(logger),                      // Set a custom logger
-    gosesh.WithSessionCookieName("my_session"),     // Custom session cookie name
-    gosesh.WithSessionIdleTimeout(1 * time.Hour),   // Session idle timeout (sliding window)
-    gosesh.WithSessionMaxLifetime(24 * time.Hour),  // Maximum session lifetime (hard limit)
-    gosesh.WithSessionRefreshThreshold(10 * time.Minute), // Refresh threshold
-    gosesh.WithOrigin(&url.URL{                     // Set your application's origin
+    gosesh.WithLogger(logger),               // Set a custom logger
+    gosesh.WithCredentialSource(credSource), // Custom credential source
+    gosesh.WithOrigin(&url.URL{              // Set your application's origin
         Scheme: "https",
         Host:   "example.com",
     }),

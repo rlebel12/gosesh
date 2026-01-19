@@ -25,10 +25,10 @@ func TestHeaderCredentialSource_SessionConfigDefaults(t *testing.T) {
 	source := NewHeaderCredentialSource()
 	config := source.SessionConfig()
 
-	// Native app defaults: no idle timeout, 30 day absolute
+	// Native app defaults: no idle timeout, 30 day absolute, no refresh
 	assert.Equal(t, time.Duration(0), config.IdleDuration, "Default should have no idle timeout")
 	assert.Equal(t, 30*24*time.Hour, config.AbsoluteDuration, "Default should have 30 day absolute duration")
-	assert.False(t, config.RefreshEnabled, "Default should have refresh disabled")
+	assert.Nil(t, config.RefreshThreshold, "Default should have refresh disabled (nil threshold)")
 }
 
 func TestHeaderCredentialSource_ReadSessionID(t *testing.T) {
@@ -182,10 +182,11 @@ func TestHeaderCredentialSource_CustomOptions(t *testing.T) {
 }
 
 func TestHeaderCredentialSource_WithHeaderSessionConfig(t *testing.T) {
+	threshold := 5 * time.Minute
 	customConfig := SessionConfig{
 		IdleDuration:     10 * time.Minute,
 		AbsoluteDuration: 7 * 24 * time.Hour,
-		RefreshEnabled:   true,
+		RefreshThreshold: &threshold,
 	}
 
 	source := NewHeaderCredentialSource(WithHeaderSessionConfig(customConfig))
@@ -193,7 +194,7 @@ func TestHeaderCredentialSource_WithHeaderSessionConfig(t *testing.T) {
 
 	assert.Equal(t, customConfig.IdleDuration, config.IdleDuration)
 	assert.Equal(t, customConfig.AbsoluteDuration, config.AbsoluteDuration)
-	assert.Equal(t, customConfig.RefreshEnabled, config.RefreshEnabled)
+	assert.Equal(t, customConfig.RefreshThreshold, config.RefreshThreshold)
 }
 
 // TestHeaderCredentialSourceContract verifies HeaderCredentialSource

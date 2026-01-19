@@ -31,11 +31,20 @@ func Example_configuration() {
 	store := gosesh.NewMemoryStore()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
+	// Create a credential source with custom session configuration
+	refreshThreshold := 10 * time.Minute
+	credSource := gosesh.NewCookieCredentialSource(
+		gosesh.WithCookieSourceName("my_session"),
+		gosesh.WithCookieSourceSessionConfig(gosesh.SessionConfig{
+			IdleDuration:     1 * time.Hour,  // Session idle timeout
+			AbsoluteDuration: 24 * time.Hour, // Maximum session lifetime
+			RefreshThreshold: &refreshThreshold,
+		}),
+	)
+
 	gs := gosesh.New(store,
-		gosesh.WithLogger(logger),                   // Set a custom logger
-		gosesh.WithSessionCookieName("my_session"),  // Custom session cookie name
-		gosesh.WithSessionMaxLifetime(24*time.Hour), // Maximum session lifetime
-		gosesh.WithSessionIdleTimeout(1*time.Hour),  // Session idle timeout
+		gosesh.WithLogger(logger),             // Set a custom logger
+		gosesh.WithCredentialSource(credSource), // Custom credential source
 		gosesh.WithOrigin(&url.URL{ // Set your application's origin
 			Scheme: "https",
 			Host:   "example.com",
@@ -131,11 +140,17 @@ func TestExamples(t *testing.T) {
 		t.Error("gosesh.New returned nil")
 	}
 
-	// Configuration
+	// Configuration with credential source
+	refreshThreshold := 5 * time.Minute
 	gs = gosesh.New(store,
-		gosesh.WithSessionCookieName("test_session"),
-		gosesh.WithSessionMaxLifetime(time.Hour),
-		gosesh.WithSessionIdleTimeout(30*time.Minute),
+		gosesh.WithCredentialSource(gosesh.NewCookieCredentialSource(
+			gosesh.WithCookieSourceName("test_session"),
+			gosesh.WithCookieSourceSessionConfig(gosesh.SessionConfig{
+				IdleDuration:     30 * time.Minute,
+				AbsoluteDuration: time.Hour,
+				RefreshThreshold: &refreshThreshold,
+			}),
+		)),
 	)
 	if gs == nil {
 		t.Error("gosesh.New with options returned nil")

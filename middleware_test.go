@@ -148,13 +148,20 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			}
 
 			withLogger, logger := withTestLogger()
+			refreshThreshold := 10 * time.Minute
 			sesh := New(
 				testStore,
 				WithNow(func() time.Time { return now }),
-				WithSessionCookieName("customName"),
-				WithSessionIdleTimeout(17*time.Minute),
-				WithSessionMaxLifetime(85*time.Minute),
-				WithSessionRefreshThreshold(10*time.Minute),
+				WithCredentialSource(NewCookieCredentialSource(
+					WithCookieSourceName("customName"),
+					WithCookieSourceDomain("localhost"),
+					WithCookieSourceSecure(false),
+					WithCookieSourceSessionConfig(SessionConfig{
+						IdleDuration:     17 * time.Minute,
+						AbsoluteDuration: 85 * time.Minute,
+						RefreshThreshold: &refreshThreshold,
+					}),
+				)),
 				withLogger,
 			)
 

@@ -104,8 +104,9 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 			return
 		}
 
+		sessionCfg := gs.credentialSource.SessionConfig()
 		session, err := gs.store.CreateSession(
-			ctx, id, now.Add(gs.sessionIdleTimeout), now.Add(gs.sessionMaxLifetime))
+			ctx, id, now.Add(sessionCfg.IdleDuration), now.Add(sessionCfg.AbsoluteDuration))
 		if err != nil {
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
 			return
