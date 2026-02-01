@@ -46,3 +46,24 @@ func (gs *Gosesh) setRedirectCookie(path string, w http.ResponseWriter) {
 	cookie := gs.redirectCookie(path, expireAt)
 	http.SetCookie(w, cookie)
 }
+
+// deviceCodeCookie creates a secure device code cookie with the given code and expiration.
+func (gs *Gosesh) deviceCodeCookie(deviceCode string, expireAt time.Time) *http.Cookie {
+	return &http.Cookie{
+		Name:     gs.deviceCodeCookieName,
+		Value:    base64.URLEncoding.EncodeToString([]byte(deviceCode)),
+		Path:     "/",
+		Domain:   gs.CookieDomain(),
+		Expires:  expireAt,
+		Secure:   gs.Scheme() == "https",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+// setDeviceCodeCookie sets a device code cookie with 5-minute expiration.
+func (gs *Gosesh) setDeviceCodeCookie(deviceCode string, w http.ResponseWriter) {
+	expireAt := gs.now().UTC().Add(5 * time.Minute)
+	cookie := gs.deviceCodeCookie(deviceCode, expireAt)
+	http.SetCookie(w, cookie)
+}

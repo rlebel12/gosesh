@@ -22,6 +22,7 @@ type Gosesh struct {
 	oAuth2StateCookieName  string
 	redirectCookieName     string
 	redirectParamName      string
+	deviceCodeCookieName   string
 	now                    func() time.Time
 	cookieDomain           func() string
 	credentialSource       CredentialSource
@@ -61,6 +62,7 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		oAuth2StateCookieName: "oauthstate",
 		redirectCookieName:    "redirect",
 		redirectParamName:     "next",
+		deviceCodeCookieName:  "devicecode",
 		origin:                url,
 		allowedHosts:          []string{url.Hostname()},
 		now:                   time.Now,
@@ -137,6 +139,13 @@ func WithOAuth2StateCookieName(name string) func(*Gosesh) {
 func WithRedirectCookieName(name string) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.redirectCookieName = name
+	}
+}
+
+// WithDeviceCodeCookieName sets the name of the device code cookie.
+func WithDeviceCodeCookieName(name string) func(*Gosesh) {
+	return func(c *Gosesh) {
+		c.deviceCodeCookieName = name
 	}
 }
 

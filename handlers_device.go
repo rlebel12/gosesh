@@ -3,6 +3,7 @@ package gosesh
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -266,7 +267,7 @@ func (gs *Gosesh) DeviceCodeAuthorize(store DeviceCodeStore) http.HandlerFunc {
 
 			// Validate user code exists
 			ctx := r.Context()
-			_, err := store.GetByUserCode(ctx, userCode)
+			entry, err := store.GetByUserCode(ctx, userCode)
 			if err != nil {
 				html := `<!DOCTYPE html>
 <html>
@@ -282,18 +283,19 @@ func (gs *Gosesh) DeviceCodeAuthorize(store DeviceCodeStore) http.HandlerFunc {
 				return
 			}
 
-			// Code is valid - redirect to OAuth
-			// Note: In a real implementation, you would redirect to OAuth2Begin
-			// with the device code stored in state/cookie so the callback knows which device to complete
+			// Store device code for OAuth flow
+			gs.setDeviceCodeCookie(entry.DeviceCode, w)
+
+			// Redirect to OAuth provider
 			http.Redirect(w, r, "/auth/oauth/begin", http.StatusFound)
 		}
 	}
 }
 
 // DeviceCodeAuthorizeCallback handles the OAuth callback for device flow.
-// After the user completes OAuth, this links the session to the device code.
+// It links the session to the device code and marks the device code as completed.
 //
-// This is similar to OAuth2Callback but uses native app session config and completes the device code.
+// This uses native app session config (long-lived, no idle timeout) for device credentials.
 func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 	store DeviceCodeStore,
 	oauthCfg *oauth2.Config,
@@ -346,9 +348,26 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 			return
 		}
 
-		// Get device code from state (in a real implementation)
-		// For now, we'll extract it from the state parameter
-		deviceCode := r.FormValue("state")
+		// Get device code from cookie
+		deviceCodeCookie, err := r.Cookie(gs.deviceCodeCookieName)
+		if err != nil {
+			gs.logger.Error("get device code cookie", "error", err)
+			http.Error(w, "missing device code", http.StatusBadRequest)
+			return
+		}
+
+		// Clear the device code cookie
+		clearCookie := gs.deviceCodeCookie("", gs.now().UTC())
+		http.SetCookie(w, clearCookie)
+
+		// Decode device code
+		deviceCodeBytes, err := base64.URLEncoding.DecodeString(deviceCodeCookie.Value)
+		if err != nil {
+			gs.logger.Error("decode device code", "error", err)
+			http.Error(w, "invalid device code", http.StatusBadRequest)
+			return
+		}
+		deviceCode := string(deviceCodeBytes)
 
 		// Complete the device code
 		if err := store.CompleteDeviceCode(ctx, deviceCode, session.ID()); err != nil {

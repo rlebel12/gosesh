@@ -3,6 +3,7 @@ package gosesh
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -279,7 +280,7 @@ func TestDeviceCodeAuthorize(t *testing.T) {
 			ctx := context.Background()
 
 			// Create a device code entry
-			_, err := store.CreateDeviceCode(ctx, "VALID123", time.Now().Add(15*time.Minute))
+			deviceCode, err := store.CreateDeviceCode(ctx, "VALID123", time.Now().Add(15*time.Minute))
 			require.NoError(t, err)
 
 			gs := New(NewMemoryStore())
@@ -297,6 +298,22 @@ func TestDeviceCodeAuthorize(t *testing.T) {
 			assert.Equal(t, http.StatusFound, rr.Code)
 			location := rr.Header().Get("Location")
 			assert.NotEmpty(t, location)
+
+			// Should set device code cookie
+			cookies := rr.Result().Cookies()
+			var deviceCodeCookie *http.Cookie
+			for _, c := range cookies {
+				if c.Name == "devicecode" {
+					deviceCodeCookie = c
+					break
+				}
+			}
+			require.NotNil(t, deviceCodeCookie, "device code cookie should be set")
+
+			// Verify cookie contains encoded device code
+			decodedValue, err := base64.URLEncoding.DecodeString(deviceCodeCookie.Value)
+			require.NoError(t, err)
+			assert.Equal(t, deviceCode, string(decodedValue))
 		})
 
 		t.Run("authorize_submit_invalid", func(t *testing.T) {
@@ -317,12 +334,97 @@ func TestDeviceCodeAuthorize(t *testing.T) {
 			assert.Contains(t, strings.ToLower(body), "invalid", "should show error message")
 		})
 
+		t.Run("authorize_submit_valid_custom_cookie_name", func(t *testing.T) {
+			store := NewMemoryDeviceCodeStore()
+			ctx := context.Background()
+
+			// Create a device code entry
+			deviceCode, err := store.CreateDeviceCode(ctx, "CUST1234", time.Now().Add(15*time.Minute))
+			require.NoError(t, err)
+
+			gs := New(NewMemoryStore(), WithDeviceCodeCookieName("custom_device"))
+			handler := gs.DeviceCodeAuthorize(store)
+
+			form := url.Values{}
+			form.Set("user_code", "CUST1234")
+			req := httptest.NewRequest("POST", "/auth/device", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			// Should set device code cookie with custom name
+			cookies := rr.Result().Cookies()
+			var deviceCodeCookie *http.Cookie
+			for _, c := range cookies {
+				if c.Name == "custom_device" {
+					deviceCodeCookie = c
+					break
+				}
+			}
+			require.NotNil(t, deviceCodeCookie, "custom device code cookie should be set")
+
+			// Verify cookie contains encoded device code
+			decodedValue, err := base64.URLEncoding.DecodeString(deviceCodeCookie.Value)
+			require.NoError(t, err)
+			assert.Equal(t, deviceCode, string(decodedValue))
+		})
+
 		t.Run("authorize_callback", func(t *testing.T) {
 			// This test is complex because it requires mocking the OAuth2 token exchange
 			// For now, we'll skip it and rely on integration tests
 			// The handler is tested indirectly through the other tests
 			t.Skip("Callback requires complex OAuth2 mocking, covered by integration tests")
 		})
+	})
+}
+
+func TestDeviceCodeCookie(t *testing.T) {
+	t.Run("cookie properties", func(t *testing.T) {
+		fixedTime := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+		gs := New(NewMemoryStore(), WithNow(func() time.Time { return fixedTime }))
+
+		expireAt := fixedTime.Add(5 * time.Minute)
+		cookie := gs.deviceCodeCookie("test-device-code", expireAt)
+
+		assert.Equal(t, "devicecode", cookie.Name)
+		assert.Equal(t, base64.URLEncoding.EncodeToString([]byte("test-device-code")), cookie.Value)
+		assert.Equal(t, "/", cookie.Path)
+		assert.Equal(t, "localhost", cookie.Domain)
+		assert.Equal(t, expireAt, cookie.Expires)
+		assert.False(t, cookie.Secure, "insecure by default")
+		assert.True(t, cookie.HttpOnly)
+		assert.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
+	})
+
+	t.Run("secure cookie for https", func(t *testing.T) {
+		origin, _ := url.Parse("https://example.com")
+		gs := New(NewMemoryStore(), WithOrigin(origin))
+
+		cookie := gs.deviceCodeCookie("test-code", time.Now())
+
+		assert.True(t, cookie.Secure)
+		assert.Equal(t, "example.com", cookie.Domain)
+	})
+
+	t.Run("custom cookie name", func(t *testing.T) {
+		gs := New(NewMemoryStore(), WithDeviceCodeCookieName("my_device_code"))
+
+		cookie := gs.deviceCodeCookie("test-code", time.Now())
+
+		assert.Equal(t, "my_device_code", cookie.Name)
+	})
+
+	t.Run("clear cookie has empty value and past expiration", func(t *testing.T) {
+		fixedTime := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
+		gs := New(NewMemoryStore(), WithNow(func() time.Time { return fixedTime }))
+
+		// To clear a cookie, use empty value and past/current expiration
+		clearCookie := gs.deviceCodeCookie("", fixedTime)
+
+		assert.Equal(t, "devicecode", clearCookie.Name)
+		assert.Equal(t, base64.URLEncoding.EncodeToString([]byte("")), clearCookie.Value)
+		assert.Equal(t, fixedTime, clearCookie.Expires)
 	})
 }
 
