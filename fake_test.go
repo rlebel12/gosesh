@@ -133,6 +133,19 @@ func (s *erroringStore) BatchRecordActivity(ctx context.Context, updates map[str
 	return 0, errors.New("BatchRecordActivity not implemented")
 }
 
+// erroringDeviceCodeStore wraps a DeviceCodeStore and injects errors for testing.
+type erroringDeviceCodeStore struct {
+	DeviceCodeStore
+	completeDeviceCodeError bool
+}
+
+func (s *erroringDeviceCodeStore) CompleteDeviceCode(ctx context.Context, deviceCode string, sessionID Identifier) error {
+	if s.completeDeviceCodeError {
+		return errors.New("mock failure")
+	}
+	return s.DeviceCodeStore.CompleteDeviceCode(ctx, deviceCode, sessionID)
+}
+
 // contextAwareStore wraps a MemoryStore and adds context cancellation checking
 // to BatchRecordActivity, simulating a real database that respects context.
 type contextAwareStore struct {
