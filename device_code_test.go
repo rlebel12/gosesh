@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 )
 
 func TestDeviceCodeBegin(t *testing.T) {
@@ -478,4 +481,239 @@ func TestGenerateUserCode(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestDeviceCodeAuthorizeCallback(t *testing.T) {
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	// Helper: Create OAuth server that returns valid token
+	newSuccessOAuthServer := func() *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/token" {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"access_token":"test-token","token_type":"bearer"}`))
+			} else {
+				http.Error(w, "not found", http.StatusNotFound)
+			}
+		}))
+	}
+
+	// Helper: Create OAuth server that fails
+	newFailingOAuthServer := func() *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "not found", http.StatusNotFound)
+		}))
+	}
+
+	// Helper: Create valid device code cookie
+	validCookie := func(deviceCode string) *http.Cookie {
+		return &http.Cookie{
+			Name:  "devicecode",
+			Value: base64.URLEncoding.EncodeToString([]byte(deviceCode)),
+		}
+	}
+
+	// Helper: Success request func
+	successRequestFunc := func(_ context.Context, _ string) (io.ReadCloser, error) {
+		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
+	}
+
+	// Helper: Success unmarshal func
+	successUnmarshalFunc := func(_ []byte) (Identifier, error) {
+		return StringIdentifier("user123"), nil
+	}
+
+	// Helper: Default store setup - creates device code entry, returns device code
+	defaultStoreSetup := func(t *testing.T, store *erroringStore, dcStore *erroringDeviceCodeStore) string {
+		t.Helper()
+		ctx := t.Context()
+		deviceCode, err := dcStore.CreateDeviceCode(ctx, "TEST1234", fixedTime.Add(15*time.Minute))
+		require.NoError(t, err)
+		return deviceCode
+	}
+
+	tests := []struct {
+		name              string
+		giveOAuthServer   func() *httptest.Server
+		giveStoreSetup    func(t *testing.T, store *erroringStore, dcStore *erroringDeviceCodeStore) string
+		giveRequestFunc   RequestFunc
+		giveUnmarshalFunc UnmarshalFunc
+		giveCookie        func(deviceCode string) *http.Cookie
+		giveOAuthCode     string
+		wantStatus        int
+		wantBodyContains  string
+	}{
+		{
+			name:              "success",
+			giveOAuthServer:   newSuccessOAuthServer,
+			giveStoreSetup:    defaultStoreSetup,
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie:        validCookie,
+			giveOAuthCode:     "auth-code",
+			wantStatus:        http.StatusOK,
+			wantBodyContains:  "Authorization Complete",
+		},
+		{
+			name:              "token_exchange_error",
+			giveOAuthServer:   newFailingOAuthServer,
+			giveStoreSetup:    defaultStoreSetup,
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie:        validCookie,
+			giveOAuthCode:     "auth-code",
+			wantStatus:        http.StatusInternalServerError,
+			wantBodyContains:  "exchange token",
+		},
+		{
+			name:            "request_user_error",
+			giveOAuthServer: newSuccessOAuthServer,
+			giveStoreSetup:  defaultStoreSetup,
+			giveRequestFunc: func(_ context.Context, _ string) (io.ReadCloser, error) {
+				return nil, errors.New("provider unreachable")
+			},
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie:        validCookie,
+			giveOAuthCode:     "auth-code",
+			wantStatus:        http.StatusInternalServerError,
+			wantBodyContains:  "get user data",
+		},
+		{
+			name:              "unmarshal_user_error",
+			giveOAuthServer:   newSuccessOAuthServer,
+			giveStoreSetup:    defaultStoreSetup,
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: func(_ []byte) (Identifier, error) {
+				return nil, errors.New("invalid user data")
+			},
+			giveCookie:       validCookie,
+			giveOAuthCode:    "auth-code",
+			wantStatus:       http.StatusInternalServerError,
+			wantBodyContains: "get user data",
+		},
+		{
+			name:            "upsert_user_error",
+			giveOAuthServer: newSuccessOAuthServer,
+			giveStoreSetup: func(t *testing.T, store *erroringStore, dcStore *erroringDeviceCodeStore) string {
+				t.Helper()
+				store.upsertUserError = true
+				return defaultStoreSetup(t, store, dcStore)
+			},
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie:        validCookie,
+			giveOAuthCode:     "auth-code",
+			wantStatus:        http.StatusInternalServerError,
+			wantBodyContains:  "upsert user",
+		},
+		{
+			name:            "create_session_error",
+			giveOAuthServer: newSuccessOAuthServer,
+			giveStoreSetup: func(t *testing.T, store *erroringStore, dcStore *erroringDeviceCodeStore) string {
+				t.Helper()
+				store.createSessionError = true
+				return defaultStoreSetup(t, store, dcStore)
+			},
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie:        validCookie,
+			giveOAuthCode:     "auth-code",
+			wantStatus:        http.StatusInternalServerError,
+			wantBodyContains:  "create session",
+		},
+		{
+			name:              "missing_device_code_cookie",
+			giveOAuthServer:   newSuccessOAuthServer,
+			giveStoreSetup:    defaultStoreSetup,
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie:        nil,
+			giveOAuthCode:     "auth-code",
+			wantStatus:        http.StatusBadRequest,
+			wantBodyContains:  "missing device code",
+		},
+		{
+			name:            "invalid_device_code_cookie",
+			giveOAuthServer: newSuccessOAuthServer,
+			giveStoreSetup:  defaultStoreSetup,
+			giveRequestFunc: successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie: func(deviceCode string) *http.Cookie {
+				return &http.Cookie{
+					Name:  "devicecode",
+					Value: "not-valid-base64!!!",
+				}
+			},
+			giveOAuthCode:    "auth-code",
+			wantStatus:       http.StatusBadRequest,
+			wantBodyContains: "invalid device code",
+		},
+		{
+			name:            "complete_device_code_error",
+			giveOAuthServer: newSuccessOAuthServer,
+			giveStoreSetup: func(t *testing.T, store *erroringStore, dcStore *erroringDeviceCodeStore) string {
+				t.Helper()
+				dcStore.completeDeviceCodeError = true
+				return defaultStoreSetup(t, store, dcStore)
+			},
+			giveRequestFunc:   successRequestFunc,
+			giveUnmarshalFunc: successUnmarshalFunc,
+			giveCookie:        validCookie,
+			giveOAuthCode:     "auth-code",
+			wantStatus:        http.StatusInternalServerError,
+			wantBodyContains:  "complete device code",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+
+			// Create OAuth server
+			oauthServer := tc.giveOAuthServer()
+			t.Cleanup(oauthServer.Close)
+
+			// Create stores
+			memStore := NewMemoryStore()
+			store := &erroringStore{Storer: memStore}
+			memDCStore := NewMemoryDeviceCodeStore()
+			dcStore := &erroringDeviceCodeStore{DeviceCodeStore: memDCStore}
+
+			// Setup stores and get device code
+			deviceCode := tc.giveStoreSetup(t, store, dcStore)
+
+			// Create Gosesh instance
+			gs := New(store, WithNow(func() time.Time { return fixedTime }))
+
+			// Build oauth2.Config pointing to test server
+			oauthCfg := &oauth2.Config{
+				ClientID:     "client_id",
+				ClientSecret: "client_secret",
+				RedirectURL:  oauthServer.URL + "/callback",
+				Endpoint: oauth2.Endpoint{
+					TokenURL: oauthServer.URL + "/token",
+				},
+			}
+
+			// Create handler
+			handler := gs.DeviceCodeAuthorizeCallback(dcStore, oauthCfg, tc.giveRequestFunc, tc.giveUnmarshalFunc)
+
+			// Create request
+			req := httptest.NewRequest("GET", "/callback?code="+tc.giveOAuthCode, nil)
+			req = req.WithContext(ctx)
+
+			// Add cookie if specified
+			if tc.giveCookie != nil {
+				req.AddCookie(tc.giveCookie(deviceCode))
+			}
+
+			// Execute handler
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			// Assert response
+			assert.Equal(t, tc.wantStatus, rr.Code, "status code mismatch")
+			assert.Contains(t, rr.Body.String(), tc.wantBodyContains, "body should contain expected substring")
+		})
+	}
 }

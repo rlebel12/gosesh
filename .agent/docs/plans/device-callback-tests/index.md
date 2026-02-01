@@ -7,7 +7,7 @@
 | Phase | Description | Depends On | Status |
 |-------|-------------|------------|--------|
 | [01-test-infrastructure](01-test-infrastructure.md) | Add erroringDeviceCodeStore and test helpers | None | Complete |
-| [02-callback-tests](02-callback-tests.md) | Implement table-driven tests for DeviceCodeAuthorizeCallback | Phase 01 | Pending |
+| [02-callback-tests](02-callback-tests.md) | Implement table-driven tests for DeviceCodeAuthorizeCallback | Phase 01 | Complete |
 
 ## Dependencies
 
@@ -30,8 +30,8 @@
 
 ## Status
 
-**Progress:** 1/2 phases complete
-**Current Phase:** Phase 02
+**Progress:** 2/2 phases complete
+**Current Phase:** All phases complete
 **Blocked:** None
 
 ---
