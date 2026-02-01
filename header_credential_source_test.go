@@ -1,7 +1,6 @@
 package gosesh
 
 import (
-	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,9 +47,9 @@ func TestHeaderCredentialSource_ReadSessionID(t *testing.T) {
 			expectedSessionID: "abc123",
 		},
 		{
-			name:              "read_bearer_base64",
-			authHeader:        "Bearer " + base64.StdEncoding.EncodeToString([]byte("user123")),
-			expectedSessionID: "user123",
+			name:              "read_bearer_base64_not_decoded",
+			authHeader:        "Bearer dXNlcjEyMw==", // base64 of "user123" - NOT decoded
+			expectedSessionID: "dXNlcjEyMw==",        // returned as-is
 		},
 		{
 			name:              "read_wrong_scheme",

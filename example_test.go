@@ -113,7 +113,7 @@ func Example_customProvider() {
 		if err := json.Unmarshal(b, &user); err != nil {
 			return nil, err
 		}
-		return gosesh.MemoryStoreIdentifier(1), nil
+		return gosesh.MemoryStoreIdentifier("user-1"), nil
 	}
 
 	// Set up your routes
@@ -192,7 +192,7 @@ func TestExamples(t *testing.T) {
 			return nil, nil
 		},
 		func(b []byte) (gosesh.Identifier, error) {
-			return gosesh.MemoryStoreIdentifier(1), nil
+			return gosesh.MemoryStoreIdentifier("user-1"), nil
 		},
 		nil,
 	)

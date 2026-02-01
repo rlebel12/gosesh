@@ -80,9 +80,10 @@ func doRequest(method, url string, header http.Header) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		err = fmt.Errorf("response not ok: %s", resp.Status)
+		resp.Body.Close()
+		return nil, fmt.Errorf("response not ok: %s", resp.Status)
 	}
-	return resp.Body, err
+	return resp.Body, nil
 }
 
 // unmarshalUser creates an UnmarshalFunc for a specific user type.

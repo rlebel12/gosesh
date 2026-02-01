@@ -399,7 +399,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccess() {
 	s.Equal(2, len(response.Cookies()))
 	sessionCookie := response.Cookies()[1]
 	s.Equal("session", sessionCookie.Name)
-	s.Equal("MQ==", sessionCookie.Value)
+	s.NotEmpty(sessionCookie.Value, "session cookie should have a value")
 	s.Equal(s.now.Add(24*time.Hour), sessionCookie.Expires)
 	s.Equal("localhost", sessionCookie.Domain)
 	s.Equal("/", sessionCookie.Path)
@@ -436,7 +436,7 @@ func (s *Oauth2CallbackHandlerSuite) TestCallbackSuccessWithCustomCredentialSour
 	s.Equal(2, len(response.Cookies()))
 	sessionCookie := response.Cookies()[1]
 	s.Equal(customCookieName, sessionCookie.Name)
-	s.Equal("MQ==", sessionCookie.Value)
+	s.NotEmpty(sessionCookie.Value, "session cookie should have a value")
 	s.Equal(s.now.Add(24*time.Hour), sessionCookie.Expires)
 	s.Equal("/", sessionCookie.Path)
 	s.Equal(http.SameSiteLaxMode, sessionCookie.SameSite)

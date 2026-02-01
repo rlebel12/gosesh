@@ -1,7 +1,6 @@
 package gosesh
 
 import (
-	"encoding/base64"
 	"net/http"
 	"strings"
 )
@@ -73,9 +72,7 @@ func (h *HeaderCredentialSource) Name() string {
 // It expects the format: "<scheme> <token>"
 //
 // The scheme is compared case-insensitively per RFC 7235.
-// The token is trimmed of whitespace and attempted to be decoded as base64.
-// If base64 decoding succeeds, the decoded value is returned.
-// If base64 decoding fails, the raw token is returned.
+// The token is used as-is (no encoding/decoding).
 //
 // Returns empty string if:
 // - Header is not present
@@ -99,17 +96,6 @@ func (h *HeaderCredentialSource) ReadSessionID(r *http.Request) string {
 	// Compare scheme case-insensitively per RFC 7235
 	if !strings.EqualFold(scheme, h.scheme) {
 		return ""
-	}
-
-	// Token must not be empty
-	if token == "" {
-		return ""
-	}
-
-	// Try to decode as base64 for compatibility with cookie tokens
-	// If it's not valid base64, use the raw token
-	if decoded, err := base64.StdEncoding.DecodeString(token); err == nil {
-		return string(decoded)
 	}
 
 	return token

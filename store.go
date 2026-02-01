@@ -4,8 +4,8 @@ package gosesh
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -18,12 +18,11 @@ func NewMemoryStore() *MemoryStore {
 
 type (
 	MemoryStore struct {
-		mu         sync.RWMutex
-		sessions   map[string]*MemoryStoreSession
-		sequenceID MemoryStoreIdentifier
+		mu       sync.RWMutex
+		sessions map[string]*MemoryStoreSession
 	}
 
-	MemoryStoreIdentifier int
+	MemoryStoreIdentifier string
 
 	MemoryStoreSession struct {
 		id               MemoryStoreIdentifier
@@ -35,7 +34,24 @@ type (
 )
 
 func (id MemoryStoreIdentifier) String() string {
-	return strconv.Itoa(int(id))
+	return string(id)
+}
+
+// generateSessionID creates a random alphanumeric session ID using crypto/rand.
+func generateSessionID() (MemoryStoreIdentifier, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const length = 32
+
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+
+	for i := range bytes {
+		bytes[i] = alphabet[int(bytes[i])%len(alphabet)]
+	}
+
+	return MemoryStoreIdentifier(bytes), nil
 }
 
 func (ms *MemoryStore) UpsertUser(ctx context.Context, userID Identifier) (Identifier, error) {
@@ -49,10 +65,14 @@ func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idl
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
+	id, err := generateSessionID()
+	if err != nil {
+		return nil, err
+	}
+
 	now := time.Now().UTC()
-	ms.sequenceID++
 	s := &MemoryStoreSession{
-		id:               ms.sequenceID,
+		id:               id,
 		userID:           userID,
 		idleDeadline:     idleDeadline,
 		absoluteDeadline: absoluteDeadline,
@@ -131,14 +151,13 @@ func (ms *MemoryStore) BatchRecordActivity(ctx context.Context, updates map[stri
 	return count, nil
 }
 
-// Reset clears all sessions and resets the sequence ID.
+// Reset clears all sessions.
 // This is useful for testing to isolate state between test cases.
 func (ms *MemoryStore) Reset() {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
 	ms.sessions = make(map[string]*MemoryStoreSession)
-	ms.sequenceID = 0
 }
 
 func (s MemoryStoreSession) ID() Identifier {

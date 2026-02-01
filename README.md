@@ -393,14 +393,4 @@ The built-in `MemoryStore` already implements this interface. For custom stores,
 
 ### Error Handling
 
-`gosesh` provides several error types:
-
-```go
-var (
-    ErrUnauthorized              = errors.New("unauthorized")
-    ErrFailedDeletingSession     = errors.New("failed deleting session(s)")
-    ErrSessionExpired            = errors.New("session expired")
-    ErrFailedValidatingAudience  = errors.New("failed validating audience")
-    // ... more error types
-)
-```
+`gosesh` provides sentinel error types for common failure cases. See `errors.go` for the complete list.
