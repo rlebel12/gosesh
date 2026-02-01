@@ -5,10 +5,6 @@
 
 An auth library that abstracts away the OAuth2 flow.
 
-## ⚠️ Under Development ⚠️
-
-This library is currently under active development, and the API is subject to change.
-
 ## Installation
 
 ```bash
@@ -197,10 +193,12 @@ The device code flow is ideal for headless environments or when you want users t
 // Implement DeviceCodeStore interface for your storage
 type DeviceCodeStore interface {
     CreateDeviceCode(ctx context.Context, userCode string, expiresAt time.Time) (deviceCode string, err error)
-    GetDeviceCode(ctx context.Context, deviceCode string) (*DeviceCodeEntry, error)
-    GetDeviceCodeByUserCode(ctx context.Context, userCode string) (*DeviceCodeEntry, error)
-    CompleteDeviceCode(ctx context.Context, deviceCode string, sessionID string) error
+    GetDeviceCode(ctx context.Context, deviceCode string) (DeviceCodeEntry, error)
+    GetByUserCode(ctx context.Context, userCode string) (DeviceCodeEntry, error)
+    CompleteDeviceCode(ctx context.Context, deviceCode string, sessionID Identifier) error
+    UpdateLastPoll(ctx context.Context, deviceCode string, pollTime time.Time) error
     DeleteDeviceCode(ctx context.Context, deviceCode string) error
+    CleanupExpired(ctx context.Context) error
 }
 
 // Set up device code routes

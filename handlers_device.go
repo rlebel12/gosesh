@@ -216,18 +216,11 @@ func (gs *Gosesh) DeviceCodeAuthorize(store DeviceCodeStore) http.HandlerFunc {
         button:hover {
             background: #0056b3;
         }
-        .error {
-            color: #dc3545;
-            margin-bottom: 20px;
-        }
     </style>
 </head>
 <body>
     <h1>Device Authorization</h1>
     <p>Enter the code shown on your device:</p>
-    {{if .Error}}
-    <div class="error">{{.Error}}</div>
-    {{end}}
     <form method="POST">
         <div class="form-group">
             <label for="user_code">Device Code:</label>
