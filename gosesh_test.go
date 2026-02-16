@@ -72,7 +72,7 @@ func TestWithActivityTracking(t *testing.T) {
 
 		// Record activity
 		newActivity := time.Now().UTC()
-		gs.activityTracker.RecordActivity(session.ID().String(), newActivity)
+		gs.activityTracker.RecordActivity(session.ID(), newActivity)
 
 		// Cancel context to trigger flush
 		cancel()

@@ -2,7 +2,9 @@ package gosesh
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// defaultSHA256Hasher is a helper for tests to hash raw IDs using the default hasher
+func defaultSHA256Hasher(rawID RawSessionID) HashedSessionID {
+	hash := sha256.Sum256([]byte(rawID))
+	return HashedSessionID(hex.EncodeToString(hash[:]))
+}
 
 func TestAuthenticateAndRefresh(t *testing.T) {
 	testCases := map[string]struct {
@@ -34,11 +42,13 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
 				// Session with 15 minutes until idle (> 10min threshold)
-				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(15*time.Minute), now.Add(85*time.Minute))
+				rawID := RawSessionID("test-raw-no-refresh")
+				hashedID := defaultSHA256Hasher(rawID)
+				_, err := store.CreateSession(t.Context(), hashedID, userID, now.Add(15*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
-					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Value:    base64.URLEncoding.EncodeToString([]byte(rawID)),
 					Expires:  now.Add(85 * time.Minute),
 					Path:     "/",
 					Domain:   "localhost",
@@ -54,11 +64,13 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
 				// Session with 5 minutes until idle (< 10min threshold)
-				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
+				rawID := RawSessionID("test-raw-refresh")
+				hashedID := defaultSHA256Hasher(rawID)
+				_, err := store.CreateSession(t.Context(), hashedID, userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
-					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Value:    base64.URLEncoding.EncodeToString([]byte(rawID)),
 					Expires:  now.Add(85 * time.Minute),
 					Path:     "/",
 					Domain:   "localhost",
@@ -76,11 +88,13 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				// Session with 5 minutes until idle, but absolute in 30min
 				// sessionIdleTimeout is 17min, so new idle would be now+17min = 17min
 				// But absolute is in 30min, so should not cap
-				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(5*time.Minute), now.Add(30*time.Minute))
+				rawID := RawSessionID("test-raw-refresh")
+				hashedID := defaultSHA256Hasher(rawID)
+				_, err := store.CreateSession(t.Context(), hashedID, userID, now.Add(5*time.Minute), now.Add(30*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
-					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Value:    base64.URLEncoding.EncodeToString([]byte(rawID)),
 					Expires:  now.Add(30 * time.Minute),
 					Path:     "/",
 					Domain:   "localhost",
@@ -96,11 +110,13 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
 				// Session with 5 minutes until idle (within threshold)
-				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
+				rawID := RawSessionID("test-raw-refresh")
+				hashedID := defaultSHA256Hasher(rawID)
+				_, err := store.CreateSession(t.Context(), hashedID, userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
-					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Value:    base64.URLEncoding.EncodeToString([]byte(rawID)),
 					Expires:  now.Add(85 * time.Minute),
 					Path:     "/",
 					Domain:   "localhost",
@@ -117,11 +133,13 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		"session expired": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(-5*time.Minute), now.Add(-1*time.Minute))
+				rawID := RawSessionID("test-raw-refresh")
+				hashedID := defaultSHA256Hasher(rawID)
+				_, err := store.CreateSession(t.Context(), hashedID, userID, now.Add(-5*time.Minute), now.Add(-1*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
-					Value:    base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+					Value:    base64.URLEncoding.EncodeToString([]byte(rawID)),
 					Expires:  now.Add(10 * time.Minute),
 					Path:     "/",
 					Domain:   "localhost",
@@ -255,8 +273,9 @@ func TestAuthenticateDualDeadline(t *testing.T) {
 			)
 
 			userID := StringIdentifier("user-id")
-			hashedID := HashedSessionID("test-hashed-id")
-			session, err := store.CreateSession(
+			rawID := RawSessionID("test-raw-session-expiry")
+			hashedID := defaultSHA256Hasher(rawID)
+			_, err := store.CreateSession(
 				context.Background(),
 				hashedID,
 				userID,
@@ -269,7 +288,7 @@ func TestAuthenticateDualDeadline(t *testing.T) {
 			require.NoError(err)
 			r.AddCookie(&http.Cookie{
 				Name:  "customName",
-				Value: base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+				Value: base64.URLEncoding.EncodeToString([]byte(rawID)),
 			})
 
 			handlerCalled := false
@@ -458,9 +477,11 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 		)
 		gs.StartBackgroundTasks(t.Context())
 
-		// Create session at time T0
+		// Create session at time T0 with proper raw->hash flow
 		userID := StringIdentifier("identifier")
-		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
+		rawID := RawSessionID("test-raw-activity")
+		hashedID := gs.idHasher(rawID)
+		session, _ := store.CreateSession(t.Context(), hashedID, userID,
 			now.Add(15*time.Minute), now.Add(85*time.Minute))
 
 		originalActivity := session.LastActivityAt()
@@ -468,11 +489,11 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 		// Advance time for the middleware request
 		currentTime = now.Add(5 * time.Second)
 
-		// Make request
+		// Make request with raw ID in cookie
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.AddCookie(&http.Cookie{
 			Name:  "customName",
-			Value: base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+			Value: base64.URLEncoding.EncodeToString([]byte(rawID)),
 		})
 
 		w := httptest.NewRecorder()
@@ -502,14 +523,15 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 		)
 
 		userID := StringIdentifier("identifier")
-		hashedID := HashedSessionID("test-hashed-id-no-tracker")
-		session, _ := store.CreateSession(context.Background(), hashedID, userID,
+		rawID := RawSessionID("test-raw-no-tracker")
+		hashedID := defaultSHA256Hasher(rawID)
+		_, _ = store.CreateSession(context.Background(), hashedID, userID,
 			now.Add(15*time.Minute), now.Add(85*time.Minute))
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.AddCookie(&http.Cookie{
 			Name:  "customName",
-			Value: base64.URLEncoding.EncodeToString([]byte(session.ID().String())),
+			Value: base64.URLEncoding.EncodeToString([]byte(rawID)),
 		})
 
 		w := httptest.NewRecorder()

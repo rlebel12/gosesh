@@ -21,10 +21,10 @@ func TestActivityTracker(t *testing.T) {
 		tracker.Start(t.Context())
 
 		now := time.Now().UTC()
-		tracker.RecordActivity("session-1", now)
+		tracker.RecordActivity(HashedSessionID("session-1"), now)
 
 		tracker.mu.Lock()
-		timestamp, exists := tracker.pending["session-1"]
+		timestamp, exists := tracker.pending[HashedSessionID("session-1")]
 		tracker.mu.Unlock()
 
 		assert.True(t, exists)
@@ -39,11 +39,11 @@ func TestActivityTracker(t *testing.T) {
 		time1 := time.Now().UTC()
 		time2 := time1.Add(5 * time.Second)
 
-		tracker.RecordActivity("session-1", time1)
-		tracker.RecordActivity("session-1", time2)
+		tracker.RecordActivity(HashedSessionID("session-1"), time1)
+		tracker.RecordActivity(HashedSessionID("session-1"), time2)
 
 		tracker.mu.Lock()
-		timestamp := tracker.pending["session-1"]
+		timestamp := tracker.pending[HashedSessionID("session-1")]
 		tracker.mu.Unlock()
 
 		assert.Equal(t, time2.Unix(), timestamp.Unix())
@@ -65,7 +65,7 @@ func TestActivityTracker(t *testing.T) {
 
 		// Record activity
 		newActivity := time.Now().UTC()
-		tracker.RecordActivity(session.ID().String(), newActivity)
+		tracker.RecordActivity(session.ID(), newActivity)
 
 		// Manual flush
 		tracker.flush(t.Context())
@@ -94,7 +94,7 @@ func TestActivityTracker(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 		// Record activity
-		tracker.RecordActivity(session.ID().String(), time.Now().UTC())
+		tracker.RecordActivity(session.ID(), time.Now().UTC())
 
 		// Wait for automatic flush
 		time.Sleep(100 * time.Millisecond)
@@ -120,7 +120,7 @@ func TestActivityTracker(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 		// Record activity
-		tracker.RecordActivity(session.ID().String(), time.Now().UTC())
+		tracker.RecordActivity(session.ID(), time.Now().UTC())
 
 		// Cancel context to trigger final flush
 		cancel()
@@ -144,7 +144,7 @@ func TestActivityTracker(t *testing.T) {
 			go func(id int) {
 				defer wg.Done()
 				sessionID := "session-" + strconv.Itoa(id)
-				tracker.RecordActivity(sessionID, time.Now().UTC())
+				tracker.RecordActivity(HashedSessionID(sessionID), time.Now().UTC())
 			}(i)
 		}
 
@@ -168,7 +168,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.Start(t.Context())
 		
 		now := time.Now().UTC()
-		tracker.RecordActivity("session-1", now)
+		tracker.RecordActivity(HashedSessionID("session-1"), now)
 		tracker.flush(t.Context())
 
 		// Should send error to channel
@@ -186,7 +186,7 @@ func TestActivityTracker(t *testing.T) {
 		// Pending should NOT be cleared on error (retained for retry)
 		tracker.mu.Lock()
 		assert.Len(t, tracker.pending, 1)
-		assert.Equal(t, now.Unix(), tracker.pending["session-1"].Unix())
+		assert.Equal(t, now.Unix(), tracker.pending[HashedSessionID("session-1")].Unix())
 		tracker.mu.Unlock()
 	})
 
@@ -226,7 +226,7 @@ func TestActivityTracker(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 		// Record activity
-		tracker.RecordActivity(session.ID().String(), time.Now().UTC())
+		tracker.RecordActivity(session.ID(), time.Now().UTC())
 
 		// Cancel the context (simulating shutdown signal)
 		cancel()
@@ -261,7 +261,7 @@ func TestActivityTracker(t *testing.T) {
 		
 		// Record initial activity
 		time1 := time.Now().UTC()
-		tracker.RecordActivity("session-1", time1)
+		tracker.RecordActivity(HashedSessionID("session-1"), time1)
 
 		// Clone pending to simulate what flush does
 		tracker.mu.Lock()
@@ -270,7 +270,7 @@ func TestActivityTracker(t *testing.T) {
 
 		// Update with newer timestamp while "flush" is in progress
 		time2 := time1.Add(5 * time.Second)
-		tracker.RecordActivity("session-1", time2)
+		tracker.RecordActivity(HashedSessionID("session-1"), time2)
 
 		// Simulate successful flush cleanup
 		tracker.mu.Lock()
@@ -284,7 +284,7 @@ func TestActivityTracker(t *testing.T) {
 		// Newer timestamp should be preserved
 		tracker.mu.Lock()
 		assert.Len(t, tracker.pending, 1)
-		assert.Equal(t, time2.Unix(), tracker.pending["session-1"].Unix())
+		assert.Equal(t, time2.Unix(), tracker.pending[HashedSessionID("session-1")].Unix())
 		tracker.mu.Unlock()
 	})
 }

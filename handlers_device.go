@@ -322,6 +322,17 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 			return
 		}
 
+		// Generate raw session ID
+		rawID, err := gs.idGenerator()
+		if err != nil {
+			gs.logger.Error("generate session ID", "error", err)
+			http.Error(w, "generate session ID", http.StatusInternalServerError)
+			return
+		}
+
+		// Hash the raw ID before storing
+		hashedID := gs.idHasher(rawID)
+
 		// Create session with native app session config (30 days, no idle timeout)
 		now := gs.now()
 		nativeAppConfig := DefaultNativeAppSessionConfig()
@@ -334,14 +345,12 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 		}
 		absoluteDeadline := now.Add(nativeAppConfig.AbsoluteDuration)
 
-		// STUB: Phase 02 - using placeholder for hashedID, will be properly generated in Phase 04
-		_, err = gs.store.CreateSession(ctx, HashedSessionID("stub-hash"), userID, idleDeadline, absoluteDeadline)
+		_, err = gs.store.CreateSession(ctx, hashedID, userID, idleDeadline, absoluteDeadline)
 		if err != nil {
 			gs.logger.Error("create session", "error", err)
 			http.Error(w, "create session", http.StatusInternalServerError)
 			return
 		}
-		// TODO(phase-04): Extract raw session ID from generated session to pass to CompleteDeviceCode
 
 		// Get device code from cookie
 		deviceCodeCookie, err := r.Cookie(gs.deviceCodeCookieName)
@@ -364,9 +373,9 @@ func (gs *Gosesh) DeviceCodeAuthorizeCallback(
 		}
 		deviceCode := string(deviceCodeBytes)
 
-		// Complete the device code
-		// STUB: Phase 02 - using placeholder RawSessionID, will be properly generated in Phase 04
-		if err := store.CompleteDeviceCode(ctx, deviceCode, RawSessionID("stub-raw")); err != nil {
+		// Complete the device code with raw session ID (not hashed)
+		// The poll endpoint will return this raw ID to the device client
+		if err := store.CompleteDeviceCode(ctx, deviceCode, rawID); err != nil {
 			gs.logger.Error("complete device code", "error", err)
 			http.Error(w, "complete device code", http.StatusInternalServerError)
 			return

@@ -104,17 +104,26 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 			return
 		}
 
+		// Generate raw session ID
+		rawID, err := gs.idGenerator()
+		if err != nil {
+			done(w, r, fmt.Errorf("generate session ID: %w", err))
+			return
+		}
+
+		// Hash the raw ID before storing
+		hashedID := gs.idHasher(rawID)
+
 		sessionCfg := gs.credentialSource.SessionConfig()
-		// STUB: Phase 02 - using placeholder for hashedID, will be properly generated in Phase 04
 		session, err := gs.store.CreateSession(
-			ctx, HashedSessionID("stub-hash"), id, now.Add(sessionCfg.IdleDuration), now.Add(sessionCfg.AbsoluteDuration))
+			ctx, hashedID, id, now.Add(sessionCfg.IdleDuration), now.Add(sessionCfg.AbsoluteDuration))
 		if err != nil {
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
 			return
 		}
 
-		// STUB: Phase 02 - using placeholder for rawID, will be properly generated in Phase 04
-		if err := gs.credentialSource.WriteSession(w, RawSessionID("stub-raw"), session); err != nil {
+		// Write raw ID to credential source (cookie/header)
+		if err := gs.credentialSource.WriteSession(w, rawID, session); err != nil {
 			done(w, r, fmt.Errorf("write session: %w", err))
 			return
 		}
@@ -234,12 +243,21 @@ func (gs *Gosesh) ExchangeExternalToken(
 			return
 		}
 
+		// Generate raw session ID
+		rawID, err := gs.idGenerator()
+		if err != nil {
+			done(w, r, fmt.Errorf("generate session ID: %w", err))
+			return
+		}
+
+		// Hash the raw ID before storing
+		hashedID := gs.idHasher(rawID)
+
 		now := gs.now().UTC()
 		nativeAppConfig := DefaultNativeAppSessionConfig()
-		// STUB: Phase 02 - using placeholder for hashedID, will be properly generated in Phase 04
 		session, err := gs.store.CreateSession(
 			ctx,
-			HashedSessionID("stub-hash"),
+			hashedID,
 			userID,
 			now.Add(nativeAppConfig.IdleDuration),
 			now.Add(nativeAppConfig.AbsoluteDuration),
@@ -250,7 +268,7 @@ func (gs *Gosesh) ExchangeExternalToken(
 		}
 
 		response := ExchangeTokenResponse{
-			SessionID: session.ID().String(),
+			SessionID: string(rawID), // Return raw ID in JSON, not hashed
 			ExpiresAt: session.AbsoluteDeadline(),
 		}
 

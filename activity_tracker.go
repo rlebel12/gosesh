@@ -96,10 +96,9 @@ func (at *ActivityTracker) Start(ctx context.Context) {
 // The mutex is held only for a map write operation (~50-100ns).
 // At typical loads (1K-10K req/sec), contention probability is <1%.
 // See PR #11 feedback for detailed blocking analysis.
-func (at *ActivityTracker) RecordActivity(sessionID string, timestamp time.Time) {
+func (at *ActivityTracker) RecordActivity(hashedID HashedSessionID, timestamp time.Time) {
 	at.mu.Lock()
-	// TODO(phase-03): sessionID will become HashedSessionID type in Phase 04
-	at.pending[HashedSessionID(sessionID)] = timestamp
+	at.pending[hashedID] = timestamp
 	at.mu.Unlock()
 }
 

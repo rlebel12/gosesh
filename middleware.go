@@ -51,16 +51,24 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			newIdleDeadline = session.AbsoluteDeadline()
 		}
 
-		// STUB: Phase 02 - session.ID() now returns HashedSessionID directly
+		// Extend session using hashed ID
 		if err := gs.store.ExtendSession(r.Context(), session.ID(), newIdleDeadline); err != nil {
 			gs.logger.Error("extend session", "error", err)
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Write session to credential source
-		// STUB: Phase 02 - using placeholder RawSessionID, will be from context in Phase 04
-		if err := gs.credentialSource.WriteSession(w, RawSessionID("stub-raw"), session); err != nil {
+		// Get raw ID from context for WriteSession
+		rawID, ok := RawSessionIDFromContext(r.Context())
+		if !ok {
+			// This shouldn't happen - authenticate should have set it
+			gs.logger.Warn("raw session ID not in context, skipping write")
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Write session to credential source with raw ID
+		if err := gs.credentialSource.WriteSession(w, rawID, session); err != nil {
 			gs.logger.Error("write session", "error", err)
 		}
 
@@ -121,14 +129,14 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 	setSecureCookieHeaders(w)
 	ctx := r.Context()
 
-	// Read session ID from credential source
+	// Read raw session ID from credential source (cookie/header)
 	rawSessionID := gs.credentialSource.ReadSessionID(r)
 	if rawSessionID == "" {
 		return r
 	}
 
-	// STUB: Phase 02 - placeholder hashing, will use gs.idHasher in Phase 04
-	hashedID := HashedSessionID("stub-hash-" + string(rawSessionID))
+	// Hash the raw ID before store lookup
+	hashedID := gs.idHasher(rawSessionID)
 	session, err := gs.store.GetSession(ctx, hashedID)
 	if err != nil {
 		gs.logger.Error("get session", "error", err)
@@ -138,10 +146,9 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 
 	now := gs.now().UTC()
 
-	// Record activity if tracker is enabled (record after session validated, before expiry checks)
-	// STUB: Phase 02 - RecordActivity still takes string, will be updated in Phase 04
+	// Record activity if tracker is enabled (use hashed ID, not raw)
 	if gs.activityTracker != nil {
-		gs.activityTracker.RecordActivity(hashedID.String(), now)
+		gs.activityTracker.RecordActivity(hashedID, now)
 	}
 
 	// Check idle deadline (sliding window)
@@ -157,6 +164,10 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 		gs.credentialSource.ClearSession(w)
 		return r
 	}
+
+	// Store raw ID in context for use by WriteSession
+	ctx = context.WithValue(ctx, rawSessionIDKey, rawSessionID)
+	r = r.WithContext(ctx)
 
 	return gs.newRequestWithSession(r, session)
 }

@@ -1207,8 +1207,10 @@ func TestExchangeExternalToken_NativeAppSessionConfig(t *testing.T) {
 	err := json.NewDecoder(rr.Body).Decode(&response)
 	require.NoError(t, err)
 
-	// Retrieve the session from the store
-	capturedSession, err := store.GetSession(t.Context(), HashedSessionID(response.SessionID))
+	// Retrieve the session from the store - need to hash the raw ID
+	rawID := RawSessionID(response.SessionID)
+	hashedID := gs.idHasher(rawID)
+	capturedSession, err := store.GetSession(t.Context(), hashedID)
 	require.NoError(t, err)
 
 	// Verify native app session config: 30-day absolute, no idle timeout (idle = now)

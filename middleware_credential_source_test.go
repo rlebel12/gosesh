@@ -16,17 +16,17 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 	testCases := []struct {
 		name             string
 		credentialSource CredentialSource
-		setupRequest     func(t *testing.T, r *http.Request, session Session)
+		setupRequest     func(t *testing.T, r *http.Request, session Session, rawID RawSessionID)
 		wantSessionInCtx bool
 	}{
 		{
 			name:             "authenticate_cookie_source",
 			credentialSource: NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false)),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
 				// Add session cookie to request
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, RawSessionID("test-raw"), session)
+				err := source.WriteSession(w, rawID, session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -37,9 +37,9 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 		{
 			name:             "authenticate_header_source",
 			credentialSource: NewHeaderCredentialSource(),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
-				// Add Bearer token header to request
-				r.Header.Set("Authorization", "Bearer "+session.ID().String())
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
+				// Add Bearer token header to request (use raw ID, not hashed)
+				r.Header.Set("Authorization", "Bearer "+rawID.String())
 			},
 			wantSessionInCtx: true,
 		},
@@ -49,11 +49,11 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 				NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false)),
 				NewHeaderCredentialSource(),
 			),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
 				// Add session cookie (first source wins)
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, RawSessionID("test-raw"), session)
+				err := source.WriteSession(w, rawID, session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -67,9 +67,9 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 				NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false)),
 				NewHeaderCredentialSource(),
 			),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
 				// Add header only (fallback to second source)
-				r.Header.Set("Authorization", "Bearer "+session.ID().String())
+				r.Header.Set("Authorization", "Bearer "+rawID.String())
 			},
 			wantSessionInCtx: true,
 		},
@@ -86,9 +86,10 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 				WithCredentialSource(tc.credentialSource),
 			)
 
-			// Create a valid session
+			// Create a valid session with proper raw->hash flow
 			userID := StringIdentifier("user-123")
-			hashedID := HashedSessionID("test-hashed-id")
+			rawID := RawSessionID("test-raw-id")
+			hashedID := sesh.idHasher(rawID)
 			session, err := store.CreateSession(
 				context.Background(),
 				hashedID,
@@ -101,7 +102,7 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 			// Setup request with credentials
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(t, err)
-			tc.setupRequest(t, r, session)
+			tc.setupRequest(t, r, session, rawID)
 
 			// Test middleware
 			handlerCalled := false
@@ -335,7 +336,8 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 
 			// Create session with 5 minutes until idle (within refresh threshold)
 			userID := StringIdentifier("user-123")
-			hashedID := HashedSessionID("test-hashed-id-refresh")
+			rawID := RawSessionID("test-raw-session-id-refresh")
+			hashedID := sesh.idHasher(rawID)
 			session, err := store.CreateSession(
 				context.Background(),
 				hashedID,
@@ -351,14 +353,13 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 			// Setup request based on source type
 			if tc.sourceType == "cookie" {
 				w := httptest.NewRecorder()
-				rawSessionID := RawSessionID("test-raw-session-id")
-			err = tc.credentialSource.WriteSession(w, rawSessionID, session)
+				err = tc.credentialSource.WriteSession(w, rawID, session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
 				r.AddCookie(cookies[0])
 			} else {
-				r.Header.Set("Authorization", "Bearer "+session.ID().String())
+				r.Header.Set("Authorization", "Bearer "+rawID.String())
 			}
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -389,14 +390,14 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 	testCases := []struct {
 		name             string
 		credentialSource CredentialSource
-		setupRequest     func(t *testing.T, r *http.Request, session Session)
+		setupRequest     func(t *testing.T, r *http.Request, session Session, rawID RawSessionID)
 		wantStatus       int
 		wantSessionInCtx bool
 	}{
 		{
 			name:             "require_auth_header_missing",
 			credentialSource: NewHeaderCredentialSource(),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
 				// No header added
 			},
 			wantStatus:       http.StatusUnauthorized,
@@ -405,7 +406,7 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 		{
 			name:             "require_auth_cookie_missing",
 			credentialSource: NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false)),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
 				// No cookie added
 			},
 			wantStatus:       http.StatusUnauthorized,
@@ -414,8 +415,8 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 		{
 			name:             "require_auth_header_present",
 			credentialSource: NewHeaderCredentialSource(),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
-				r.Header.Set("Authorization", "Bearer "+session.ID().String())
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
+				r.Header.Set("Authorization", "Bearer "+rawID.String())
 			},
 			wantStatus:       http.StatusOK,
 			wantSessionInCtx: true,
@@ -423,10 +424,10 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 		{
 			name:             "require_auth_cookie_present",
 			credentialSource: NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false)),
-			setupRequest: func(t *testing.T, r *http.Request, session Session) {
+			setupRequest: func(t *testing.T, r *http.Request, session Session, rawID RawSessionID) {
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, RawSessionID("test-raw"), session)
+				err := source.WriteSession(w, rawID, session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -448,9 +449,10 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 				WithCredentialSource(tc.credentialSource),
 			)
 
-			// Create a valid session
+			// Create a valid session with proper raw->hash flow
 			userID := StringIdentifier("user-123")
-			hashedID := HashedSessionID("test-hashed-id")
+			rawID := RawSessionID("test-raw-require-auth")
+			hashedID := sesh.idHasher(rawID)
 			session, err := store.CreateSession(
 				context.Background(),
 				hashedID,
@@ -462,7 +464,7 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 
 			r, err := http.NewRequest(http.MethodGet, "/", nil)
 			require.NoError(t, err)
-			tc.setupRequest(t, r, session)
+			tc.setupRequest(t, r, session, rawID)
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
@@ -494,8 +496,9 @@ func TestBackwardCompatNoSource(t *testing.T) {
 		WithNow(func() time.Time { return now }),
 	)
 
-	// Create a session
-	hashedID := HashedSessionID("test-hashed-id")
+	// Create a session with proper raw->hash flow
+	rawID := RawSessionID("test-raw-backward-compat")
+	hashedID := sesh.idHasher(rawID)
 	userID := StringIdentifier("user-123")
 	session, err := store.CreateSession(
 		context.Background(),
@@ -513,7 +516,7 @@ func TestBackwardCompatNoSource(t *testing.T) {
 	// The default should be a cookie source, so write using cookie
 	source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 	w := httptest.NewRecorder()
-	err = source.WriteSession(w, RawSessionID("test-raw"), session)
+	err = source.WriteSession(w, rawID, session)
 	require.NoError(t, err)
 	cookies := w.Result().Cookies()
 	require.NotEmpty(t, cookies)
@@ -552,9 +555,10 @@ func TestCustomCookieNameWithCredentialSource(t *testing.T) {
 		WithCredentialSource(source),
 	)
 
-	// Create a session
+	// Create a session with proper raw->hash flow
 	userID := StringIdentifier("user-123")
-	hashedID := HashedSessionID("test-hashed-id")
+	rawID := RawSessionID("test-raw-custom-cookie")
+	hashedID := sesh.idHasher(rawID)
 	session, err := store.CreateSession(
 		context.Background(),
 		hashedID,
@@ -569,7 +573,7 @@ func TestCustomCookieNameWithCredentialSource(t *testing.T) {
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	err = source.WriteSession(w, RawSessionID("test-raw"), session)
+	err = source.WriteSession(w, rawID, session)
 	require.NoError(t, err)
 	cookies := w.Result().Cookies()
 	require.NotEmpty(t, cookies)
@@ -601,7 +605,8 @@ func TestBackwardCompatExistingSessions(t *testing.T) {
 		WithNow(func() time.Time { return now }),
 	)
 
-	hashedID := HashedSessionID("test-hashed-id")
+	rawID := RawSessionID("test-raw-backward-compat-existing")
+	hashedID := oldSesh.idHasher(rawID)
 	userID := StringIdentifier("user-123")
 	session, err := store.CreateSession(
 		context.Background(),
@@ -624,7 +629,7 @@ func TestBackwardCompatExistingSessions(t *testing.T) {
 
 	source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 	w := httptest.NewRecorder()
-	err = source.WriteSession(w, RawSessionID("test-raw"), session)
+	err = source.WriteSession(w, rawID, session)
 	require.NoError(t, err)
 	cookies := w.Result().Cookies()
 	require.NotEmpty(t, cookies)
