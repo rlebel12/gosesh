@@ -2,6 +2,11 @@ package gosesh
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,6 +14,44 @@ import (
 	"net/url"
 	"time"
 )
+
+// RawSessionID is the unprocessed session identifier generated with crypto/rand.
+// This is the value stored in cookies or returned to clients.
+// It should never be stored directly in the backing store.
+type RawSessionID string
+
+// String returns the string representation of the raw session ID.
+func (r RawSessionID) String() string {
+	return string(r)
+}
+
+// IsZero returns true if the raw session ID is empty.
+func (r RawSessionID) IsZero() bool {
+	return r == ""
+}
+
+// HashedSessionID is the cryptographically hashed session identifier.
+// This is the value stored in the backing store and used for lookups.
+// It is derived from RawSessionID using SHA-256 or HMAC-SHA256.
+type HashedSessionID string
+
+// String returns the string representation of the hashed session ID.
+func (h HashedSessionID) String() string {
+	return string(h)
+}
+
+// IsZero returns true if the hashed session ID is empty.
+func (h HashedSessionID) IsZero() bool {
+	return h == ""
+}
+
+// SessionIDGenerator generates a new raw session ID.
+// The default implementation uses crypto/rand with 256 bits of entropy.
+type SessionIDGenerator func() (RawSessionID, error)
+
+// SessionIDHasher hashes a raw session ID to produce a hashed session ID for storage.
+// The default implementation uses SHA-256. HMAC-SHA256 can be configured via options.
+type SessionIDHasher func(RawSessionID) HashedSessionID
 
 // Gosesh is the main type that provides OAuth2 authentication and session management.
 // It handles the OAuth2 flow, session creation and validation, and provides middleware
@@ -28,6 +71,8 @@ type Gosesh struct {
 	credentialSource       CredentialSource
 	activityTracker        *ActivityTracker
 	activityTrackingConfig *ActivityTrackingConfig
+	idGenerator            SessionIDGenerator
+	idHasher               SessionIDHasher
 }
 
 // Identifier is an interface that represents a unique identifier for users and sessions.
@@ -51,6 +96,34 @@ func (gs *Gosesh) CookieDomain() string {
 	return gs.cookieDomain()
 }
 
+// defaultSessionIDGenerator generates a new session ID using crypto/rand.
+// It produces 32 bytes (256 bits) of entropy, base64url-encoded without padding.
+func defaultSessionIDGenerator() (RawSessionID, error) {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("generate session ID: %w", err)
+	}
+	return RawSessionID(base64.RawURLEncoding.EncodeToString(b)), nil
+}
+
+// defaultSessionIDHasher hashes a raw session ID using SHA-256.
+// The output is hex-encoded for consistent string representation.
+func defaultSessionIDHasher(raw RawSessionID) HashedSessionID {
+	hash := sha256.Sum256([]byte(raw))
+	return HashedSessionID(hex.EncodeToString(hash[:]))
+}
+
+// newHMACSessionIDHasher creates an HMAC-SHA256 hasher with the given secret.
+// The returned hasher can be used to hash session IDs with a secret key.
+func newHMACSessionIDHasher(secret []byte) SessionIDHasher {
+	return func(raw RawSessionID) HashedSessionID {
+		h := hmac.New(sha256.New, secret)
+		h.Write([]byte(raw))
+		return HashedSessionID(hex.EncodeToString(h.Sum(nil)))
+	}
+}
+
 // New creates a new Gosesh instance with the provided store and options.
 // The store is responsible for persisting user and session data.
 func New(store Storer, opts ...NewOpts) *Gosesh {
@@ -66,6 +139,8 @@ func New(store Storer, opts ...NewOpts) *Gosesh {
 		origin:                url,
 		allowedHosts:          []string{url.Hostname()},
 		now:                   time.Now,
+		idGenerator:           defaultSessionIDGenerator,
+		idHasher:              defaultSessionIDHasher,
 	}
 	gs.cookieDomain = func() string { return gs.origin.Hostname() }
 
@@ -209,6 +284,23 @@ func WithActivityTracking(config ActivityTrackingConfig) func(*Gosesh) {
 	}
 }
 
+// WithSessionIDGenerator sets a custom session ID generator.
+// If not specified, the default generator uses crypto/rand with 256 bits of entropy.
+func WithSessionIDGenerator(gen SessionIDGenerator) NewOpts {
+	return func(gs *Gosesh) {
+		gs.idGenerator = gen
+	}
+}
+
+// WithHMACSessionIDHasher sets an HMAC-SHA256 session ID hasher with the given secret.
+// This provides an additional layer of security over the default SHA-256 hasher.
+// The secret should be kept secure and rotated periodically.
+func WithHMACSessionIDHasher(secret []byte) NewOpts {
+	return func(gs *Gosesh) {
+		gs.idHasher = newHMACSessionIDHasher(secret)
+	}
+}
+
 // Storer is the interface that must be implemented by storage backends.
 // It defines the methods required for managing users and sessions.
 type Storer interface {
@@ -342,4 +434,17 @@ type StringIdentifier string
 
 func (s StringIdentifier) String() string {
 	return string(s)
+}
+
+// rawSessionIDContextKey is the context key for storing raw session IDs.
+type rawSessionIDContextKey struct{}
+
+// rawSessionIDKey is the singleton context key instance.
+var rawSessionIDKey = rawSessionIDContextKey{}
+
+// RawSessionIDFromContext retrieves the raw session ID from the context.
+// Returns the session ID and true if present, or an empty ID and false if not.
+func RawSessionIDFromContext(ctx context.Context) (RawSessionID, bool) {
+	id, ok := ctx.Value(rawSessionIDKey).(RawSessionID)
+	return id, ok
 }
