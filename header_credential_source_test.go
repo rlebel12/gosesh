@@ -207,3 +207,54 @@ func TestHeaderCredentialSourceContract(t *testing.T) {
 		RequestFromResponse: nil, // Headers are not writable, so no round-trip test
 	}.Test(t)
 }
+
+// TestHeaderCredentialSource_ReadSessionIDReturnsRawType verifies ReadSessionID returns RawSessionID type
+func TestHeaderCredentialSource_ReadSessionIDReturnsRawType(t *testing.T) {
+	source := NewHeaderCredentialSource()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer test-token-123")
+
+	result := source.ReadSessionID(req)
+
+	// Type assertion to ensure return type is RawSessionID
+	var _ RawSessionID = result
+	assert.Equal(t, RawSessionID("test-token-123"), result)
+}
+
+// TestHeaderCredentialSource_WriteSessionAcceptsRawSessionID verifies WriteSession signature accepts RawSessionID
+func TestHeaderCredentialSource_WriteSessionAcceptsRawSessionID(t *testing.T) {
+	source := NewHeaderCredentialSource()
+	hashedID := HashedSessionID("test-hashed-id")
+	userID := StringIdentifier("test-user-id")
+	now := time.Now()
+	session := NewFakeSession(
+		hashedID,
+		userID,
+		now.Add(30*time.Minute),
+		now.Add(24*time.Hour),
+		now,
+	)
+
+	w := httptest.NewRecorder()
+	rawID := RawSessionID("test-raw-id")
+
+	// Should accept RawSessionID parameter and not error (even though it's a no-op)
+	err := source.WriteSession(w, rawID, session)
+	require.NoError(t, err)
+}
+
+// TestHeaderCredentialSource_RoundTripWithBearerToken verifies Authorization header round-trip
+func TestHeaderCredentialSource_RoundTripWithBearerToken(t *testing.T) {
+	source := NewHeaderCredentialSource()
+
+	// Set Authorization header with Bearer token
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	testToken := "my-bearer-token-abc123"
+	req.Header.Set("Authorization", "Bearer "+testToken)
+
+	// Read session ID
+	readID := source.ReadSessionID(req)
+
+	// Should return RawSessionID with the token
+	assert.Equal(t, RawSessionID(testToken), readID)
+}

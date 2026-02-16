@@ -344,3 +344,142 @@ func TestCookieCredentialSourceContract(t *testing.T) {
 	}
 	contract.Test(t)
 }
+
+// TestCookieCredentialSource_ReadSessionIDReturnsRawType verifies ReadSessionID returns RawSessionID type
+func TestCookieCredentialSource_ReadSessionIDReturnsRawType(t *testing.T) {
+	source := NewCookieCredentialSource()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  "session",
+		Value: base64.URLEncoding.EncodeToString([]byte("test-raw-id")),
+	})
+
+	result := source.ReadSessionID(req)
+
+	// Type assertion to ensure return type is RawSessionID
+	var _ RawSessionID = result
+	assert.Equal(t, RawSessionID("test-raw-id"), result)
+}
+
+// TestCookieCredentialSource_WriteSessionAcceptsRawSessionID verifies WriteSession accepts RawSessionID parameter
+func TestCookieCredentialSource_WriteSessionAcceptsRawSessionID(t *testing.T) {
+	source := NewCookieCredentialSource()
+	hashedID := HashedSessionID("test-hashed-id")
+	userID := StringIdentifier("test-user-id")
+	now := time.Now()
+	session := NewFakeSession(
+		hashedID,
+		userID,
+		now.Add(30*time.Minute),
+		now.Add(24*time.Hour),
+		now,
+	)
+
+	w := httptest.NewRecorder()
+	rawID := RawSessionID("test-raw-id")
+	err := source.WriteSession(w, rawID, session)
+	require.NoError(t, err)
+
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1)
+
+	// Verify cookie contains base64-encoded raw ID
+	decoded, err := base64.URLEncoding.DecodeString(cookies[0].Value)
+	require.NoError(t, err)
+	assert.Equal(t, "test-raw-id", string(decoded))
+}
+
+// TestCookieCredentialSource_WriteReadRoundTrip verifies write-then-read round-trip with RawSessionID
+func TestCookieCredentialSource_WriteReadRoundTrip(t *testing.T) {
+	source := NewCookieCredentialSource()
+	hashedID := HashedSessionID("test-hashed-id")
+	userID := StringIdentifier("test-user-id")
+	now := time.Now()
+	session := NewFakeSession(
+		hashedID,
+		userID,
+		now.Add(30*time.Minute),
+		now.Add(24*time.Hour),
+		now,
+	)
+
+	// Write session with specific raw ID
+	rawID := RawSessionID("my-raw-session")
+	w := httptest.NewRecorder()
+	err := source.WriteSession(w, rawID, session)
+	require.NoError(t, err)
+
+	// Read back the cookie
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(cookies[0])
+
+	readID := source.ReadSessionID(req)
+	assert.Equal(t, rawID, readID)
+}
+
+// TestCookieCredentialSource_WriteUsesRawIDNotSessionID verifies WriteSession uses rawID parameter, not session.ID()
+func TestCookieCredentialSource_WriteUsesRawIDNotSessionID(t *testing.T) {
+	source := NewCookieCredentialSource()
+
+	// Create session with a hashed ID (different from raw ID)
+	hashedID := HashedSessionID("hashed-value-abc123")
+	userID := StringIdentifier("test-user-id")
+	now := time.Now()
+	session := NewFakeSession(
+		hashedID,
+		userID,
+		now.Add(30*time.Minute),
+		now.Add(24*time.Hour),
+		now,
+	)
+
+	// Write with a different raw ID
+	rawID := RawSessionID("raw-value-xyz789")
+	w := httptest.NewRecorder()
+	err := source.WriteSession(w, rawID, session)
+	require.NoError(t, err)
+
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1)
+
+	// Decode cookie value
+	decoded, err := base64.URLEncoding.DecodeString(cookies[0].Value)
+	require.NoError(t, err)
+
+	// Cookie should contain rawID, NOT session.ID()
+	assert.Equal(t, "raw-value-xyz789", string(decoded), "Cookie must contain rawID parameter, not session.ID()")
+	assert.NotEqual(t, "hashed-value-abc123", string(decoded), "Cookie must NOT contain session.ID()")
+}
+
+// TestCookieCredentialSource_EmptyRawSessionID tests edge case of empty RawSessionID
+func TestCookieCredentialSource_EmptyRawSessionID(t *testing.T) {
+	source := NewCookieCredentialSource()
+	hashedID := HashedSessionID("test-hashed-id")
+	userID := StringIdentifier("test-user-id")
+	now := time.Now()
+	session := NewFakeSession(
+		hashedID,
+		userID,
+		now.Add(30*time.Minute),
+		now.Add(24*time.Hour),
+		now,
+	)
+
+	w := httptest.NewRecorder()
+	emptyRawID := RawSessionID("")
+	err := source.WriteSession(w, emptyRawID, session)
+
+	// Should not error with empty raw ID
+	require.NoError(t, err)
+
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 1)
+
+	// Decode cookie value
+	decoded, err := base64.URLEncoding.DecodeString(cookies[0].Value)
+	require.NoError(t, err)
+	assert.Equal(t, "", string(decoded))
+}

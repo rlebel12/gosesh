@@ -330,3 +330,79 @@ func TestCompositeCredentialSourceContract(t *testing.T) {
 	}
 	contract.Test(t)
 }
+
+// TestCompositeCredentialSource_ReadSessionIDReturnsRawType verifies ReadSessionID returns RawSessionID type
+func TestCompositeCredentialSource_ReadSessionIDReturnsRawType(t *testing.T) {
+	cookieSource := NewCookieCredentialSource()
+	headerSource := NewHeaderCredentialSource()
+	source := NewCompositeCredentialSource(cookieSource, headerSource)
+
+	// Test with cookie set
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  "session",
+		Value: base64.URLEncoding.EncodeToString([]byte("cookie-value")),
+	})
+
+	result := source.ReadSessionID(req)
+
+	// Type assertion to ensure return type is RawSessionID
+	var _ RawSessionID = result
+	assert.Equal(t, RawSessionID("cookie-value"), result)
+}
+
+// TestCompositeCredentialSource_WriteSessionPassesRawIDToSources verifies rawID is forwarded to sub-sources
+func TestCompositeCredentialSource_WriteSessionPassesRawIDToSources(t *testing.T) {
+	// Create two cookie sources with different names to track which gets written
+	source1 := NewCookieCredentialSource(WithCookieSourceName("session1"))
+	source2 := NewCookieCredentialSource(WithCookieSourceName("session2"))
+	composite := NewCompositeCredentialSource(source1, source2)
+
+	hashedID := HashedSessionID("test-hashed-id")
+	userID := StringIdentifier("test-user-id")
+	now := time.Now()
+	session := NewFakeSession(
+		hashedID,
+		userID,
+		now.Add(30*time.Minute),
+		now.Add(24*time.Hour),
+		now,
+	)
+
+	rawID := RawSessionID("my-raw-id")
+	w := httptest.NewRecorder()
+	err := composite.WriteSession(w, rawID, session)
+	require.NoError(t, err)
+
+	// Both sources should have written cookies with the raw ID
+	cookies := w.Result().Cookies()
+	require.Len(t, cookies, 2)
+
+	for _, cookie := range cookies {
+		decoded, err := base64.URLEncoding.DecodeString(cookie.Value)
+		require.NoError(t, err)
+		assert.Equal(t, "my-raw-id", string(decoded), "Both cookies should contain the same rawID")
+	}
+}
+
+// TestCompositeCredentialSource_FirstNonEmptyWins verifies first non-empty source wins
+func TestCompositeCredentialSource_FirstNonEmptyWins(t *testing.T) {
+	headerSource := NewHeaderCredentialSource()
+	cookieSource := NewCookieCredentialSource()
+
+	// Header first, cookie second
+	composite := NewCompositeCredentialSource(headerSource, cookieSource)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	// Set both header and cookie
+	req.Header.Set("Authorization", "Bearer header-token")
+	req.AddCookie(&http.Cookie{
+		Name:  "session",
+		Value: base64.URLEncoding.EncodeToString([]byte("cookie-token")),
+	})
+
+	result := composite.ReadSessionID(req)
+
+	// Header should win (it's first)
+	assert.Equal(t, RawSessionID("header-token"), result)
+}

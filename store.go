@@ -4,7 +4,6 @@ package gosesh
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"sync"
 	"time"
@@ -12,17 +11,15 @@ import (
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		sessions: map[string]*MemoryStoreSession{},
+		sessions: map[HashedSessionID]*MemoryStoreSession{},
 	}
 }
 
 type (
 	MemoryStore struct {
 		mu       sync.RWMutex
-		sessions map[string]*MemoryStoreSession
+		sessions map[HashedSessionID]*MemoryStoreSession
 	}
-
-	MemoryStoreIdentifier string
 
 	MemoryStoreSession struct {
 		id               HashedSessionID
@@ -32,27 +29,6 @@ type (
 		lastActivityAt   time.Time
 	}
 )
-
-func (id MemoryStoreIdentifier) String() string {
-	return string(id)
-}
-
-// generateSessionID creates a random alphanumeric session ID using crypto/rand.
-func generateSessionID() (MemoryStoreIdentifier, error) {
-	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	const length = 32
-
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-
-	for i := range bytes {
-		bytes[i] = alphabet[int(bytes[i])%len(alphabet)]
-	}
-
-	return MemoryStoreIdentifier(bytes), nil
-}
 
 func (ms *MemoryStore) UpsertUser(ctx context.Context, userID Identifier) (Identifier, error) {
 	ms.mu.Lock()
@@ -65,8 +41,6 @@ func (ms *MemoryStore) CreateSession(ctx context.Context, hashedID HashedSession
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	// STUB: Phase 02 - intentionally incomplete for RED gate
-	// Proper implementation in Phase 03
 	now := time.Now().UTC()
 	s := &MemoryStoreSession{
 		id:               hashedID,
@@ -75,7 +49,7 @@ func (ms *MemoryStore) CreateSession(ctx context.Context, hashedID HashedSession
 		absoluteDeadline: absoluteDeadline,
 		lastActivityAt:   now,
 	}
-	ms.sessions[s.ID().String()] = s
+	ms.sessions[hashedID] = s
 	return s, nil
 }
 
@@ -83,9 +57,7 @@ func (ms *MemoryStore) GetSession(ctx context.Context, hashedID HashedSessionID)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
-	// STUB: Phase 02 - intentionally uses string conversion for RED gate
-	// Proper implementation in Phase 03
-	s, ok := ms.sessions[hashedID.String()]
+	s, ok := ms.sessions[hashedID]
 	if !ok {
 		return nil, errors.New("session not found")
 	}
@@ -96,13 +68,11 @@ func (ms *MemoryStore) DeleteSession(ctx context.Context, hashedID HashedSession
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	// STUB: Phase 02 - intentionally uses string conversion for RED gate
-	// Proper implementation in Phase 03
-	_, ok := ms.sessions[hashedID.String()]
+	_, ok := ms.sessions[hashedID]
 	if !ok {
 		return errors.New("session not found")
 	}
-	delete(ms.sessions, hashedID.String())
+	delete(ms.sessions, hashedID)
 	return nil
 }
 
@@ -111,9 +81,9 @@ func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID Identifier
 	defer ms.mu.Unlock()
 
 	var count int
-	for _, s := range ms.sessions {
+	for hashedID, s := range ms.sessions {
 		if s.UserID() == userID {
-			delete(ms.sessions, s.ID().String())
+			delete(ms.sessions, hashedID)
 			count++
 		}
 	}
@@ -124,9 +94,7 @@ func (ms *MemoryStore) ExtendSession(ctx context.Context, hashedID HashedSession
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	// STUB: Phase 02 - intentionally uses string conversion for RED gate
-	// Proper implementation in Phase 03
-	s, ok := ms.sessions[hashedID.String()]
+	s, ok := ms.sessions[hashedID]
 	if !ok {
 		return errors.New("session not found")
 	}
@@ -143,11 +111,9 @@ func (ms *MemoryStore) BatchRecordActivity(ctx context.Context, updates map[Hash
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	// STUB: Phase 02 - intentionally uses string conversion for RED gate
-	// Proper implementation in Phase 03
 	count := 0
 	for hashedID, timestamp := range updates {
-		s, ok := ms.sessions[hashedID.String()]
+		s, ok := ms.sessions[hashedID]
 		if ok {
 			s.lastActivityAt = timestamp
 			count++
@@ -162,7 +128,7 @@ func (ms *MemoryStore) Reset() {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	ms.sessions = make(map[string]*MemoryStoreSession)
+	ms.sessions = make(map[HashedSessionID]*MemoryStoreSession)
 }
 
 func (s MemoryStoreSession) ID() HashedSessionID {
@@ -206,5 +172,4 @@ func (s *MemoryStoreSession) SetAbsoluteDeadline(deadline time.Time) {
 // Ensure interfaces are implemented
 var _ Storer = (*MemoryStore)(nil)
 var _ ActivityRecorder = (*MemoryStore)(nil)
-var _ Identifier = (*MemoryStoreIdentifier)(nil)
 var _ Session = (*MemoryStoreSession)(nil)

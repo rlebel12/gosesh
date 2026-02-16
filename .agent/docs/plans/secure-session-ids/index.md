@@ -16,8 +16,8 @@
 | Phase | Description | Depends On | Status |
 |-------|-------------|------------|--------|
 | [01-core-types-and-generators](phases/01-core-types-and-generators.md) | Add RawSessionID, HashedSessionID types, SessionIDGenerator, SessionIDHasher, default implementations, functional options, and context helpers | None | Complete |
-| [02-interface-updates-and-test-infra](phases/02-interface-updates-and-test-infra.md) | Update Storer, CredentialSource, ActivityRecorder interfaces; update fakes, contracts, and test helpers | Phase 01 | Pending |
-| [03-store-and-credential-sources](phases/03-store-and-credential-sources.md) | Update MemoryStore, CookieCredentialSource, HeaderCredentialSource, CompositeCredentialSource implementations | Phase 02 | Pending |
+| [02-interface-updates-and-test-infra](phases/02-interface-updates-and-test-infra.md) | Update Storer, CredentialSource, ActivityRecorder interfaces; update fakes, contracts, and test helpers | Phase 01 | Complete |
+| [03-store-and-credential-sources](phases/03-store-and-credential-sources.md) | Update MemoryStore, CookieCredentialSource, HeaderCredentialSource, CompositeCredentialSource implementations | Phase 02 | Complete |
 | [04-handlers-and-middleware](phases/04-handlers-and-middleware.md) | Update OAuth2Callback, ExchangeExternalToken, Logout, authenticate, AuthenticateAndRefresh, ActivityTracker, and device code handlers | Phase 03 | Pending |
 
 <!-- Status values: Pending | RED | GREEN | Complete -->
@@ -65,8 +65,8 @@ All phase gates must pass, plus these overall integration criteria.
 
 ## Status
 
-**Progress:** 1/4 phases complete
-**Current Phase:** Phase 01 complete, Phase 02 ready
+**Progress:** 3/4 phases complete
+**Current Phase:** Phase 03 complete, Phase 04 ready
 **Blocked:** None
 
 ---

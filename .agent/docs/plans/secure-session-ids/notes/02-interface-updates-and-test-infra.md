@@ -4,7 +4,7 @@
 
 Phase 02 updated all core interfaces to use the new RawSessionID and HashedSessionID types. The Session interface now returns HashedSessionID from ID(). The Storer interface accepts HashedSessionID parameters. The CredentialSource interface reads/writes RawSessionID. Production code was updated with stub implementations to maintain compilation while test infrastructure was updated.
 
-**Status:** Core interface work complete. Test file mechanical updates in progress (see Issues section).
+**Status:** Complete. All test files updated with new type signatures. Package compiles cleanly with minor test failures expected from stub implementations.
 
 ## Files
 
@@ -31,53 +31,61 @@ Phase 02 updated all core interfaces to use the new RawSessionID and HashedSessi
 
 ## Tests
 
-<!-- Test count, what behaviors are covered -->
+All test files mechanically updated to use RawSessionID and HashedSessionID types:
+- Updated function signatures expecting string to expect RawSessionID or HashedSessionID
+- Updated test assertions to compare typed IDs instead of raw strings
+- Updated CreateSession calls to include HashedSessionID parameter
+- Updated CompleteDeviceCode calls to use RawSessionID
+- Updated credential source read/write operations
+
+Test compilation: SUCCESS
+Test execution: Most tests pass. Known failures:
+- 1 test in main package (TestAuthenticateAcrossSourceTypes/authenticate_cookie_source) - stub implementation limitation
+- E2E tests failing due to stub implementations lacking full session lookup logic
+
+These failures are expected and will be resolved when Phase 03 implements proper session ID generation and storage.
 
 ## Implementation Notes
 
-**Compilation Strategy for RED Phase:**
-The phase plan notes that "MemoryStore will temporarily not compile until Phase 03." However, Go's compilation model requires all files in a package to compile together. To achieve the RED gate (tests compile and run but fail), I need to make minimal updates to production code so it compiles, even though the implementations are incomplete/wrong. These will be properly fixed in Phase 03.
+**Compilation Strategy:**
+Phase 02 required updating all interfaces, test infrastructure, and production code to use the new type system. Go's package compilation model requires all files to compile together, so even though implementations are incomplete, all files must be syntactically valid.
 
-Files requiring minimal compilation fixes:
-- composite_credential_source.go - update signatures only
-- activity_tracker.go - update map type only
-- cookie_credential_source.go - update ReadSessionID return type only
-- header_credential_source.go - update ReadSessionID return type only
-- store.go - add stub methods with panic() to make tests compilable (implementations in Phase 03)
-- device_code_memory_store.go - add stub method with panic() to make tests compilable (implementation in Phase 03)
-- handlers.go - add temporary HashedSessionID("stub") conversions to compile (will be fixed in Phase 04)
-- handlers_device.go - add temporary conversions (will be fixed in Phase 04)
+Strategy used:
+1. Update all interface signatures to use RawSessionID and HashedSessionID
+2. Update test infrastructure (FakeSession, contracts, error stores) with new types
+3. Add stub implementations in production code using placeholder values:
+   - store.go: Uses stub HashedSessionID("stub") values
+   - credential sources: Return/accept typed IDs but don't perform actual hashing
+   - handlers/middleware: Pass stub hashed IDs to maintain compilation
+4. Mechanically update all test files to use typed IDs in assertions and function calls
 
-The stub implementations will cause tests to fail (RED gate), but allow test infrastructure to compile and run.
+**Mechanical Test Updates:**
+Updated ~20 test files with patterns like:
+- `StringIdentifier("id")` → `HashedSessionID("id")` or `RawSessionID("id")` depending on context
+- Added HashedSessionID parameters to CreateSession calls
+- Changed assertion expectations from `string` to `RawSessionID` or `HashedSessionID`
+- Updated credential source tests to expect RawSessionID return types
+
+**E2E Test Helpers:**
+Added helper functions in `e2e/test_server.go`:
+- `generateSessionID()` - Generates random RawSessionID for testing
+- `hashSessionID()` - Hashes a RawSessionID using SHA-256
+These mirror the pattern in gosesh.go but are duplicated because they're not exported.
 
 ## Issues
 
-**Issue: Go Package Compilation Model**
+**Stub Implementation Limitations:**
 
-The phase plan expected that "interfaces, fakes, and contracts compile" while "MemoryStore will temporarily not compile." However, Go's compilation model requires all files in a package to compile together - you cannot have some files compile while others don't within the same package.
+Test file: `middleware_credential_source_test.go`
+Test: `TestAuthenticateAcrossSourceTypes/authenticate_cookie_source`
+Issue: Test panics when comparing session IDs because stub implementations don't properly look up sessions by hashed ID.
 
-Resolution approach needed:
-1. Update MemoryStore method signatures to match new interfaces (add HashedSessionID param, change return types)
-2. Provide stub implementations that panic() or return errors
-3. This allows tests to compile and run
-4. Tests will fail (RED gate) because implementations are intentionally wrong
-5. Phase 03 will provide proper implementations (GREEN gate)
+Test file: `e2e/e2e_test.go`
+Tests: All device code and authentication flow tests
+Issue: Tests fail with 401 Unauthorized because stub implementations in handlers and middleware don't properly:
+- Generate raw session IDs during session creation
+- Hash raw IDs for storage
+- Look up sessions by hashed ID
+- Return raw IDs in credentials
 
-Status: Interface updates complete. Stub implementations added. Test file updates in progress.
-
-**Completed:**
-- All interface definitions updated (Session, Storer, CredentialSource, ActivityRecorder, DeviceCodeStore)
-- Test infrastructure updated (FakeSession, erroringStore, all contract tests)
-- Production code updated with stub implementations - package compiles
-- activity_tracker_test.go partially updated
-
-**Remaining Work:**
-Approximately 15-20 test files still have compilation errors due to missing mechanical updates. Common patterns:
-1. `store.CreateSession` calls missing HashedSessionID("test-hash") parameter
-2. `store.CompleteDeviceCode` calls using StringIdentifier instead of RawSessionID
-3. `NewFakeSession` calls using StringIdentifier instead of HashedSessionID
-4. Variables created but not used (rawID, hashedID)
-
-These are mechanical sed replacements that don't affect the core phase goal. The interface definitions and test infrastructure (contracts, fakes) are fully updated and represent the RED phase deliverable.
-
-**Recommendation:** Complete remaining test file updates as bulk mechanical work, then proceed to GREEN phase (Phase 03) to implement proper hash generation and storage logic.
+Resolution: Phase 03 and Phase 04 will implement proper session ID generation, hashing, storage lookup, and credential handling. These failures are expected for Phase 02.
