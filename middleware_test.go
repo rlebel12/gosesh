@@ -34,7 +34,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
 				// Session with 15 minutes until idle (> 10min threshold)
-				session, err := store.CreateSession(t.Context(), userID, now.Add(15*time.Minute), now.Add(85*time.Minute))
+				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(15*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
@@ -54,7 +54,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
 				// Session with 5 minutes until idle (< 10min threshold)
-				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
+				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
@@ -76,7 +76,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 				// Session with 5 minutes until idle, but absolute in 30min
 				// sessionIdleTimeout is 17min, so new idle would be now+17min = 17min
 				// But absolute is in 30min, so should not cap
-				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(30*time.Minute))
+				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(5*time.Minute), now.Add(30*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
@@ -96,7 +96,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
 				// Session with 5 minutes until idle (within threshold)
-				session, err := store.CreateSession(t.Context(), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
+				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(5*time.Minute), now.Add(85*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
@@ -117,7 +117,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		"session expired": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
 				userID := StringIdentifier("identifier")
-				session, err := store.CreateSession(t.Context(), userID, now.Add(-5*time.Minute), now.Add(-1*time.Minute))
+				session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID, now.Add(-5*time.Minute), now.Add(-1*time.Minute))
 				require.NoError(t, err)
 				r.AddCookie(&http.Cookie{
 					Name:     "customName",
@@ -255,8 +255,10 @@ func TestAuthenticateDualDeadline(t *testing.T) {
 			)
 
 			userID := StringIdentifier("user-id")
+			hashedID := HashedSessionID("test-hashed-id")
 			session, err := store.CreateSession(
 				context.Background(),
+				hashedID,
 				userID,
 				now.Add(tc.idleDeadline),
 				now.Add(tc.absoluteDeadline),
@@ -305,7 +307,7 @@ func TestRequireAuthentication(t *testing.T) {
 		rr := httptest.NewRecorder()
 
 		session := NewFakeSession(
-			StringIdentifier("session-id"),
+			HashedSessionID("session-id"),
 			StringIdentifier("user-id"),
 			now,
 			now.Add(time.Hour),
@@ -350,7 +352,7 @@ func TestRedirectUnauthenticated(t *testing.T) {
 			giveSession: func(t *testing.T, r *http.Request) *http.Request {
 				now := time.Now()
 				session := NewFakeSession(
-					StringIdentifier("session-id"),
+					HashedSessionID("session-id"),
 					StringIdentifier("user-id"),
 					now,
 					now.Add(time.Hour),
@@ -458,7 +460,7 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 
 		// Create session at time T0
 		userID := StringIdentifier("identifier")
-		session, _ := store.CreateSession(t.Context(), userID,
+		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			now.Add(15*time.Minute), now.Add(85*time.Minute))
 
 		originalActivity := session.LastActivityAt()
@@ -483,7 +485,7 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 		gs.activityTracker.flush(t.Context())
 
 		// Verify activity was recorded
-		updated, _ := store.GetSession(t.Context(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID())
 		assert.True(t, updated.LastActivityAt().After(originalActivity),
 			"Expected LastActivityAt %v to be after %v", updated.LastActivityAt(), originalActivity)
 	})
@@ -500,7 +502,8 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 		)
 
 		userID := StringIdentifier("identifier")
-		session, _ := store.CreateSession(context.Background(), userID,
+		hashedID := HashedSessionID("test-hashed-id-no-tracker")
+		session, _ := store.CreateSession(context.Background(), hashedID, userID,
 			now.Add(15*time.Minute), now.Add(85*time.Minute))
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)

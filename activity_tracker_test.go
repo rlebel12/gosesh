@@ -56,7 +56,7 @@ func TestActivityTracker(t *testing.T) {
 
 		// Create a session
 		userID := StringIdentifier("user-1")
-		session, err := store.CreateSession(t.Context(), userID,
+		session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 		require.NoError(t, err)
 
@@ -76,7 +76,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.mu.Unlock()
 
 		// Verify store was updated
-		updated, _ := store.GetSession(t.Context(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 
@@ -87,7 +87,7 @@ func TestActivityTracker(t *testing.T) {
 		
 		// Create session
 		userID := StringIdentifier("user-1")
-		session, _ := store.CreateSession(t.Context(), userID,
+		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
 		originalActivity := session.LastActivityAt()
@@ -100,7 +100,7 @@ func TestActivityTracker(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Verify was flushed
-		updated, _ := store.GetSession(t.Context(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 
@@ -113,7 +113,7 @@ func TestActivityTracker(t *testing.T) {
 
 		// Create session
 		userID := StringIdentifier("user-1")
-		session, _ := store.CreateSession(t.Context(), userID,
+		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
 		originalActivity := session.LastActivityAt()
@@ -129,7 +129,7 @@ func TestActivityTracker(t *testing.T) {
 		}
 
 		// Verify was flushed
-		updated, _ := store.GetSession(t.Context(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 
@@ -218,7 +218,7 @@ func TestActivityTracker(t *testing.T) {
 
 		// Create session in store
 		userID := StringIdentifier("user-1")
-		session, err := store.CreateSession(t.Context(), userID,
+		session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 		require.NoError(t, err)
 
@@ -236,7 +236,7 @@ func TestActivityTracker(t *testing.T) {
 		}
 
 		// Verify activity was flushed to store despite cancelled context
-		updated, err := store.GetSession(t.Context(), session.ID().String())
+		updated, err := store.GetSession(t.Context(), session.ID())
 		require.NoError(t, err)
 		assert.True(t, updated.LastActivityAt().After(originalActivity),
 			"final flush should succeed even after context cancellation")

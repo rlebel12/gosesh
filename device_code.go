@@ -27,9 +27,9 @@ type DeviceCodeEntry struct {
 	// Typically 5 seconds to prevent excessive polling.
 	Interval time.Duration
 
-	// SessionID is set when the authorization is completed.
-	// Nil until the user authorizes on the web.
-	SessionID Identifier
+	// SessionID stores the raw (unhashed) session ID so the poll endpoint can
+	// return it to the device client for use as a Bearer token.
+	SessionID RawSessionID
 
 	// Completed indicates whether the user has authorized this device.
 	Completed bool
@@ -58,10 +58,11 @@ type DeviceCodeStore interface {
 	// Returns ErrDeviceCodeNotFound if the code doesn't exist.
 	GetByUserCode(ctx context.Context, userCode string) (DeviceCodeEntry, error)
 
-	// CompleteDeviceCode marks an authorization as complete with the session ID.
+	// CompleteDeviceCode marks an authorization as complete with the raw session ID.
+	// The raw ID is stored so the poll endpoint can return it to the device client.
 	// Returns ErrDeviceCodeNotFound if the code doesn't exist.
 	// Returns ErrDeviceCodeAlreadyComplete if already completed (idempotency check).
-	CompleteDeviceCode(ctx context.Context, deviceCode string, sessionID Identifier) error
+	CompleteDeviceCode(ctx context.Context, deviceCode string, rawSessionID RawSessionID) error
 
 	// UpdateLastPoll updates the last poll time for rate limiting.
 	// Returns ErrDeviceCodeNotFound if the code doesn't exist.

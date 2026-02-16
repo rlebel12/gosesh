@@ -307,24 +307,25 @@ type Storer interface {
 	// UpsertUser creates or updates a user based on their OAuth2 provider ID.
 	UpsertUser(ctx context.Context, authProviderID Identifier) (userID Identifier, err error)
 	// CreateSession creates a new session for a user with the specified deadlines.
+	// hashedID is the pre-hashed session identifier to store.
 	// idleDeadline is when the session expires from inactivity.
 	// absoluteDeadline is when the session expires regardless of activity.
-	CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error)
+	CreateSession(ctx context.Context, hashedID HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error)
 	// ExtendSession extends the idle deadline of an existing session.
 	// This is used to refresh a session's TTL without creating a new session.
-	ExtendSession(ctx context.Context, sessionID string, newIdleDeadline time.Time) error
-	// GetSession retrieves a session by its ID.
-	GetSession(ctx context.Context, sessionID string) (Session, error)
-	// DeleteSession deletes a session by its ID.
-	DeleteSession(ctx context.Context, sessionID string) error
+	ExtendSession(ctx context.Context, hashedID HashedSessionID, newIdleDeadline time.Time) error
+	// GetSession retrieves a session by its hashed ID.
+	GetSession(ctx context.Context, hashedID HashedSessionID) (Session, error)
+	// DeleteSession deletes a session by its hashed ID.
+	DeleteSession(ctx context.Context, hashedID HashedSessionID) error
 	// DeleteUserSessions deletes all sessions for a user, returning the number of sessions deleted.
 	DeleteUserSessions(ctx context.Context, userID Identifier) (int, error)
 }
 
 // Session represents an active user session.
 type Session interface {
-	// ID returns the session's unique identifier.
-	ID() Identifier
+	// ID returns the hashed session identifier as stored in the backing store.
+	ID() HashedSessionID
 	// UserID returns the ID of the user associated with this session.
 	UserID() Identifier
 	// IdleDeadline returns the time at which the session expires from inactivity.
@@ -344,7 +345,7 @@ type ActivityRecorder interface {
 	// Returns the number of sessions successfully updated.
 	// Non-existent session IDs are silently ignored.
 	// This method must be safe to call concurrently with other store operations.
-	BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error)
+	BatchRecordActivity(ctx context.Context, updates map[HashedSessionID]time.Time) (int, error)
 }
 
 // SessionConfig configures session timeouts for a credential source.
@@ -370,14 +371,14 @@ type CredentialSource interface {
 	// Name returns an identifier for this source (used for logging/debugging).
 	Name() string
 
-	// ReadSessionID extracts the session ID from a request.
-	// Returns empty string if no credential is present.
-	ReadSessionID(r *http.Request) string
+	// ReadSessionID extracts the raw (unhashed) session ID from a request.
+	// Returns empty RawSessionID if no credential is present.
+	ReadSessionID(r *http.Request) RawSessionID
 
-	// WriteSession writes the session credential to the response.
+	// WriteSession writes the session credential to the response using the raw session ID.
 	// For sources that cannot write (e.g., header-based auth where client stores token),
 	// this should be a no-op and return nil.
-	WriteSession(w http.ResponseWriter, session Session) error
+	WriteSession(w http.ResponseWriter, rawID RawSessionID, session Session) error
 
 	// ClearSession removes the credential from the response.
 	// For sources that cannot write, this should be a no-op and return nil.

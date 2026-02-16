@@ -74,11 +74,11 @@ func (h *HeaderCredentialSource) Name() string {
 // The scheme is compared case-insensitively per RFC 7235.
 // The token is used as-is (no encoding/decoding).
 //
-// Returns empty string if:
+// Returns empty RawSessionID if:
 // - Header is not present
 // - Scheme doesn't match
 // - Token is missing or empty after the scheme
-func (h *HeaderCredentialSource) ReadSessionID(r *http.Request) string {
+func (h *HeaderCredentialSource) ReadSessionID(r *http.Request) RawSessionID {
 	headerValue := r.Header.Get(h.headerName)
 	if headerValue == "" {
 		return ""
@@ -98,13 +98,13 @@ func (h *HeaderCredentialSource) ReadSessionID(r *http.Request) string {
 		return ""
 	}
 
-	return token
+	return RawSessionID(token)
 }
 
 // WriteSession is a no-op for header-based credentials.
 // The server cannot write headers to the client - clients are responsible
 // for storing and sending tokens in their requests.
-func (h *HeaderCredentialSource) WriteSession(w http.ResponseWriter, session Session) error {
+func (h *HeaderCredentialSource) WriteSession(w http.ResponseWriter, rawID RawSessionID, session Session) error {
 	// No-op: headers cannot be written by server
 	return nil
 }

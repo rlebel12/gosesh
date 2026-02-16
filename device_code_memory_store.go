@@ -96,7 +96,7 @@ func (m *MemoryDeviceCodeStore) GetByUserCode(ctx context.Context, userCode stri
 }
 
 // CompleteDeviceCode marks an authorization as complete.
-func (m *MemoryDeviceCodeStore) CompleteDeviceCode(ctx context.Context, deviceCode string, sessionID Identifier) error {
+func (m *MemoryDeviceCodeStore) CompleteDeviceCode(ctx context.Context, deviceCode string, rawSessionID RawSessionID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -111,7 +111,9 @@ func (m *MemoryDeviceCodeStore) CompleteDeviceCode(ctx context.Context, deviceCo
 	}
 
 	entry.Completed = true
-	entry.SessionID = sessionID
+	// STUB: Phase 02 - directly assign RawSessionID
+	// Proper implementation in Phase 03 (no changes needed, this is correct)
+	entry.SessionID = rawSessionID
 
 	return nil
 }

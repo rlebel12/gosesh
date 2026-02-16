@@ -140,8 +140,8 @@ func TestDeviceCodePoll(t *testing.T) {
 				setupStore: func(store DeviceCodeStore) string {
 					ctx := context.Background()
 					deviceCode, _ := store.CreateDeviceCode(ctx, "TEST5678", time.Now().Add(15*time.Minute))
-					sessionID := StringIdentifier("session-123")
-					_ = store.CompleteDeviceCode(ctx, deviceCode, sessionID)
+					rawSessionID := RawSessionID("session-123")
+					_ = store.CompleteDeviceCode(ctx, deviceCode, rawSessionID)
 					return deviceCode
 				},
 				expectedStatus: "complete",

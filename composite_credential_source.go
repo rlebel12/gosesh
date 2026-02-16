@@ -42,10 +42,10 @@ func (c *CompositeCredentialSource) Name() string {
 // a non-empty value. Sources are checked in the order they were provided
 // to NewCompositeCredentialSource.
 //
-// Returns empty string if:
+// Returns empty RawSessionID if:
 // - No sources are configured
-// - All sources return empty string
-func (c *CompositeCredentialSource) ReadSessionID(r *http.Request) string {
+// - All sources return empty RawSessionID
+func (c *CompositeCredentialSource) ReadSessionID(r *http.Request) RawSessionID {
 	for _, source := range c.sources {
 		sessionID := source.ReadSessionID(r)
 		if sessionID != "" {
@@ -63,10 +63,10 @@ func (c *CompositeCredentialSource) ReadSessionID(r *http.Request) string {
 // By failing fast, we ensure either all writable sources succeed or none do.
 //
 // Returns nil if no sources support writing or all writes succeed.
-func (c *CompositeCredentialSource) WriteSession(w http.ResponseWriter, session Session) error {
+func (c *CompositeCredentialSource) WriteSession(w http.ResponseWriter, rawID RawSessionID, session Session) error {
 	for _, source := range c.sources {
 		if source.CanWrite() {
-			if err := source.WriteSession(w, session); err != nil {
+			if err := source.WriteSession(w, rawID, session); err != nil {
 				return err
 			}
 		}

@@ -26,7 +26,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 		source := c.NewSource()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		sessionID := source.ReadSessionID(req)
-		assert.Empty(t, sessionID, "ReadSessionID() should return empty string for request with no credentials")
+		assert.Empty(t, sessionID, "ReadSessionID() should return empty RawSessionID for request with no credentials")
 	})
 
 	t.Run("read_returns_consistent", func(t *testing.T) {
@@ -56,12 +56,13 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 			}
 
 			// Create a fake session
-			sessionID := StringIdentifier("test-session-id")
+			rawID := RawSessionID("test-raw-session-id")
+			hashedID := HashedSessionID("test-hashed-session-id")
 			userID := StringIdentifier("test-user-id")
 			now := time.Now()
 			config := source.SessionConfig()
 			session := NewFakeSession(
-				sessionID,
+				hashedID,
 				userID,
 				now.Add(config.IdleDuration),
 				now.Add(config.AbsoluteDuration),
@@ -70,7 +71,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 
 			// Write session to response
 			w := httptest.NewRecorder()
-			err := source.WriteSession(w, session)
+			err := source.WriteSession(w, rawID, session)
 			require.NoError(t, err, "WriteSession() should not return error")
 
 			// Create request from response
@@ -78,7 +79,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 
 			// Read session ID back
 			readSessionID := source.ReadSessionID(req)
-			assert.Equal(t, "test-session-id", readSessionID, "ReadSessionID() should return written session ID")
+			assert.Equal(t, rawID, readSessionID, "ReadSessionID() should return written raw session ID")
 		})
 
 		t.Run("clear_then_read", func(t *testing.T) {
@@ -97,7 +98,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 
 			// Read session ID - should be empty
 			readSessionID := source.ReadSessionID(req)
-			assert.Empty(t, readSessionID, "ReadSessionID() should return empty string after ClearSession()")
+			assert.Empty(t, readSessionID, "ReadSessionID() should return empty RawSessionID after ClearSession()")
 		})
 	}
 
@@ -109,12 +110,13 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 		}
 
 		// Create a fake session
-		sessionID := StringIdentifier("test-session-id")
+		rawID := RawSessionID("test-raw-session-id")
+		hashedID := HashedSessionID("test-hashed-session-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		config := source.SessionConfig()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(config.IdleDuration),
 			now.Add(config.AbsoluteDuration),
@@ -123,7 +125,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 
 		// WriteSession should be no-op, no error
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, rawID, session)
 		assert.NoError(t, err, "WriteSession() on non-writable source should be no-op without error")
 
 		// ClearSession should also be no-op, no error

@@ -485,8 +485,10 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	handler := gosesh.Logout(nil)
 
 	currentTime := now()
+	hashedID := HashedSessionID("test-hashed-id")
 	session, err := store.CreateSession(
 		context.Background(),
+		hashedID,
 		StringIdentifier("identifier"),
 		currentTime,
 		currentTime.Add(time.Hour),
@@ -576,8 +578,10 @@ func TestLogoutHandler(t *testing.T) {
 			setup: func(t *testing.T, test *logoutTest) {
 				test.succeedParsingID()
 
+				hashedID := HashedSessionID("test-hashed-id-expired")
 				_, err := test.store.CreateSession(
 					t.Context(),
+					hashedID,
 					test.identifier,
 					test.now().UTC().Add(-1*time.Hour),
 					test.now().UTC().Add(-1*time.Hour),
@@ -664,8 +668,10 @@ func TestLogoutWithCustomCredentialSource(t *testing.T) {
 	gs := New(store, WithNow(now), WithCredentialSources(credentialSource))
 
 	currentTime := now()
+	hashedID := HashedSessionID("test-hashed-id-logout")
 	session, err := store.CreateSession(
 		t.Context(),
+		hashedID,
 		StringIdentifier("user"),
 		currentTime.Add(time.Hour),
 		currentTime.Add(24*time.Hour),
@@ -1202,7 +1208,7 @@ func TestExchangeExternalToken_NativeAppSessionConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	// Retrieve the session from the store
-	capturedSession, err := store.GetSession(t.Context(), response.SessionID)
+	capturedSession, err := store.GetSession(t.Context(), HashedSessionID(response.SessionID))
 	require.NoError(t, err)
 
 	// Verify native app session config: 30-day absolute, no idle timeout (idle = now)

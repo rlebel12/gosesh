@@ -25,7 +25,7 @@ type (
 	MemoryStoreIdentifier string
 
 	MemoryStoreSession struct {
-		id               MemoryStoreIdentifier
+		id               HashedSessionID
 		userID           Identifier
 		idleDeadline     time.Time
 		absoluteDeadline time.Time
@@ -61,47 +61,48 @@ func (ms *MemoryStore) UpsertUser(ctx context.Context, userID Identifier) (Ident
 	return userID, nil
 }
 
-func (ms *MemoryStore) CreateSession(ctx context.Context, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
+func (ms *MemoryStore) CreateSession(ctx context.Context, hashedID HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	id, err := generateSessionID()
-	if err != nil {
-		return nil, err
-	}
-
+	// STUB: Phase 02 - intentionally incomplete for RED gate
+	// Proper implementation in Phase 03
 	now := time.Now().UTC()
 	s := &MemoryStoreSession{
-		id:               id,
+		id:               hashedID,
 		userID:           userID,
 		idleDeadline:     idleDeadline,
 		absoluteDeadline: absoluteDeadline,
-		lastActivityAt:   now, // Set to creation time
+		lastActivityAt:   now,
 	}
 	ms.sessions[s.ID().String()] = s
 	return s, nil
 }
 
-func (ms *MemoryStore) GetSession(ctx context.Context, sessionID string) (Session, error) {
+func (ms *MemoryStore) GetSession(ctx context.Context, hashedID HashedSessionID) (Session, error) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 
-	s, ok := ms.sessions[sessionID]
+	// STUB: Phase 02 - intentionally uses string conversion for RED gate
+	// Proper implementation in Phase 03
+	s, ok := ms.sessions[hashedID.String()]
 	if !ok {
 		return nil, errors.New("session not found")
 	}
 	return s, nil
 }
 
-func (ms *MemoryStore) DeleteSession(ctx context.Context, sessionID string) error {
+func (ms *MemoryStore) DeleteSession(ctx context.Context, hashedID HashedSessionID) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	_, ok := ms.sessions[sessionID]
+	// STUB: Phase 02 - intentionally uses string conversion for RED gate
+	// Proper implementation in Phase 03
+	_, ok := ms.sessions[hashedID.String()]
 	if !ok {
 		return errors.New("session not found")
 	}
-	delete(ms.sessions, sessionID)
+	delete(ms.sessions, hashedID.String())
 	return nil
 }
 
@@ -119,11 +120,13 @@ func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID Identifier
 	return count, nil
 }
 
-func (ms *MemoryStore) ExtendSession(ctx context.Context, sessionID string, newIdleDeadline time.Time) error {
+func (ms *MemoryStore) ExtendSession(ctx context.Context, hashedID HashedSessionID, newIdleDeadline time.Time) error {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	s, ok := ms.sessions[sessionID]
+	// STUB: Phase 02 - intentionally uses string conversion for RED gate
+	// Proper implementation in Phase 03
+	s, ok := ms.sessions[hashedID.String()]
 	if !ok {
 		return errors.New("session not found")
 	}
@@ -132,7 +135,7 @@ func (ms *MemoryStore) ExtendSession(ctx context.Context, sessionID string, newI
 	return nil
 }
 
-func (ms *MemoryStore) BatchRecordActivity(ctx context.Context, updates map[string]time.Time) (int, error) {
+func (ms *MemoryStore) BatchRecordActivity(ctx context.Context, updates map[HashedSessionID]time.Time) (int, error) {
 	if len(updates) == 0 {
 		return 0, nil
 	}
@@ -140,9 +143,11 @@ func (ms *MemoryStore) BatchRecordActivity(ctx context.Context, updates map[stri
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
+	// STUB: Phase 02 - intentionally uses string conversion for RED gate
+	// Proper implementation in Phase 03
 	count := 0
-	for sessionID, timestamp := range updates {
-		s, ok := ms.sessions[sessionID]
+	for hashedID, timestamp := range updates {
+		s, ok := ms.sessions[hashedID.String()]
 		if ok {
 			s.lastActivityAt = timestamp
 			count++
@@ -160,7 +165,7 @@ func (ms *MemoryStore) Reset() {
 	ms.sessions = make(map[string]*MemoryStoreSession)
 }
 
-func (s MemoryStoreSession) ID() Identifier {
+func (s MemoryStoreSession) ID() HashedSessionID {
 	return s.id
 }
 

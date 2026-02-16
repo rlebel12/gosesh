@@ -35,7 +35,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		tests := []struct {
 			name           string
 			cookieValue    string
-			expectedResult string
+			expectedResult RawSessionID
 			setupCookie    bool
 		}{
 			{
@@ -46,7 +46,7 @@ func TestCookieCredentialSource(t *testing.T) {
 			{
 				name:           "read_valid_cookie",
 				cookieValue:    base64.URLEncoding.EncodeToString([]byte("test-session-id")),
-				expectedResult: "test-session-id",
+				expectedResult: RawSessionID("test-session-id"),
 				setupCookie:    true,
 			},
 			{
@@ -83,11 +83,12 @@ func TestCookieCredentialSource(t *testing.T) {
 
 	t.Run("cookie_attributes", func(t *testing.T) {
 		source := NewCookieCredentialSource()
-		sessionID := StringIdentifier("test-session-id")
+		hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
@@ -95,7 +96,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		cookies := w.Result().Cookies()
@@ -123,11 +124,12 @@ func TestCookieCredentialSource(t *testing.T) {
 
 	t.Run("write_sets_cookie", func(t *testing.T) {
 		source := NewCookieCredentialSource()
-		sessionID := StringIdentifier("test-session-id")
+		hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
@@ -135,7 +137,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		assert.NotEmpty(t, w.Header().Get("Set-Cookie"), "Response should have Set-Cookie header")
@@ -147,17 +149,18 @@ func TestCookieCredentialSource(t *testing.T) {
 		// Verify cookie value is base64 encoded session ID
 		decoded, err := base64.URLEncoding.DecodeString(cookies[0].Value)
 		require.NoError(t, err, "Cookie value should be valid base64")
-		assert.Equal(t, "test-session-id", string(decoded), "Decoded cookie value should match session ID")
+		assert.Equal(t, "test-raw", string(decoded), "Decoded cookie value should match raw session ID")
 	})
 
 	t.Run("write_cookie_expiry", func(t *testing.T) {
 		source := NewCookieCredentialSource()
-		sessionID := StringIdentifier("test-session-id")
+		hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		absoluteDeadline := now.Add(24 * time.Hour)
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			absoluteDeadline,
@@ -165,7 +168,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		cookies := w.Result().Cookies()
@@ -233,11 +236,12 @@ func TestCookieCredentialSource(t *testing.T) {
 				source := NewCookieCredentialSource(tt.option)
 
 				// Write a session to test the option
-				sessionID := StringIdentifier("test-session-id")
+				hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 				userID := StringIdentifier("test-user-id")
 				now := time.Now()
 				session := NewFakeSession(
-					sessionID,
+					hashedID,
 					userID,
 					now.Add(30*time.Minute),
 					now.Add(24*time.Hour),
@@ -245,7 +249,7 @@ func TestCookieCredentialSource(t *testing.T) {
 				)
 
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, session)
+				err := source.WriteSession(w, RawSessionID("test-raw"), session)
 				require.NoError(t, err)
 
 				tt.verifyFunc(t, source, w)
@@ -269,11 +273,11 @@ func TestCookieCredentialSource(t *testing.T) {
 
 	t.Run("empty_session_id_edge_case", func(t *testing.T) {
 		source := NewCookieCredentialSource()
-		sessionID := StringIdentifier("")
+		hashedID := HashedSessionID("")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
@@ -281,7 +285,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 
 		// Should still work, just with empty encoded value
 		require.NoError(t, err)
@@ -290,13 +294,13 @@ func TestCookieCredentialSource(t *testing.T) {
 	t.Run("cookie_name_with_special_characters", func(t *testing.T) {
 		// Cookie names with special characters should work
 		source := NewCookieCredentialSource(WithCookieSourceName("my-session_2"))
-		sessionID := StringIdentifier("test-id")
+		hashedID := HashedSessionID("test-id")
 		userID := StringIdentifier("test-user")
 		now := time.Now()
-		session := NewFakeSession(sessionID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
+		session := NewFakeSession(hashedID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		cookies := w.Result().Cookies()
@@ -306,13 +310,13 @@ func TestCookieCredentialSource(t *testing.T) {
 
 	t.Run("domain_with_leading_dot", func(t *testing.T) {
 		source := NewCookieCredentialSource(WithCookieSourceDomain(".example.com"))
-		sessionID := StringIdentifier("test-id")
+		hashedID := HashedSessionID("test-id")
 		userID := StringIdentifier("test-user")
 		now := time.Now()
-		session := NewFakeSession(sessionID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
+		session := NewFakeSession(hashedID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		cookies := w.Result().Cookies()

@@ -31,7 +31,7 @@ func (e *FlushError) Unwrap() error {
 // ActivityTracker periodically flushes session activity timestamps to the store in batches.
 // This reduces database write load by batching multiple activity updates together.
 type ActivityTracker struct {
-	pending       map[string]time.Time
+	pending       map[HashedSessionID]time.Time
 	mu            sync.Mutex // See RWMutex note below
 	store         ActivityRecorder
 	ticker        *time.Ticker
@@ -53,7 +53,7 @@ type ActivityTracker struct {
 // Flush errors are sent to the Errors() channel for client handling.
 func NewActivityTracker(store ActivityRecorder, flushInterval time.Duration, logger *slog.Logger) *ActivityTracker {
 	return &ActivityTracker{
-		pending:       make(map[string]time.Time),
+		pending:       make(map[HashedSessionID]time.Time),
 		store:         store,
 		flushInterval: flushInterval,
 		logger:        logger,
@@ -98,7 +98,8 @@ func (at *ActivityTracker) Start(ctx context.Context) {
 // See PR #11 feedback for detailed blocking analysis.
 func (at *ActivityTracker) RecordActivity(sessionID string, timestamp time.Time) {
 	at.mu.Lock()
-	at.pending[sessionID] = timestamp
+	// TODO(phase-03): sessionID will become HashedSessionID type in Phase 04
+	at.pending[HashedSessionID(sessionID)] = timestamp
 	at.mu.Unlock()
 }
 

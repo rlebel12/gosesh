@@ -64,7 +64,7 @@ func TestWithActivityTracking(t *testing.T) {
 
 		// Create session
 		userID := StringIdentifier("user-1")
-		session, _ := store.CreateSession(t.Context(), userID,
+		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
 		originalActivity := session.LastActivityAt()
@@ -81,7 +81,7 @@ func TestWithActivityTracking(t *testing.T) {
 		}
 
 		// Verify flushed
-		updated, _ := store.GetSession(t.Context(), session.ID().String())
+		updated, _ := store.GetSession(t.Context(), session.ID())
 		assert.True(t, updated.LastActivityAt().After(originalActivity))
 	})
 }

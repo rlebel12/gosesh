@@ -47,7 +47,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 			name           string
 			sources        []CredentialSource
 			setupRequest   func(*http.Request)
-			expectedResult string
+			expectedResult RawSessionID
 		}{
 			{
 				name:    "read_first_source",
@@ -59,7 +59,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 						Value: base64.URLEncoding.EncodeToString([]byte("cookie-session")),
 					})
 				},
-				expectedResult: "cookie-session",
+				expectedResult: RawSessionID("cookie-session"),
 			},
 			{
 				name:    "read_second_source",
@@ -68,7 +68,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 					// Add header only
 					r.Header.Set("Authorization", "Bearer header-session")
 				},
-				expectedResult: "header-session",
+				expectedResult: RawSessionID("header-session"),
 			},
 			{
 				name:    "read_both_present",
@@ -81,7 +81,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 					})
 					r.Header.Set("Authorization", "Bearer header-session")
 				},
-				expectedResult: "cookie-session", // First takes priority
+				expectedResult: RawSessionID("cookie-session"), // First takes priority
 			},
 			{
 				name:    "read_neither_present",
@@ -102,7 +102,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 					})
 					r.Header.Set("Authorization", "Bearer header-session")
 				},
-				expectedResult: "header-session", // Header is first, so it wins
+				expectedResult: RawSessionID("header-session"), // Header is first, so it wins
 			},
 		}
 
@@ -154,11 +154,12 @@ func TestCompositeCredentialSource(t *testing.T) {
 		headerSource := NewHeaderCredentialSource()
 		source := NewCompositeCredentialSource(cookieSource, headerSource)
 
-		sessionID := StringIdentifier("test-session-id")
+		hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
@@ -166,7 +167,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 		)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		// Cookie should be written (cookie source can write)
@@ -183,11 +184,12 @@ func TestCompositeCredentialSource(t *testing.T) {
 		cookieSource2 := NewCookieCredentialSource(WithCookieSourceName("session2"))
 		source := NewCompositeCredentialSource(cookieSource1, cookieSource2)
 
-		sessionID := StringIdentifier("test-session-id")
+		hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
@@ -195,7 +197,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 		)
 
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		// Both cookies should be written
@@ -242,21 +244,22 @@ func TestCompositeCredentialSource(t *testing.T) {
 		// ReadSessionID should return empty string
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		result := source.ReadSessionID(req)
-		assert.Equal(t, "", result)
+		assert.Equal(t, RawSessionID(""), result)
 
 		// WriteSession should be no-op
-		sessionID := StringIdentifier("test-session-id")
+		hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
 			now,
 		)
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		assert.NoError(t, err)
 
 		// ClearSession should be no-op
@@ -285,21 +288,22 @@ func TestCompositeCredentialSource(t *testing.T) {
 			Value: base64.URLEncoding.EncodeToString([]byte("test-session")),
 		})
 		result := source.ReadSessionID(req)
-		assert.Equal(t, "test-session", result)
+		assert.Equal(t, RawSessionID("test-session"), result)
 
 		// Write should work
-		sessionID := StringIdentifier("test-session-id")
+		hashedID := HashedSessionID("test-hashed-id")
+	_ = RawSessionID("test-raw-id")
 		userID := StringIdentifier("test-user-id")
 		now := time.Now()
 		session := NewFakeSession(
-			sessionID,
+			hashedID,
 			userID,
 			now.Add(30*time.Minute),
 			now.Add(24*time.Hour),
 			now,
 		)
 		w := httptest.NewRecorder()
-		err := source.WriteSession(w, session)
+		err := source.WriteSession(w, RawSessionID("test-raw"), session)
 		require.NoError(t, err)
 
 		cookies := w.Result().Cookies()

@@ -34,7 +34,7 @@ func TestHeaderCredentialSource_ReadSessionID(t *testing.T) {
 	tests := []struct {
 		name              string
 		authHeader        string
-		expectedSessionID string
+		expectedSessionID RawSessionID
 	}{
 		{
 			name:              "read_missing_header",
@@ -44,12 +44,12 @@ func TestHeaderCredentialSource_ReadSessionID(t *testing.T) {
 		{
 			name:              "read_valid_bearer",
 			authHeader:        "Bearer abc123",
-			expectedSessionID: "abc123",
+			expectedSessionID: RawSessionID("abc123"),
 		},
 		{
 			name:              "read_bearer_base64_not_decoded",
 			authHeader:        "Bearer dXNlcjEyMw==", // base64 of "user123" - NOT decoded
-			expectedSessionID: "dXNlcjEyMw==",        // returned as-is
+			expectedSessionID: RawSessionID("dXNlcjEyMw=="), // returned as-is
 		},
 		{
 			name:              "read_wrong_scheme",
@@ -69,27 +69,27 @@ func TestHeaderCredentialSource_ReadSessionID(t *testing.T) {
 		{
 			name:              "read_case_insensitive",
 			authHeader:        "bearer abc123",
-			expectedSessionID: "abc123",
+			expectedSessionID: RawSessionID("abc123"),
 		},
 		{
 			name:              "read_BEARER_caps",
 			authHeader:        "BEARER abc123",
-			expectedSessionID: "abc123",
+			expectedSessionID: RawSessionID("abc123"),
 		},
 		{
 			name:              "read_extra_whitespace",
 			authHeader:        "Bearer   abc123  ",
-			expectedSessionID: "abc123",
+			expectedSessionID: RawSessionID("abc123"),
 		},
 		{
 			name:              "read_token_with_special_chars",
 			authHeader:        "Bearer abc-123_xyz.token",
-			expectedSessionID: "abc-123_xyz.token",
+			expectedSessionID: RawSessionID("abc-123_xyz.token"),
 		},
 		{
 			name:              "read_non_base64_token",
 			authHeader:        "Bearer not-valid-base64!",
-			expectedSessionID: "not-valid-base64!",
+			expectedSessionID: RawSessionID("not-valid-base64!"),
 		},
 	}
 
@@ -111,12 +111,12 @@ func TestHeaderCredentialSource_ReadSessionID(t *testing.T) {
 func TestHeaderCredentialSource_WriteSession_NoOp(t *testing.T) {
 	source := NewHeaderCredentialSource()
 
-	sessionID := StringIdentifier("test-session-id")
+	hashedID := HashedSessionID("test-hashed-id")
 	userID := StringIdentifier("test-user-id")
 	now := time.Now()
 	config := source.SessionConfig()
 	session := NewFakeSession(
-		sessionID,
+		hashedID,
 		userID,
 		now.Add(config.IdleDuration),
 		now.Add(config.AbsoluteDuration),
@@ -126,7 +126,7 @@ func TestHeaderCredentialSource_WriteSession_NoOp(t *testing.T) {
 	w := httptest.NewRecorder()
 	initialHeaders := w.Header().Clone()
 
-	err := source.WriteSession(w, session)
+	err := source.WriteSession(w, RawSessionID("test-raw"), session)
 
 	require.NoError(t, err, "WriteSession should not return error")
 	assert.Equal(t, initialHeaders, w.Header(), "WriteSession should not modify response headers")
@@ -150,21 +150,21 @@ func TestHeaderCredentialSource_CustomOptions(t *testing.T) {
 		option            HeaderSourceOption
 		headerName        string
 		headerValue       string
-		expectedSessionID string
+		expectedSessionID RawSessionID
 	}{
 		{
 			name:              "WithHeaderName",
 			option:            WithHeaderName("X-Session-ID"),
 			headerName:        "X-Session-ID",
 			headerValue:       "Bearer abc123",
-			expectedSessionID: "abc123",
+			expectedSessionID: RawSessionID("abc123"),
 		},
 		{
 			name:              "WithHeaderScheme",
 			option:            WithHeaderScheme("Token"),
 			headerName:        "Authorization",
 			headerValue:       "Token abc123",
-			expectedSessionID: "abc123",
+			expectedSessionID: RawSessionID("abc123"),
 		},
 	}
 

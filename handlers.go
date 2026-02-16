@@ -105,14 +105,16 @@ func (gs *Gosesh) OAuth2Callback(config *oauth2.Config, request RequestFunc, unm
 		}
 
 		sessionCfg := gs.credentialSource.SessionConfig()
+		// STUB: Phase 02 - using placeholder for hashedID, will be properly generated in Phase 04
 		session, err := gs.store.CreateSession(
-			ctx, id, now.Add(sessionCfg.IdleDuration), now.Add(sessionCfg.AbsoluteDuration))
+			ctx, HashedSessionID("stub-hash"), id, now.Add(sessionCfg.IdleDuration), now.Add(sessionCfg.AbsoluteDuration))
 		if err != nil {
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedCreatingSession, err))
 			return
 		}
 
-		if err := gs.credentialSource.WriteSession(w, session); err != nil {
+		// STUB: Phase 02 - using placeholder for rawID, will be properly generated in Phase 04
+		if err := gs.credentialSource.WriteSession(w, RawSessionID("stub-raw"), session); err != nil {
 			done(w, r, fmt.Errorf("write session: %w", err))
 			return
 		}
@@ -234,8 +236,10 @@ func (gs *Gosesh) ExchangeExternalToken(
 
 		now := gs.now().UTC()
 		nativeAppConfig := DefaultNativeAppSessionConfig()
+		// STUB: Phase 02 - using placeholder for hashedID, will be properly generated in Phase 04
 		session, err := gs.store.CreateSession(
 			ctx,
+			HashedSessionID("stub-hash"),
 			userID,
 			now.Add(nativeAppConfig.IdleDuration),
 			now.Add(nativeAppConfig.AbsoluteDuration),
@@ -327,7 +331,8 @@ func (gs *Gosesh) Logout(done HandlerDoneFunc) http.HandlerFunc {
 		case r.URL.Query().Get("all") != "":
 			_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID())
 		default:
-			err = gs.store.DeleteSession(r.Context(), session.ID().String())
+			// STUB: Phase 02 - session.ID() now returns HashedSessionID, no .String() needed
+			err = gs.store.DeleteSession(r.Context(), session.ID())
 		}
 		if err != nil {
 			done(w, r, fmt.Errorf("%w: %w", ErrFailedDeletingSession, err))

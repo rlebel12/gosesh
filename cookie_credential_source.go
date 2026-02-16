@@ -76,11 +76,11 @@ func (c *CookieCredentialSource) Name() string {
 }
 
 // ReadSessionID extracts the session ID from the request's session cookie.
-// Returns empty string if:
+// Returns empty RawSessionID if:
 // - The cookie is not present
 // - The cookie value is empty
 // - The cookie value is not valid base64
-func (c *CookieCredentialSource) ReadSessionID(r *http.Request) string {
+func (c *CookieCredentialSource) ReadSessionID(r *http.Request) RawSessionID {
 	cookie, err := r.Cookie(c.cookieName)
 	if err != nil {
 		// Cookie not found
@@ -98,7 +98,7 @@ func (c *CookieCredentialSource) ReadSessionID(r *http.Request) string {
 		return ""
 	}
 
-	return string(decoded)
+	return RawSessionID(decoded)
 }
 
 // WriteSession writes the session ID to a cookie in the response.
@@ -108,9 +108,9 @@ func (c *CookieCredentialSource) ReadSessionID(r *http.Request) string {
 // - SameSite=Lax: CSRF protection while allowing top-level navigation
 // - Path=/: available site-wide
 // - Expires: set to the session's absolute deadline
-func (c *CookieCredentialSource) WriteSession(w http.ResponseWriter, session Session) error {
-	// Base64 encode the session ID
-	encodedID := base64.URLEncoding.EncodeToString([]byte(session.ID().String()))
+func (c *CookieCredentialSource) WriteSession(w http.ResponseWriter, rawID RawSessionID, session Session) error {
+	// Base64 encode the raw session ID
+	encodedID := base64.URLEncoding.EncodeToString([]byte(rawID))
 
 	cookie := &http.Cookie{
 		Name:     c.cookieName,

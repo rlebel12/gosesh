@@ -2,7 +2,12 @@ package e2e
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -250,7 +255,15 @@ func (ts *TestServer) handleDeviceCallback(oauthConfig *oauth2.Config) http.Hand
 		idleDeadline := now.Add(nativeAppConfig.AbsoluteDuration) // No idle timeout
 		absoluteDeadline := now.Add(nativeAppConfig.AbsoluteDuration)
 
-		session, err := ts.Store.CreateSession(ctx, userID, idleDeadline, absoluteDeadline)
+		// Generate session ID (raw and hashed)
+	rawSessionID, err := generateSessionID()
+	if err != nil {
+		http.Error(w, "Failed to generate session ID", http.StatusInternalServerError)
+		return
+	}
+	hashedSessionID := hashSessionID(rawSessionID)
+
+	_, err = ts.Store.CreateSession(ctx, hashedSessionID, userID, idleDeadline, absoluteDeadline)
 		if err != nil {
 			http.Error(w, "Failed to create session", http.StatusInternalServerError)
 			return
@@ -264,7 +277,7 @@ func (ts *TestServer) handleDeviceCallback(oauthConfig *oauth2.Config) http.Hand
 		}
 
 		// Complete the device code
-		if err := ts.DeviceStore.CompleteDeviceCode(ctx, deviceCode, session.ID()); err != nil {
+		if err := ts.DeviceStore.CompleteDeviceCode(ctx, deviceCode, rawSessionID); err != nil {
 			http.Error(w, "Failed to complete device code: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -348,4 +361,22 @@ func fakeUnmarshalUserFromToken(accessToken string) (gosesh.Identifier, error) {
 		ID:    "test-user-123",
 		Email: "test@example.com",
 	}, nil
+}
+
+// generateSessionID generates a new session ID using crypto/rand.
+// It produces 32 bytes (256 bits) of entropy, base64url-encoded without padding.
+func generateSessionID() (gosesh.RawSessionID, error) {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("generate session ID: %w", err)
+	}
+	return gosesh.RawSessionID(base64.RawURLEncoding.EncodeToString(b)), nil
+}
+
+// hashSessionID hashes a raw session ID using SHA-256.
+// The output is hex-encoded for consistent string representation.
+func hashSessionID(raw gosesh.RawSessionID) gosesh.HashedSessionID {
+	hash := sha256.Sum256([]byte(raw))
+	return gosesh.HashedSessionID(hex.EncodeToString(hash[:]))
 }

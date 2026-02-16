@@ -26,7 +26,7 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 				// Add session cookie to request
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, session)
+				err := source.WriteSession(w, RawSessionID("test-raw"), session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -53,7 +53,7 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 				// Add session cookie (first source wins)
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, session)
+				err := source.WriteSession(w, RawSessionID("test-raw"), session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -88,8 +88,10 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 
 			// Create a valid session
 			userID := StringIdentifier("user-123")
+			hashedID := HashedSessionID("test-hashed-id")
 			session, err := store.CreateSession(
 				context.Background(),
+				hashedID,
 				userID,
 				now.Add(30*time.Minute),
 				now.Add(24*time.Hour),
@@ -147,7 +149,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 			setupRequest: func(t *testing.T, r *http.Request, store Storer, now time.Time) {
 				// Add cookie with non-existent session ID
 				fakeSession := NewFakeSession(
-					StringIdentifier("non-existent-session"),
+					HashedSessionID("non-existent-session"),
 					StringIdentifier("user-123"),
 					now.Add(30*time.Minute),
 					now.Add(24*time.Hour),
@@ -155,7 +157,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 				)
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, fakeSession)
+				err := source.WriteSession(w, RawSessionID("test-raw"), fakeSession)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -170,8 +172,10 @@ func TestAuthenticationFailureCases(t *testing.T) {
 			setupRequest: func(t *testing.T, r *http.Request, store Storer, now time.Time) {
 				// Create session with idle deadline in the past
 				userID := StringIdentifier("user-123")
+				hashedID := HashedSessionID("test-hashed-id-expired")
 				session, err := store.CreateSession(
 					context.Background(),
+					hashedID,
 					userID,
 					now.Add(-5*time.Minute), // Idle expired
 					now.Add(24*time.Hour),
@@ -180,7 +184,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err = source.WriteSession(w, session)
+				err = source.WriteSession(w, RawSessionID("test-raw"), session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -195,8 +199,10 @@ func TestAuthenticationFailureCases(t *testing.T) {
 			setupRequest: func(t *testing.T, r *http.Request, store Storer, now time.Time) {
 				// Create session with absolute deadline in the past
 				userID := StringIdentifier("user-123")
+				hashedID := HashedSessionID("test-hashed-id-abs-expired")
 				session, err := store.CreateSession(
 					context.Background(),
+					hashedID,
 					userID,
 					now.Add(30*time.Minute),
 					now.Add(-5*time.Minute), // Absolute expired
@@ -205,7 +211,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err = source.WriteSession(w, session)
+				err = source.WriteSession(w, RawSessionID("test-raw"), session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -329,8 +335,10 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 
 			// Create session with 5 minutes until idle (within refresh threshold)
 			userID := StringIdentifier("user-123")
+			hashedID := HashedSessionID("test-hashed-id-refresh")
 			session, err := store.CreateSession(
 				context.Background(),
+				hashedID,
 				userID,
 				now.Add(5*time.Minute),
 				now.Add(24*time.Hour),
@@ -343,7 +351,8 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 			// Setup request based on source type
 			if tc.sourceType == "cookie" {
 				w := httptest.NewRecorder()
-				err = tc.credentialSource.WriteSession(w, session)
+				rawSessionID := RawSessionID("test-raw-session-id")
+			err = tc.credentialSource.WriteSession(w, rawSessionID, session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -417,7 +426,7 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 			setupRequest: func(t *testing.T, r *http.Request, session Session) {
 				source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 				w := httptest.NewRecorder()
-				err := source.WriteSession(w, session)
+				err := source.WriteSession(w, RawSessionID("test-raw"), session)
 				require.NoError(t, err)
 				cookies := w.Result().Cookies()
 				require.NotEmpty(t, cookies)
@@ -441,8 +450,10 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 
 			// Create a valid session
 			userID := StringIdentifier("user-123")
+			hashedID := HashedSessionID("test-hashed-id")
 			session, err := store.CreateSession(
 				context.Background(),
+				hashedID,
 				userID,
 				now.Add(30*time.Minute),
 				now.Add(24*time.Hour),
@@ -484,9 +495,11 @@ func TestBackwardCompatNoSource(t *testing.T) {
 	)
 
 	// Create a session
+	hashedID := HashedSessionID("test-hashed-id")
 	userID := StringIdentifier("user-123")
 	session, err := store.CreateSession(
 		context.Background(),
+		hashedID,
 		userID,
 		now.Add(30*time.Minute),
 		now.Add(24*time.Hour),
@@ -500,7 +513,7 @@ func TestBackwardCompatNoSource(t *testing.T) {
 	// The default should be a cookie source, so write using cookie
 	source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 	w := httptest.NewRecorder()
-	err = source.WriteSession(w, session)
+	err = source.WriteSession(w, RawSessionID("test-raw"), session)
 	require.NoError(t, err)
 	cookies := w.Result().Cookies()
 	require.NotEmpty(t, cookies)
@@ -541,8 +554,10 @@ func TestCustomCookieNameWithCredentialSource(t *testing.T) {
 
 	// Create a session
 	userID := StringIdentifier("user-123")
+	hashedID := HashedSessionID("test-hashed-id")
 	session, err := store.CreateSession(
 		context.Background(),
+		hashedID,
 		userID,
 		now.Add(17*time.Minute),
 		now.Add(85*time.Minute),
@@ -554,7 +569,7 @@ func TestCustomCookieNameWithCredentialSource(t *testing.T) {
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
-	err = source.WriteSession(w, session)
+	err = source.WriteSession(w, RawSessionID("test-raw"), session)
 	require.NoError(t, err)
 	cookies := w.Result().Cookies()
 	require.NotEmpty(t, cookies)
@@ -586,9 +601,11 @@ func TestBackwardCompatExistingSessions(t *testing.T) {
 		WithNow(func() time.Time { return now }),
 	)
 
+	hashedID := HashedSessionID("test-hashed-id")
 	userID := StringIdentifier("user-123")
 	session, err := store.CreateSession(
 		context.Background(),
+		hashedID,
 		userID,
 		now.Add(30*time.Minute),
 		now.Add(24*time.Hour),
@@ -607,7 +624,7 @@ func TestBackwardCompatExistingSessions(t *testing.T) {
 
 	source := NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false))
 	w := httptest.NewRecorder()
-	err = source.WriteSession(w, session)
+	err = source.WriteSession(w, RawSessionID("test-raw"), session)
 	require.NoError(t, err)
 	cookies := w.Result().Cookies()
 	require.NotEmpty(t, cookies)

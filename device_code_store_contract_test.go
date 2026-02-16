@@ -116,8 +116,8 @@ func (c DeviceCodeStoreContract) Test(t *testing.T) {
 				name: "complete_nonexistent",
 				test: func(t *testing.T, store DeviceCodeStore) {
 					ctx := context.Background()
-					sessionID := StringIdentifier("session-123")
-					err := store.CompleteDeviceCode(ctx, "unknown-device-code", sessionID)
+					rawSessionID := RawSessionID("raw-session-123")
+					err := store.CompleteDeviceCode(ctx, "unknown-device-code", rawSessionID)
 					assert.ErrorIs(t, err, ErrDeviceCodeNotFound)
 				},
 			},
@@ -131,12 +131,12 @@ func (c DeviceCodeStoreContract) Test(t *testing.T) {
 					deviceCode, err := store.CreateDeviceCode(ctx, userCode, expiresAt)
 					require.NoError(t, err)
 
-					sessionID := StringIdentifier("session-123")
-					err = store.CompleteDeviceCode(ctx, deviceCode, sessionID)
+					rawSessionID := RawSessionID("raw-session-123")
+					err = store.CompleteDeviceCode(ctx, deviceCode, rawSessionID)
 					require.NoError(t, err)
 
 					// Try to complete again
-					err = store.CompleteDeviceCode(ctx, deviceCode, sessionID)
+					err = store.CompleteDeviceCode(ctx, deviceCode, rawSessionID)
 					assert.ErrorIs(t, err, ErrDeviceCodeAlreadyComplete)
 				},
 			},
@@ -160,14 +160,14 @@ func (c DeviceCodeStoreContract) Test(t *testing.T) {
 			deviceCode, err := store.CreateDeviceCode(ctx, userCode, expiresAt)
 			require.NoError(t, err)
 
-			sessionID := StringIdentifier("session-456")
-			err = store.CompleteDeviceCode(ctx, deviceCode, sessionID)
+			rawSessionID := RawSessionID("raw-session-456")
+			err = store.CompleteDeviceCode(ctx, deviceCode, rawSessionID)
 			require.NoError(t, err)
 
 			entry, err := store.GetDeviceCode(ctx, deviceCode)
 			require.NoError(t, err)
 			assert.True(t, entry.Completed)
-			assert.Equal(t, sessionID.String(), entry.SessionID.String())
+			assert.Equal(t, rawSessionID, entry.SessionID)
 		})
 
 		t.Run("create_user_code_collision", func(t *testing.T) {

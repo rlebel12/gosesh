@@ -437,7 +437,7 @@ func TestE2E_CookieSession_IdleTimeout(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp1.Body).Decode(&me))
 
 	// Get the session and manually expire the idle deadline
-	session, err := testServer.Store.GetSession(ctx, me.SessionID)
+	session, err := testServer.Store.GetSession(ctx, gosesh.HashedSessionID(me.SessionID))
 	require.NoError(t, err)
 
 	// Set idle deadline to past (simulate idle timeout)

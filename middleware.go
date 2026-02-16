@@ -51,14 +51,16 @@ func (gs *Gosesh) AuthenticateAndRefresh(next http.Handler) http.Handler {
 			newIdleDeadline = session.AbsoluteDeadline()
 		}
 
-		if err := gs.store.ExtendSession(r.Context(), session.ID().String(), newIdleDeadline); err != nil {
+		// STUB: Phase 02 - session.ID() now returns HashedSessionID directly
+		if err := gs.store.ExtendSession(r.Context(), session.ID(), newIdleDeadline); err != nil {
 			gs.logger.Error("extend session", "error", err)
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		// Write session to credential source
-		if err := gs.credentialSource.WriteSession(w, session); err != nil {
+		// STUB: Phase 02 - using placeholder RawSessionID, will be from context in Phase 04
+		if err := gs.credentialSource.WriteSession(w, RawSessionID("stub-raw"), session); err != nil {
 			gs.logger.Error("write session", "error", err)
 		}
 
@@ -120,12 +122,14 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 	ctx := r.Context()
 
 	// Read session ID from credential source
-	sessionID := gs.credentialSource.ReadSessionID(r)
-	if sessionID == "" {
+	rawSessionID := gs.credentialSource.ReadSessionID(r)
+	if rawSessionID == "" {
 		return r
 	}
 
-	session, err := gs.store.GetSession(ctx, sessionID)
+	// STUB: Phase 02 - placeholder hashing, will use gs.idHasher in Phase 04
+	hashedID := HashedSessionID("stub-hash-" + string(rawSessionID))
+	session, err := gs.store.GetSession(ctx, hashedID)
 	if err != nil {
 		gs.logger.Error("get session", "error", err)
 		gs.credentialSource.ClearSession(w)
@@ -135,8 +139,9 @@ func (gs *Gosesh) authenticate(w http.ResponseWriter, r *http.Request) *http.Req
 	now := gs.now().UTC()
 
 	// Record activity if tracker is enabled (record after session validated, before expiry checks)
+	// STUB: Phase 02 - RecordActivity still takes string, will be updated in Phase 04
 	if gs.activityTracker != nil {
-		gs.activityTracker.RecordActivity(sessionID, now)
+		gs.activityTracker.RecordActivity(hashedID.String(), now)
 	}
 
 	// Check idle deadline (sliding window)
