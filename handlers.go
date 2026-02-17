@@ -349,7 +349,6 @@ func (gs *Gosesh) Logout(done HandlerDoneFunc) http.HandlerFunc {
 		case r.URL.Query().Get("all") != "":
 			_, err = gs.store.DeleteUserSessions(r.Context(), session.UserID())
 		default:
-			// STUB: Phase 02 - session.ID() now returns HashedSessionID, no .String() needed
 			err = gs.store.DeleteSession(r.Context(), session.ID())
 		}
 		if err != nil {

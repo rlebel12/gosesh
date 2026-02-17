@@ -111,8 +111,6 @@ func (m *MemoryDeviceCodeStore) CompleteDeviceCode(ctx context.Context, deviceCo
 	}
 
 	entry.Completed = true
-	// STUB: Phase 02 - directly assign RawSessionID
-	// Proper implementation in Phase 03 (no changes needed, this is correct)
 	entry.SessionID = rawSessionID
 
 	return nil
