@@ -14,7 +14,7 @@ import (
 
 type FakeSession struct {
 	IDValue               HashedSessionID
-	UserIDValue           Identifier
+	UserIDValue           UserID
 	IdleDeadlineValue     time.Time
 	AbsoluteDeadlineValue time.Time
 	LastActivityAtValue   time.Time
@@ -24,7 +24,7 @@ func (f *FakeSession) ID() HashedSessionID {
 	return f.IDValue
 }
 
-func (f *FakeSession) UserID() Identifier {
+func (f *FakeSession) UserID() UserID {
 	return f.UserIDValue
 }
 
@@ -40,7 +40,7 @@ func (f *FakeSession) LastActivityAt() time.Time {
 	return f.LastActivityAtValue
 }
 
-func NewFakeSession(id HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline, lastActivityAt time.Time) *FakeSession {
+func NewFakeSession(id HashedSessionID, userID UserID, idleDeadline, absoluteDeadline, lastActivityAt time.Time) *FakeSession {
 	return &FakeSession{
 		IDValue:               id,
 		UserIDValue:           userID,
@@ -50,21 +50,10 @@ func NewFakeSession(id HashedSessionID, userID Identifier, idleDeadline, absolut
 	}
 }
 
-func TestStringIdentifierContract(t *testing.T) {
-	IdentifierContract{
-		NewIdentifier: func(id string) Identifier {
-			return StringIdentifier(id)
-		},
-	}.Test(t)
-}
-
 func TestFakeSessionContract(t *testing.T) {
 	SessionContract{
-		NewSession: func(id HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline, lastActivityAt time.Time) Session {
+		NewSession: func(id HashedSessionID, userID UserID, idleDeadline, absoluteDeadline, lastActivityAt time.Time) Session {
 			return NewFakeSession(id, userID, idleDeadline, absoluteDeadline, lastActivityAt)
-		},
-		NewIdentifier: func(id string) Identifier {
-			return StringIdentifier(id)
 		},
 	}.Test(t)
 }
@@ -80,7 +69,7 @@ type erroringStore struct {
 	BatchRecordActivityErr   error
 }
 
-func (s *erroringStore) CreateSession(ctx context.Context, hashedID HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
+func (s *erroringStore) CreateSession(ctx context.Context, hashedID HashedSessionID, userID UserID, idleDeadline, absoluteDeadline time.Time) (Session, error) {
 	if s.createSessionError {
 		return nil, errors.New("mock failure")
 	}
@@ -94,14 +83,14 @@ func (s *erroringStore) DeleteSession(ctx context.Context, hashedID HashedSessio
 	return s.Storer.DeleteSession(ctx, hashedID)
 }
 
-func (s *erroringStore) DeleteUserSessions(ctx context.Context, userID Identifier) (int, error) {
+func (s *erroringStore) DeleteUserSessions(ctx context.Context, userID UserID) (int, error) {
 	if s.deleteUserSessionsError {
 		return 0, errors.New("mock failure")
 	}
 	return s.Storer.DeleteUserSessions(ctx, userID)
 }
 
-func (s *erroringStore) UpsertUser(ctx context.Context, authProviderID Identifier) (Identifier, error) {
+func (s *erroringStore) UpsertUser(ctx context.Context, authProviderID AuthProviderID) (UserID, error) {
 	if s.upsertUserError {
 		return nil, errors.New("mock failure")
 	}

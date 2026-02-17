@@ -30,31 +30,31 @@ func TestMemoryStoreTypedIDs(t *testing.T) {
 	tests := []struct {
 		name            string
 		hashedSessionID HashedSessionID
-		userID          Identifier
+		userID          UserID
 		assertion       string
 	}{
 		{
 			name:            "create_and_get",
 			hashedSessionID: HashedSessionID("abc123hash"),
-			userID:          StringIdentifier("user-1"),
+			userID:          "user-1",
 			assertion:       "Created session retrieved by same hashed ID",
 		},
 		{
 			name:            "delete_by_hashed_id",
 			hashedSessionID: HashedSessionID("to-delete"),
-			userID:          StringIdentifier("user-1"),
+			userID:          "user-1",
 			assertion:       "Deleted session not found on subsequent get",
 		},
 		{
 			name:            "extend_by_hashed_id",
 			hashedSessionID: HashedSessionID("to-extend"),
-			userID:          StringIdentifier("user-1"),
+			userID:          "user-1",
 			assertion:       "Extended session has updated idle deadline",
 		},
 		{
 			name:            "get_nonexistent",
 			hashedSessionID: HashedSessionID("nonexistent"),
-			userID:          StringIdentifier(""),
+			userID:          "",
 			assertion:       "Error returned",
 		},
 	}
@@ -128,7 +128,7 @@ func TestMemoryStoreNoGenerateSessionID(t *testing.T) {
 
 	// Create a session with a specific hashed ID
 	hashedID := HashedSessionID("explicit-id")
-	session, err := store.CreateSession(ctx, hashedID, StringIdentifier("user-1"), now.Add(time.Hour), now.Add(24*time.Hour))
+	session, err := store.CreateSession(ctx, hashedID, "user-1", now.Add(time.Hour), now.Add(24*time.Hour))
 	require.NoError(t, err)
 
 	// Verify the session has exactly the ID we provided
@@ -143,7 +143,7 @@ func TestMemoryStoreSessionIDFromCaller(t *testing.T) {
 
 	// Create session with specific hashed ID
 	providedID := HashedSessionID("caller-provided-id")
-	session, err := store.CreateSession(ctx, providedID, StringIdentifier("user-1"), now.Add(time.Hour), now.Add(24*time.Hour))
+	session, err := store.CreateSession(ctx, providedID, "user-1", now.Add(time.Hour), now.Add(24*time.Hour))
 	require.NoError(t, err)
 
 	// Verify ID matches exactly
@@ -166,11 +166,11 @@ func TestMemoryStoreBatchRecordActivityWithHashedIDs(t *testing.T) {
 	id2 := HashedSessionID("session-2")
 	id3 := HashedSessionID("session-3")
 
-	_, err := store.CreateSession(ctx, id1, StringIdentifier("user-1"), now.Add(time.Hour), now.Add(24*time.Hour))
+	_, err := store.CreateSession(ctx, id1, "user-1", now.Add(time.Hour), now.Add(24*time.Hour))
 	require.NoError(t, err)
-	_, err = store.CreateSession(ctx, id2, StringIdentifier("user-2"), now.Add(time.Hour), now.Add(24*time.Hour))
+	_, err = store.CreateSession(ctx, id2, "user-2", now.Add(time.Hour), now.Add(24*time.Hour))
 	require.NoError(t, err)
-	_, err = store.CreateSession(ctx, id3, StringIdentifier("user-3"), now.Add(time.Hour), now.Add(24*time.Hour))
+	_, err = store.CreateSession(ctx, id3, "user-3", now.Add(time.Hour), now.Add(24*time.Hour))
 	require.NoError(t, err)
 
 	// Record activity for some sessions
@@ -207,7 +207,7 @@ func TestMemoryStoreSessionIDReturnsHashedSessionID(t *testing.T) {
 	now := time.Now()
 
 	hashedID := HashedSessionID("test-hashed-id")
-	session, err := store.CreateSession(ctx, hashedID, StringIdentifier("user-1"), now.Add(time.Hour), now.Add(24*time.Hour))
+	session, err := store.CreateSession(ctx, hashedID, "user-1", now.Add(time.Hour), now.Add(24*time.Hour))
 	require.NoError(t, err)
 
 	// Verify ID() returns HashedSessionID type
@@ -225,7 +225,7 @@ func TestMemoryStoreEmptyHashedSessionID(t *testing.T) {
 	now := time.Now()
 
 	emptyID := HashedSessionID("")
-	session, err := store.CreateSession(ctx, emptyID, StringIdentifier("user-1"), now.Add(time.Hour), now.Add(24*time.Hour))
+	session, err := store.CreateSession(ctx, emptyID, "user-1", now.Add(time.Hour), now.Add(24*time.Hour))
 	require.NoError(t, err)
 	assert.Equal(t, emptyID, session.ID())
 

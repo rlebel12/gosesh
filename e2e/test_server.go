@@ -148,7 +148,7 @@ func (ts *TestServer) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"user_id":           session.UserID().String(),
+		"user_id":           fmt.Sprintf("%v", session.UserID()),
 		"session_id":        session.ID().String(),
 		"idle_deadline":     session.IdleDeadline(),
 		"absolute_deadline": session.AbsoluteDeadline(),
@@ -325,7 +325,7 @@ type FakeUser struct {
 	Email string
 }
 
-// String implements Identifier interface.
+// String returns the user's ID as a string.
 func (f *FakeUser) String() string {
 	return f.ID
 }
@@ -339,7 +339,7 @@ func fakeRequestUser(ctx context.Context, accessToken string) (io.ReadCloser, er
 }
 
 // fakeUnmarshalUser creates a fake user from JSON data.
-func fakeUnmarshalUser(b []byte) (gosesh.Identifier, error) {
+func fakeUnmarshalUser(b []byte) (gosesh.AuthProviderID, error) {
 	// Unmarshal simple JSON
 	var data struct {
 		ID    string `json:"id"`
@@ -356,7 +356,7 @@ func fakeUnmarshalUser(b []byte) (gosesh.Identifier, error) {
 }
 
 // fakeUnmarshalUserFromToken creates a fake user from an access token string.
-func fakeUnmarshalUserFromToken(accessToken string) (gosesh.Identifier, error) {
+func fakeUnmarshalUserFromToken(accessToken string) (gosesh.AuthProviderID, error) {
 	return &FakeUser{
 		ID:    "test-user-123",
 		Email: "test@example.com",

@@ -63,7 +63,7 @@ func TestWithActivityTracking(t *testing.T) {
 		errors := gs.StartBackgroundTasks(ctx)
 
 		// Create session
-		userID := StringIdentifier("user-1")
+		userID := "user-1"
 		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 

@@ -23,21 +23,21 @@ type (
 
 	MemoryStoreSession struct {
 		id               HashedSessionID
-		userID           Identifier
+		userID           UserID
 		idleDeadline     time.Time
 		absoluteDeadline time.Time
 		lastActivityAt   time.Time
 	}
 )
 
-func (ms *MemoryStore) UpsertUser(ctx context.Context, userID Identifier) (Identifier, error) {
+func (ms *MemoryStore) UpsertUser(ctx context.Context, authProviderID AuthProviderID) (UserID, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
-	return userID, nil
+	return authProviderID, nil
 }
 
-func (ms *MemoryStore) CreateSession(ctx context.Context, hashedID HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error) {
+func (ms *MemoryStore) CreateSession(ctx context.Context, hashedID HashedSessionID, userID UserID, idleDeadline, absoluteDeadline time.Time) (Session, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -76,7 +76,7 @@ func (ms *MemoryStore) DeleteSession(ctx context.Context, hashedID HashedSession
 	return nil
 }
 
-func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID Identifier) (int, error) {
+func (ms *MemoryStore) DeleteUserSessions(ctx context.Context, userID UserID) (int, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
@@ -135,7 +135,7 @@ func (s MemoryStoreSession) ID() HashedSessionID {
 	return s.id
 }
 
-func (s MemoryStoreSession) UserID() Identifier {
+func (s MemoryStoreSession) UserID() UserID {
 	return s.userID
 }
 

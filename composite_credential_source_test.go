@@ -156,7 +156,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 
 		hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		session := NewFakeSession(
 			hashedID,
@@ -186,7 +186,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 
 		hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		session := NewFakeSession(
 			hashedID,
@@ -249,7 +249,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 		// WriteSession should be no-op
 		hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		session := NewFakeSession(
 			hashedID,
@@ -293,7 +293,7 @@ func TestCompositeCredentialSource(t *testing.T) {
 		// Write should work
 		hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		session := NewFakeSession(
 			hashedID,
@@ -359,7 +359,7 @@ func TestCompositeCredentialSource_WriteSessionPassesRawIDToSources(t *testing.T
 	composite := NewCompositeCredentialSource(source1, source2)
 
 	hashedID := HashedSessionID("test-hashed-id")
-	userID := StringIdentifier("test-user-id")
+	userID := "test-user-id"
 	now := time.Now()
 	session := NewFakeSession(
 		hashedID,

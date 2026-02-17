@@ -105,7 +105,7 @@ func Example_customProvider() {
 	}
 
 	// Define how to unmarshal user data
-	unmarshalUser := func(b []byte) (gosesh.Identifier, error) {
+	unmarshalUser := func(b []byte) (gosesh.AuthProviderID, error) {
 		var user struct {
 			ID    string `json:"id"`
 			Email string `json:"email"`
@@ -113,7 +113,7 @@ func Example_customProvider() {
 		if err := json.Unmarshal(b, &user); err != nil {
 			return nil, err
 		}
-		return gosesh.StringIdentifier("user-1"), nil
+		return "user-1", nil
 	}
 
 	// Set up your routes
@@ -191,8 +191,8 @@ func TestExamples(t *testing.T) {
 		func(ctx context.Context, token string) (io.ReadCloser, error) {
 			return nil, nil
 		},
-		func(b []byte) (gosesh.Identifier, error) {
-			return gosesh.StringIdentifier("user-1"), nil
+		func(b []byte) (gosesh.AuthProviderID, error) {
+			return "user-1", nil
 		},
 		nil,
 	)

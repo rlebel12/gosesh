@@ -8,32 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type IdentifierContract struct {
-	NewIdentifier func(giveID string) Identifier
-}
-
-func (c IdentifierContract) Test(t *testing.T) {
-	t.Run("returns correct ID", func(t *testing.T) {
-		id := c.NewIdentifier("test-id")
-		assert.Equal(t, "test-id", id.String())
-	})
-
-	t.Run("different IDs are not equal", func(t *testing.T) {
-		id1 := c.NewIdentifier("id1")
-		id2 := c.NewIdentifier("id2")
-		assert.NotEqual(t, id1.String(), id2.String())
-	})
-}
-
 type SessionContract struct {
-	NewSession    func(id HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline, lastActivityAt time.Time) Session
-	NewIdentifier func(giveID string) Identifier
+	NewSession func(id HashedSessionID, userID UserID, idleDeadline, absoluteDeadline, lastActivityAt time.Time) Session
 }
 
 func (c SessionContract) Test(t *testing.T) {
 	t.Run("returns correct values", func(t *testing.T) {
 		id := HashedSessionID("session-id")
-		userID := c.NewIdentifier("user-id")
+		userID := "user-id"
 		now := time.Now().UTC()
 		idleDeadline := now.Add(time.Hour)
 		absoluteDeadline := now.Add(24 * time.Hour)
@@ -50,7 +32,7 @@ func (c SessionContract) Test(t *testing.T) {
 
 	t.Run("returns last activity timestamp", func(t *testing.T) {
 		id := HashedSessionID("session-id")
-		userID := c.NewIdentifier("user-id")
+		userID := "user-id"
 		now := time.Now().UTC()
 		idleDeadline := now.Add(time.Hour)
 		absoluteDeadline := now.Add(24 * time.Hour)
@@ -68,43 +50,43 @@ type StorerContract struct {
 
 func (c StorerContract) Test(t *testing.T) {
 	t.Run("can upsert the same user in idempotent way", func(t *testing.T) {
-		authProviderID := StringIdentifier("user-id")
+		authProviderID := "user-id"
 		store := c.NewStorer()
 		gotUser1, err := store.UpsertUser(t.Context(), authProviderID)
 		require.NoError(t, err)
-		assert.Equal(t, "user-id", gotUser1.String())
+		assert.Equal(t, "user-id", gotUser1)
 
 		gotUser2, err := store.UpsertUser(t.Context(), authProviderID)
 		require.NoError(t, err)
-		assert.Equal(t, "user-id", gotUser2.String())
+		assert.Equal(t, "user-id", gotUser2)
 
-		assert.Equal(t, gotUser1.String(), gotUser2.String())
+		assert.Equal(t, gotUser1, gotUser2)
 
-		anotherAuthProviderID := StringIdentifier("another-user-id")
+		anotherAuthProviderID := "another-user-id"
 		gotUser3, err := store.UpsertUser(t.Context(), anotherAuthProviderID)
 		require.NoError(t, err)
-		assert.Equal(t, "another-user-id", gotUser3.String())
+		assert.Equal(t, "another-user-id", gotUser3)
 
-		assert.NotEqual(t, gotUser1.String(), gotUser3.String())
+		assert.NotEqual(t, gotUser1, gotUser3)
 	})
 
 	t.Run("can create and get a session", func(t *testing.T) {
 		hashedID := HashedSessionID("test-hashed-id")
-		userID := StringIdentifier("user-id")
+		userID := "user-id"
 		idleDeadline := time.Now()
 		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
 
 		gotSession, err := store.CreateSession(t.Context(), hashedID, userID, idleDeadline, absoluteDeadline)
 		require.NoError(t, err)
-		assert.Equal(t, "user-id", gotSession.UserID().String())
+		assert.Equal(t, "user-id", gotSession.UserID())
 		assert.Equal(t, idleDeadline, gotSession.IdleDeadline())
 		assert.Equal(t, absoluteDeadline, gotSession.AbsoluteDeadline())
 		assert.Equal(t, hashedID, gotSession.ID())
 
 		gotSession2, err := store.GetSession(t.Context(), hashedID)
 		require.NoError(t, err)
-		assert.Equal(t, "user-id", gotSession2.UserID().String())
+		assert.Equal(t, "user-id", gotSession2.UserID())
 		assert.Equal(t, idleDeadline, gotSession2.IdleDeadline())
 		assert.Equal(t, absoluteDeadline, gotSession2.AbsoluteDeadline())
 
@@ -114,7 +96,7 @@ func (c StorerContract) Test(t *testing.T) {
 	t.Run("can delete one session", func(t *testing.T) {
 		hashedID1 := HashedSessionID("test-hashed-id-1")
 		hashedID2 := HashedSessionID("test-hashed-id-2")
-		userID := StringIdentifier("user-id")
+		userID := "user-id"
 		idleDeadline := time.Now()
 		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
@@ -144,8 +126,8 @@ func (c StorerContract) Test(t *testing.T) {
 		hashedID1 := HashedSessionID("test-hashed-id-1")
 		hashedID2 := HashedSessionID("test-hashed-id-2")
 		hashedID3 := HashedSessionID("test-hashed-id-3")
-		userID := StringIdentifier("user-id")
-		otherUserID := StringIdentifier("other-user-id")
+		userID := "user-id"
+		otherUserID := "other-user-id"
 		idleDeadline := time.Now()
 		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
@@ -174,7 +156,7 @@ func (c StorerContract) Test(t *testing.T) {
 
 	t.Run("can extend an existing session", func(t *testing.T) {
 		hashedID := HashedSessionID("test-hashed-id")
-		userID := StringIdentifier("user-id")
+		userID := "user-id"
 		idleDeadline := time.Now()
 		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
@@ -202,7 +184,7 @@ func (c StorerContract) Test(t *testing.T) {
 
 	t.Run("extend session updates deadline correctly", func(t *testing.T) {
 		hashedID := HashedSessionID("test-hashed-id")
-		userID := StringIdentifier("user-id")
+		userID := "user-id"
 		originalIdleDeadline := time.Now().Add(10 * time.Minute)
 		absoluteDeadline := time.Now().Add(time.Hour)
 		store := c.NewStorer()
@@ -223,7 +205,7 @@ func (c StorerContract) Test(t *testing.T) {
 
 	t.Run("extend session updates last activity timestamp", func(t *testing.T) {
 		hashedID := HashedSessionID("test-hashed-id")
-		userID := StringIdentifier("user-id")
+		userID := "user-id"
 		now := time.Now().UTC()
 		idleDeadline := now.Add(10 * time.Minute)
 		absoluteDeadline := now.Add(time.Hour)
@@ -262,7 +244,7 @@ func (c ActivityRecorderContract) Test(t *testing.T) {
 		hashedID1 := HashedSessionID("test-hashed-id-1")
 		hashedID2 := HashedSessionID("test-hashed-id-2")
 		hashedID3 := HashedSessionID("test-hashed-id-3")
-		userID := StringIdentifier("user-id")
+		userID := "user-id"
 		now := time.Now().UTC()
 
 		// Create 3 sessions

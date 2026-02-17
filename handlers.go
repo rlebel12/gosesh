@@ -54,9 +54,9 @@ type (
 	// It takes a context and access token, and returns a reader with the user data.
 	RequestFunc func(ctx context.Context, accessToken string) (io.ReadCloser, error)
 
-	// UnmarshalFunc is a function type that unmarshals user data into an Identifier.
-	// It takes the raw user data and returns an Identifier and any error that occurred.
-	UnmarshalFunc func(b []byte) (Identifier, error)
+	// UnmarshalFunc is a function type that unmarshals user data into an auth provider ID.
+	// It takes the raw user data and returns an AuthProviderID and any error that occurred.
+	UnmarshalFunc func(b []byte) (AuthProviderID, error)
 )
 
 // OAuth2Callback creates a handler that completes the OAuth2 flow.
@@ -137,7 +137,7 @@ func unmarshalUserData(
 	request RequestFunc,
 	unmarshal UnmarshalFunc,
 	accessToken string,
-) (Identifier, error) {
+) (AuthProviderID, error) {
 	response, err := request(ctx, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("get user info: %w", err)
@@ -289,7 +289,7 @@ func fetchAndUnmarshalUserData(
 	request RequestFunc,
 	unmarshal UnmarshalFunc,
 	accessToken string,
-) (Identifier, error) {
+) (AuthProviderID, error) {
 	response, err := request(ctx, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("%w: fetch user data: %w", ErrFailedExchangingToken, err)

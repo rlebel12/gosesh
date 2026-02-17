@@ -75,11 +75,13 @@ type Gosesh struct {
 	idHasher               SessionIDHasher
 }
 
-// Identifier is an interface that represents a unique identifier for users and sessions.
-// It must implement fmt.Stringer to provide a string representation of the identifier.
-type Identifier interface {
-	fmt.Stringer
-}
+// AuthProviderID is an opaque identifier returned by the OAuth provider's UnmarshalFunc.
+// It is passed into Storer.UpsertUser and never interpreted by gosesh.
+type AuthProviderID = any
+
+// UserID is the consumer's internal user identifier, returned by Storer.UpsertUser.
+// It is used in CreateSession, Session.UserID(), and DeleteUserSessions.
+type UserID = any
 
 // Host returns the hostname of the application's origin.
 func (gs *Gosesh) Host() string {
@@ -305,12 +307,12 @@ func WithHMACSessionIDHasher(secret []byte) NewOpts {
 // It defines the methods required for managing users and sessions.
 type Storer interface {
 	// UpsertUser creates or updates a user based on their OAuth2 provider ID.
-	UpsertUser(ctx context.Context, authProviderID Identifier) (userID Identifier, err error)
+	UpsertUser(ctx context.Context, authProviderID AuthProviderID) (userID UserID, err error)
 	// CreateSession creates a new session for a user with the specified deadlines.
 	// hashedID is the pre-hashed session identifier to store.
 	// idleDeadline is when the session expires from inactivity.
 	// absoluteDeadline is when the session expires regardless of activity.
-	CreateSession(ctx context.Context, hashedID HashedSessionID, userID Identifier, idleDeadline, absoluteDeadline time.Time) (Session, error)
+	CreateSession(ctx context.Context, hashedID HashedSessionID, userID UserID, idleDeadline, absoluteDeadline time.Time) (Session, error)
 	// ExtendSession extends the idle deadline of an existing session.
 	// This is used to refresh a session's TTL without creating a new session.
 	ExtendSession(ctx context.Context, hashedID HashedSessionID, newIdleDeadline time.Time) error
@@ -319,7 +321,7 @@ type Storer interface {
 	// DeleteSession deletes a session by its hashed ID.
 	DeleteSession(ctx context.Context, hashedID HashedSessionID) error
 	// DeleteUserSessions deletes all sessions for a user, returning the number of sessions deleted.
-	DeleteUserSessions(ctx context.Context, userID Identifier) (int, error)
+	DeleteUserSessions(ctx context.Context, userID UserID) (int, error)
 }
 
 // Session represents an active user session.
@@ -327,7 +329,7 @@ type Session interface {
 	// ID returns the hashed session identifier as stored in the backing store.
 	ID() HashedSessionID
 	// UserID returns the ID of the user associated with this session.
-	UserID() Identifier
+	UserID() UserID
 	// IdleDeadline returns the time at which the session expires from inactivity.
 	IdleDeadline() time.Time
 	// AbsoluteDeadline returns the time at which the session expires regardless of activity.
@@ -429,12 +431,6 @@ func WithNow(fn func() time.Time) func(*Gosesh) {
 	return func(c *Gosesh) {
 		c.now = fn
 	}
-}
-
-type StringIdentifier string
-
-func (s StringIdentifier) String() string {
-	return string(s)
 }
 
 // rawSessionIDContextKey is the context key for storing raw session IDs.

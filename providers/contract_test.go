@@ -55,7 +55,7 @@ func (c GosesherContract) Test(t *testing.T) {
 
 	t.Run("OAuth2Callback handler can be called", func(t *testing.T) {
 		var (
-			gotIdentifier gosesh.Identifier
+			gotIdentifier gosesh.AuthProviderID
 			gotCalled     bool
 			gotErr        error
 		)
@@ -65,8 +65,8 @@ func (c GosesherContract) Test(t *testing.T) {
 			func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
 				return io.NopCloser(strings.NewReader("content")), nil
 			},
-			func(b []byte) (gosesh.Identifier, error) {
-				id := gosesh.StringIdentifier(b)
+			func(b []byte) (gosesh.AuthProviderID, error) {
+				id := string(b)
 				gotIdentifier = id
 				return id, nil
 			},
@@ -83,6 +83,6 @@ func (c GosesherContract) Test(t *testing.T) {
 		assert.NoError(t, gotErr)
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.True(t, gotCalled)
-		assert.Equal(t, "content", gotIdentifier.String())
+		assert.Equal(t, "content", gotIdentifier)
 	})
 }

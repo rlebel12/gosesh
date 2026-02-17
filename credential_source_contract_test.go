@@ -58,7 +58,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 			// Create a fake session
 			rawID := RawSessionID("test-raw-session-id")
 			hashedID := HashedSessionID("test-hashed-session-id")
-			userID := StringIdentifier("test-user-id")
+			userID := "test-user-id"
 			now := time.Now()
 			config := source.SessionConfig()
 			session := NewFakeSession(
@@ -112,7 +112,7 @@ func (c CredentialSourceContract) Test(t *testing.T) {
 		// Create a fake session
 		rawID := RawSessionID("test-raw-session-id")
 		hashedID := HashedSessionID("test-hashed-session-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		config := source.SessionConfig()
 		session := NewFakeSession(

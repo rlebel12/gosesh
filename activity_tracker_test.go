@@ -55,7 +55,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.Start(t.Context())
 
 		// Create a session
-		userID := StringIdentifier("user-1")
+		userID := "user-1"
 		session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 		require.NoError(t, err)
@@ -86,7 +86,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.Start(t.Context())
 		
 		// Create session
-		userID := StringIdentifier("user-1")
+		userID := "user-1"
 		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
@@ -112,7 +112,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.Start(ctx)
 
 		// Create session
-		userID := StringIdentifier("user-1")
+		userID := "user-1"
 		session, _ := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 
@@ -217,7 +217,7 @@ func TestActivityTracker(t *testing.T) {
 		tracker.Start(ctx)
 
 		// Create session in store
-		userID := StringIdentifier("user-1")
+		userID := "user-1"
 		session, err := store.CreateSession(t.Context(), HashedSessionID("test-hash"), userID,
 			time.Now().Add(1*time.Hour), time.Now().Add(24*time.Hour))
 		require.NoError(t, err)

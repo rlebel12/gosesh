@@ -85,7 +85,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		source := NewCookieCredentialSource()
 		hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		session := NewFakeSession(
 			hashedID,
@@ -126,7 +126,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		source := NewCookieCredentialSource()
 		hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		session := NewFakeSession(
 			hashedID,
@@ -156,7 +156,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		source := NewCookieCredentialSource()
 		hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		absoluteDeadline := now.Add(24 * time.Hour)
 		session := NewFakeSession(
@@ -238,7 +238,7 @@ func TestCookieCredentialSource(t *testing.T) {
 				// Write a session to test the option
 				hashedID := HashedSessionID("test-hashed-id")
 	_ = RawSessionID("test-raw-id")
-				userID := StringIdentifier("test-user-id")
+				userID := "test-user-id"
 				now := time.Now()
 				session := NewFakeSession(
 					hashedID,
@@ -274,7 +274,7 @@ func TestCookieCredentialSource(t *testing.T) {
 	t.Run("empty_session_id_edge_case", func(t *testing.T) {
 		source := NewCookieCredentialSource()
 		hashedID := HashedSessionID("")
-		userID := StringIdentifier("test-user-id")
+		userID := "test-user-id"
 		now := time.Now()
 		session := NewFakeSession(
 			hashedID,
@@ -295,7 +295,7 @@ func TestCookieCredentialSource(t *testing.T) {
 		// Cookie names with special characters should work
 		source := NewCookieCredentialSource(WithCookieSourceName("my-session_2"))
 		hashedID := HashedSessionID("test-id")
-		userID := StringIdentifier("test-user")
+		userID := "test-user"
 		now := time.Now()
 		session := NewFakeSession(hashedID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
 
@@ -311,7 +311,7 @@ func TestCookieCredentialSource(t *testing.T) {
 	t.Run("domain_with_leading_dot", func(t *testing.T) {
 		source := NewCookieCredentialSource(WithCookieSourceDomain(".example.com"))
 		hashedID := HashedSessionID("test-id")
-		userID := StringIdentifier("test-user")
+		userID := "test-user"
 		now := time.Now()
 		session := NewFakeSession(hashedID, userID, now.Add(time.Minute), now.Add(time.Hour), now)
 
@@ -365,7 +365,7 @@ func TestCookieCredentialSource_ReadSessionIDReturnsRawType(t *testing.T) {
 func TestCookieCredentialSource_WriteSessionAcceptsRawSessionID(t *testing.T) {
 	source := NewCookieCredentialSource()
 	hashedID := HashedSessionID("test-hashed-id")
-	userID := StringIdentifier("test-user-id")
+	userID := "test-user-id"
 	now := time.Now()
 	session := NewFakeSession(
 		hashedID,
@@ -393,7 +393,7 @@ func TestCookieCredentialSource_WriteSessionAcceptsRawSessionID(t *testing.T) {
 func TestCookieCredentialSource_WriteReadRoundTrip(t *testing.T) {
 	source := NewCookieCredentialSource()
 	hashedID := HashedSessionID("test-hashed-id")
-	userID := StringIdentifier("test-user-id")
+	userID := "test-user-id"
 	now := time.Now()
 	session := NewFakeSession(
 		hashedID,
@@ -426,7 +426,7 @@ func TestCookieCredentialSource_WriteUsesRawIDNotSessionID(t *testing.T) {
 
 	// Create session with a hashed ID (different from raw ID)
 	hashedID := HashedSessionID("hashed-value-abc123")
-	userID := StringIdentifier("test-user-id")
+	userID := "test-user-id"
 	now := time.Now()
 	session := NewFakeSession(
 		hashedID,
@@ -458,7 +458,7 @@ func TestCookieCredentialSource_WriteUsesRawIDNotSessionID(t *testing.T) {
 func TestCookieCredentialSource_EmptyRawSessionID(t *testing.T) {
 	source := NewCookieCredentialSource()
 	hashedID := HashedSessionID("test-hashed-id")
-	userID := StringIdentifier("test-user-id")
+	userID := "test-user-id"
 	now := time.Now()
 	session := NewFakeSession(
 		hashedID,

@@ -40,7 +40,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"no_refresh_outside_threshold": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
+				userID := "identifier"
 				// Session with 15 minutes until idle (> 10min threshold)
 				rawID := RawSessionID("test-raw-no-refresh")
 				hashedID := defaultSHA256Hasher(rawID)
@@ -62,7 +62,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"refresh_within_threshold": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
+				userID := "identifier"
 				// Session with 5 minutes until idle (< 10min threshold)
 				rawID := RawSessionID("test-raw-refresh")
 				hashedID := defaultSHA256Hasher(rawID)
@@ -84,7 +84,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"refresh_caps_at_absolute": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
+				userID := "identifier"
 				// Session with 5 minutes until idle, but absolute in 30min
 				// sessionIdleTimeout is 17min, so new idle would be now+17min = 17min
 				// But absolute is in 30min, so should not cap
@@ -108,7 +108,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"refresh_error_continues": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
+				userID := "identifier"
 				// Session with 5 minutes until idle (within threshold)
 				rawID := RawSessionID("test-raw-refresh")
 				hashedID := defaultSHA256Hasher(rawID)
@@ -132,7 +132,7 @@ func TestAuthenticateAndRefresh(t *testing.T) {
 		},
 		"session expired": {
 			setup: func(t *testing.T, store Storer, r *http.Request, now time.Time) *http.Request {
-				userID := StringIdentifier("identifier")
+				userID := "identifier"
 				rawID := RawSessionID("test-raw-refresh")
 				hashedID := defaultSHA256Hasher(rawID)
 				_, err := store.CreateSession(t.Context(), hashedID, userID, now.Add(-5*time.Minute), now.Add(-1*time.Minute))
@@ -272,7 +272,7 @@ func TestAuthenticateDualDeadline(t *testing.T) {
 				withLogger,
 			)
 
-			userID := StringIdentifier("user-id")
+			userID := "user-id"
 			rawID := RawSessionID("test-raw-session-expiry")
 			hashedID := defaultSHA256Hasher(rawID)
 			_, err := store.CreateSession(
@@ -327,7 +327,7 @@ func TestRequireAuthentication(t *testing.T) {
 
 		session := NewFakeSession(
 			HashedSessionID("session-id"),
-			StringIdentifier("user-id"),
+			"user-id",
 			now,
 			now.Add(time.Hour),
 			now,
@@ -372,7 +372,7 @@ func TestRedirectUnauthenticated(t *testing.T) {
 				now := time.Now()
 				session := NewFakeSession(
 					HashedSessionID("session-id"),
-					StringIdentifier("user-id"),
+					"user-id",
 					now,
 					now.Add(time.Hour),
 					now,
@@ -478,7 +478,7 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 		gs.StartBackgroundTasks(t.Context())
 
 		// Create session at time T0 with proper raw->hash flow
-		userID := StringIdentifier("identifier")
+		userID := "identifier"
 		rawID := RawSessionID("test-raw-activity")
 		hashedID := gs.idHasher(rawID)
 		session, _ := store.CreateSession(t.Context(), hashedID, userID,
@@ -522,7 +522,7 @@ func TestAuthenticateWithActivityTracking(t *testing.T) {
 			// No activity tracking
 		)
 
-		userID := StringIdentifier("identifier")
+		userID := "identifier"
 		rawID := RawSessionID("test-raw-no-tracker")
 		hashedID := defaultSHA256Hasher(rawID)
 		_, _ = store.CreateSession(context.Background(), hashedID, userID,

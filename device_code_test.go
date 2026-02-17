@@ -519,8 +519,8 @@ func TestDeviceCodeAuthorizeCallback(t *testing.T) {
 	}
 
 	// Helper: Success unmarshal func
-	successUnmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	successUnmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	// Helper: Default store setup - creates device code entry, returns device code
@@ -583,7 +583,7 @@ func TestDeviceCodeAuthorizeCallback(t *testing.T) {
 			giveOAuthServer:   newSuccessOAuthServer,
 			giveStoreSetup:    defaultStoreSetup,
 			giveRequestFunc:   successRequestFunc,
-			giveUnmarshalFunc: func(_ []byte) (Identifier, error) {
+			giveUnmarshalFunc: func(_ []byte) (AuthProviderID, error) {
 				return nil, errors.New("invalid user data")
 			},
 			giveCookie:       validCookie,

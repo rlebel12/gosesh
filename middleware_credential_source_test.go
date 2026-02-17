@@ -87,7 +87,7 @@ func TestAuthenticateAcrossSourceTypes(t *testing.T) {
 			)
 
 			// Create a valid session with proper raw->hash flow
-			userID := StringIdentifier("user-123")
+			userID := "user-123"
 			rawID := RawSessionID("test-raw-id")
 			hashedID := sesh.idHasher(rawID)
 			session, err := store.CreateSession(
@@ -151,7 +151,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 				// Add cookie with non-existent session ID
 				fakeSession := NewFakeSession(
 					HashedSessionID("non-existent-session"),
-					StringIdentifier("user-123"),
+					"user-123",
 					now.Add(30*time.Minute),
 					now.Add(24*time.Hour),
 					now,
@@ -172,7 +172,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 			credentialSource: NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false)),
 			setupRequest: func(t *testing.T, r *http.Request, store Storer, now time.Time) {
 				// Create session with idle deadline in the past
-				userID := StringIdentifier("user-123")
+				userID := "user-123"
 				hashedID := HashedSessionID("test-hashed-id-expired")
 				session, err := store.CreateSession(
 					context.Background(),
@@ -199,7 +199,7 @@ func TestAuthenticationFailureCases(t *testing.T) {
 			credentialSource: NewCookieCredentialSource(WithCookieSourceName("session"), WithCookieSourceSecure(false)),
 			setupRequest: func(t *testing.T, r *http.Request, store Storer, now time.Time) {
 				// Create session with absolute deadline in the past
-				userID := StringIdentifier("user-123")
+				userID := "user-123"
 				hashedID := HashedSessionID("test-hashed-id-abs-expired")
 				session, err := store.CreateSession(
 					context.Background(),
@@ -335,7 +335,7 @@ func TestRefreshBehaviorByConfig(t *testing.T) {
 			)
 
 			// Create session with 5 minutes until idle (within refresh threshold)
-			userID := StringIdentifier("user-123")
+			userID := "user-123"
 			rawID := RawSessionID("test-raw-session-id-refresh")
 			hashedID := sesh.idHasher(rawID)
 			session, err := store.CreateSession(
@@ -450,7 +450,7 @@ func TestRequireAuthenticationResponse(t *testing.T) {
 			)
 
 			// Create a valid session with proper raw->hash flow
-			userID := StringIdentifier("user-123")
+			userID := "user-123"
 			rawID := RawSessionID("test-raw-require-auth")
 			hashedID := sesh.idHasher(rawID)
 			session, err := store.CreateSession(
@@ -499,7 +499,7 @@ func TestBackwardCompatNoSource(t *testing.T) {
 	// Create a session with proper raw->hash flow
 	rawID := RawSessionID("test-raw-backward-compat")
 	hashedID := sesh.idHasher(rawID)
-	userID := StringIdentifier("user-123")
+	userID := "user-123"
 	session, err := store.CreateSession(
 		context.Background(),
 		hashedID,
@@ -556,7 +556,7 @@ func TestCustomCookieNameWithCredentialSource(t *testing.T) {
 	)
 
 	// Create a session with proper raw->hash flow
-	userID := StringIdentifier("user-123")
+	userID := "user-123"
 	rawID := RawSessionID("test-raw-custom-cookie")
 	hashedID := sesh.idHasher(rawID)
 	session, err := store.CreateSession(
@@ -607,7 +607,7 @@ func TestBackwardCompatExistingSessions(t *testing.T) {
 
 	rawID := RawSessionID("test-raw-backward-compat-existing")
 	hashedID := oldSesh.idHasher(rawID)
-	userID := StringIdentifier("user-123")
+	userID := "user-123"
 	session, err := store.CreateSession(
 		context.Background(),
 		hashedID,

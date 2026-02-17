@@ -110,7 +110,7 @@ func (u fakeUser) String() string {
 func TestUnmarshalUser(t *testing.T) {
 	for name, tc := range map[string]struct {
 		giveContent []byte
-		wantUser    gosesh.Identifier
+		wantUser    gosesh.AuthProviderID
 		wantErr     string
 	}{
 		"success": {

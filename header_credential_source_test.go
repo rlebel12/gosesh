@@ -112,7 +112,7 @@ func TestHeaderCredentialSource_WriteSession_NoOp(t *testing.T) {
 	source := NewHeaderCredentialSource()
 
 	hashedID := HashedSessionID("test-hashed-id")
-	userID := StringIdentifier("test-user-id")
+	userID := "test-user-id"
 	now := time.Now()
 	config := source.SessionConfig()
 	session := NewFakeSession(
@@ -225,7 +225,7 @@ func TestHeaderCredentialSource_ReadSessionIDReturnsRawType(t *testing.T) {
 func TestHeaderCredentialSource_WriteSessionAcceptsRawSessionID(t *testing.T) {
 	source := NewHeaderCredentialSource()
 	hashedID := HashedSessionID("test-hashed-id")
-	userID := StringIdentifier("test-user-id")
+	userID := "test-user-id"
 	now := time.Now()
 	session := NewFakeSession(
 		hashedID,

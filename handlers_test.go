@@ -183,7 +183,7 @@ func (m *failReader) Read(p []byte) (n int, err error) {
 
 func (s *Oauth2CallbackHandlerSuite) prepareTest(
 	mode testCallbackRequestMode,
-) (r *http.Request, config *oauth2.Config, user Identifier, store *erroringStore, requestFunc RequestFunc, unmarshalFunc UnmarshalFunc) {
+) (r *http.Request, config *oauth2.Config, user AuthProviderID, store *erroringStore, requestFunc RequestFunc, unmarshalFunc UnmarshalFunc) {
 	var err error
 	callbackURL := fmt.Sprintf("%s/auth/callback", s.oauth2Server.URL)
 	r, err = http.NewRequest(http.MethodGet, callbackURL, nil)
@@ -223,7 +223,7 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 		return
 	}
 	config.Endpoint.TokenURL = fmt.Sprintf("%s/token", s.oauth2Server.URL)
-	user = StringIdentifier("user")
+	user = "user"
 
 	if mode == testFailedUnmarshalRequest {
 		requestFunc = func(ctx context.Context, accessToken string) (io.ReadCloser, error) {
@@ -243,13 +243,13 @@ func (s *Oauth2CallbackHandlerSuite) prepareTest(
 	}
 
 	if mode == testFailedUnmarshalDataFinal {
-		unmarshalFunc = func(b []byte) (Identifier, error) {
+		unmarshalFunc = func(b []byte) (AuthProviderID, error) {
 			return nil, fmt.Errorf("failed unmarshal")
 		}
 		return
 	}
-	unmarshalFunc = func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user"), nil
+	unmarshalFunc = func(_ []byte) (AuthProviderID, error) {
+		return "user", nil
 	}
 
 	if mode == testCallbackErrUpsertUser {
@@ -463,7 +463,7 @@ func TestOauth2CallbackHandlerSuite(t *testing.T) {
 
 type logoutTest struct {
 	store      *erroringStore
-	identifier Identifier
+	identifier UserID
 	now        func() time.Time
 	req        *http.Request
 	resp       *httptest.ResponseRecorder
@@ -489,7 +489,7 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 	session, err := store.CreateSession(
 		context.Background(),
 		hashedID,
-		StringIdentifier("identifier"),
+		"identifier",
 		currentTime,
 		currentTime.Add(time.Hour),
 	)
@@ -497,7 +497,7 @@ func prepareLogoutTest(t *testing.T) *logoutTest {
 
 	return &logoutTest{
 		store:      store,
-		identifier: StringIdentifier("identifier"),
+		identifier: "identifier",
 		now:        now,
 		req:        req,
 		resp:       resp,
@@ -672,7 +672,7 @@ func TestLogoutWithCustomCredentialSource(t *testing.T) {
 	session, err := store.CreateSession(
 		t.Context(),
 		hashedID,
-		StringIdentifier("user"),
+		"user",
 		currentTime.Add(time.Hour),
 		currentTime.Add(24*time.Hour),
 	)
@@ -842,8 +842,8 @@ func TestExchangeExternalToken(t *testing.T) {
 	}
 
 	// Helper to create a successful unmarshal func
-	successUnmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	successUnmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	tests := map[string]struct {
@@ -892,7 +892,7 @@ func TestExchangeExternalToken(t *testing.T) {
 		"unmarshal_error": {
 			giveRequestBody: `{"access_token":"valid-token"}`,
 			giveRequestFunc: successRequestFunc,
-			giveUnmarshalFunc: func(_ []byte) (Identifier, error) {
+			giveUnmarshalFunc: func(_ []byte) (AuthProviderID, error) {
 				return nil, errors.New("invalid user data")
 			},
 			wantStatusCode:  http.StatusInternalServerError,
@@ -1184,8 +1184,8 @@ func TestExchangeExternalToken_NativeAppSessionConfig(t *testing.T) {
 		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
 	}
 
-	unmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	unmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
@@ -1237,8 +1237,8 @@ func TestExchangeExternalToken_AudienceErrorWrapping(t *testing.T) {
 		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
 	}
 
-	unmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	unmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	var capturedErr error
@@ -1284,8 +1284,8 @@ func TestExchangeExternalToken_DoneHandlerReceivesValidationError(t *testing.T) 
 		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
 	}
 
-	unmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	unmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	var doneHandlerCalled bool
@@ -1330,8 +1330,8 @@ func TestExchangeExternalToken_ValidationBeforeRequestFunc(t *testing.T) {
 		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
 	}
 
-	unmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	unmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {
@@ -1370,8 +1370,8 @@ func TestExchangeExternalToken_ContextCancellation(t *testing.T) {
 		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
 	}
 
-	unmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	unmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	var capturedErr error
@@ -1413,8 +1413,8 @@ func TestExchangeExternalToken_ResponseFormat(t *testing.T) {
 		return io.NopCloser(strings.NewReader(`{"id":"user123"}`)), nil
 	}
 
-	unmarshalFunc := func(_ []byte) (Identifier, error) {
-		return StringIdentifier("user123"), nil
+	unmarshalFunc := func(_ []byte) (AuthProviderID, error) {
+		return "user123", nil
 	}
 
 	doneHandler := func(w http.ResponseWriter, r *http.Request, err error) {

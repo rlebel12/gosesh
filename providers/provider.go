@@ -87,9 +87,8 @@ func doRequest(method, url string, header http.Header) (io.ReadCloser, error) {
 }
 
 // unmarshalUser creates an UnmarshalFunc for a specific user type.
-// It uses a generic type parameter to ensure the user type implements the Identifier interface.
-func unmarshalUser[T gosesh.Identifier](newUser func() T) gosesh.UnmarshalFunc {
-	return func(b []byte) (gosesh.Identifier, error) {
+func unmarshalUser[T any](newUser func() T) gosesh.UnmarshalFunc {
+	return func(b []byte) (gosesh.AuthProviderID, error) {
 		user := newUser()
 		err := json.Unmarshal(b, &user)
 		if err != nil {
